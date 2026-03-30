@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Procurement System — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/bom-parser.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-brand">Triana · <span>Procurement</span></div>
+    <div class="topbar-right" id="topbarRight"></div>
+  </div>
+
+  <!-- Page -->
+  <div class="page-content">
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid"></div>
+
+    <!-- Filter + actions bar -->
+    <div class="filter-bar">
+      <input type="text" id="searchInput" placeholder="Pesquisar cliente ou projeto..." oninput="renderList()" style="max-width:280px">
+      <select id="filterStatus" onchange="renderList()" style="max-width:180px">
+        <option value="">Todos os estados</option>
+        <option>Active</option>
+        <option>Waiting for suppliers</option>
+        <option>Waiting for internal info</option>
+        <option>Partial responses</option>
+        <option>Ready for Excel</option>
+        <option>Closed</option>
+        <option>Cancelled</option>
+      </select>
+      <select id="filterPriority" onchange="renderList()" style="max-width:140px">
+        <option value="">Todas prioridades</option>
+        <option>Urgent</option>
+        <option>High</option>
+        <option>Medium</option>
+        <option>Low</option>
+      </select>
+      <div style="margin-left:auto">
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Novo Processo</button>
+      </div>
+    </div>
+
+    <!-- Process list -->
+    <div id="processList"></div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Modal root -->
+<div id="modalRoot"></div>
+
+<script>
+let allProcesses = [];
+
+// ── Init ──
+window.addEventListener('load', async () => {
+  const auth = await requireAuth('index.html');
+  if (!auth) return;
+  document.getElementById('topbarRight').innerHTML = renderUserChip();
+  await loadProcesses();
+});
+
+async function loadProcesses() {
+  try {
+    allProcesses = await API.getProcesses();
+    renderStats();
+    renderList();
+  } catch(e) { showToast('Erro ao carregar processos: ' + e.message, true); }
+}
+
+// ── Stats ──
+function renderStats() {
+  const total    = allProcesses.length;
+  const active   = allProcesses.filter(p => p.status === 'Active').length;
+  const waiting  = allProcesses.filter(p => p.status === 'Waiting for suppliers').length;
+  const ready    = allProcesses.filter(p => p.status === 'Ready for Excel').length;
+  const urgent   = allProcesses.filter(p => p.priority === 'Urgent').length;
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card" onclick="setFilter('')">
+      <div class="stat-number">${total}</div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card" onclick="setFilter('Active')">
+      <div class="stat-number" style="color:var(--accent)">${active}</div>
+      <div class="stat-label">Ativos</div>
+    </div>
+    <div class="stat-card" onclick="setFilter('Waiting for suppliers')">
+      <div class="stat-number" style="color:#4fc3f7">${waiting}</div>
+      <div class="stat-label">A aguardar</div>
+    </div>
+    <div class="stat-card" onclick="setFilter('Ready for Excel')">
+      <div class="stat-number" style="color:var(--accent)">${ready}</div>
+      <div class="stat-label">Prontos Excel</div>
+    </div>
+    <div class="stat-card" onclick="setFilterPriority('Urgent')">
+      <div class="stat-number" style="color:var(--danger)">${urgent}</div>
+      <div class="stat-label">Urgentes</div>
+    </div>
+  `;
+}
+
+function setFilter(val) {
+  document.getElementById('filterStatus').value = val;
+  renderList();
+}
+function setFilterPriority(val) {
+  document.getElementById('filterPriority').value = val;
+  renderList();
+}
+
+// ── Process list ──
+const PRIORITY_ORDER = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
+
+function renderList() {
+  const q  = document.getElementById('searchInput').value.toLowerCase().trim();
+  const fs = document.getElementById('filterStatus').value;
+  const fp = document.getElementById('filterPriority').value;
+
+  let list = [...allProcesses];
+  if (q)  list = list.filter(p => p.client_name?.toLowerCase().includes(q) || p.project_name?.toLowerCase().includes(q));
+  if (fs) list = list.filter(p => p.status === fs);
+  if (fp) list = list.filter(p => p.priority === fp);
+
+  list.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || new Date(a.deadline||'9999') - new Date(b.deadline||'9999'));
+
+  const el = document.getElementById('processList');
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state">Sem processos encontrados.<br>Clica em "+ Novo Processo" para começar.</div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="process-list">${list.map(p => `
+    <div class="process-row" onclick="goToProcess('${p.id}')">
+      <div>
+        <div class="process-name">${esc(p.project_name)}</div>
+        <div class="process-client">${esc(p.client_name)}</div>
+      </div>
+      <span class="priority-${(p.priority||'medium').toLowerCase()}" style="font-family:'IBM Plex Mono',monospace;font-size:12px">${p.priority||'Medium'}</span>
+      <span class="badge ${statusBadgeClass(p.status)}">${p.status||'Active'}</span>
+      <span class="deadline-chip ${deadlineClass(p.deadline)}">${p.deadline ? fmtDate(p.deadline) : '—'}</span>
+      <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+        <button class="btn btn-ghost btn-sm" onclick="openCreateModal('${p.id}')">Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDelete('${p.id}')">×</button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+function goToProcess(id) {
+  window.location.href = `process.html?id=${id}`;
+}
+
+// ── Create / Edit modal ──
+let editingProcessId = null;
+
+function openCreateModal(id = null) {
+  editingProcessId = id;
+  const p = id ? allProcesses.find(x => x.id === id) : null;
+  showModal(`
+    <div class="modal-tag">${p ? 'Editar Processo' : 'Novo Processo'}</div>
+    <div class="modal-title">${p ? esc(p.project_name) : 'Criar Processo'}</div>
+    <div class="form-grid-2">
+      <div><label>Nome do Cliente</label><input id="f_client" value="${esc(p?.client_name||'')}" placeholder="Ex: Banco BCI"></div>
+      <div><label>Nome do Projeto</label><input id="f_project" value="${esc(p?.project_name||'')}" placeholder="Ex: Upgrade Server Room"></div>
+    </div>
+    <div class="form-grid-2">
+      <div><label>Deadline</label><input type="date" id="f_deadline" value="${p?.deadline||''}"></div>
+      <div><label>Prioridade</label>
+        <select id="f_priority">
+          ${['Low','Medium','High','Urgent'].map(v => `<option ${(p?.priority||'Medium')===v?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    ${p ? `<div class="form-row"><label>Estado</label>
+      <select id="f_status">
+        ${['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'].map(v=>`<option ${p.status===v?'selected':''}>${v}</option>`).join('')}
+      </select></div>` : ''}
+    <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observações...">${esc(p?.notes||'')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveProcess()">Guardar</button>
+    </div>
+  `);
+}
+
+async function saveProcess() {
+  const fields = {
+    client_name:  document.getElementById('f_client').value.trim(),
+    project_name: document.getElementById('f_project').value.trim(),
+    deadline:     document.getElementById('f_deadline').value || null,
+    priority:     document.getElementById('f_priority').value,
+    notes:        document.getElementById('f_notes').value.trim(),
+  };
+  const statusEl = document.getElementById('f_status');
+  if (statusEl) fields.status = statusEl.value;
+
+  if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto são obrigatórios.', true); return; }
+
+  try {
+    if (editingProcessId) {
+      await API.updateProcess(editingProcessId, fields);
+      showToast('Processo atualizado.');
+    } else {
+      const proc = await API.createProcess(fields);
+      showToast('Processo criado.');
+      closeModal();
+      await loadProcesses();
+      // Go to process detail to upload BOM
+      window.location.href = `process.html?id=${proc.id}&new=1`;
+      return;
+    }
+    closeModal();
+    await loadProcesses();
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+async function confirmDelete(id) {
+  const p = allProcesses.find(x => x.id === id);
+  showModal(`
+    <div class="modal-tag">Confirmar</div>
+    <div class="modal-title">Apagar Processo</div>
+    <div style="color:var(--muted);font-size:14px;margin-bottom:24px">Apagar "<strong style="color:#fff">${esc(p?.project_name)}</strong>"? Esta ação não pode ser desfeita.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="doDelete('${id}')">Apagar</button>
+    </div>
+  `);
+}
+
+async function doDelete(id) {
+  try {
+    await API.deleteProcess(id);
+    closeModal();
+    showToast('Processo apagado.');
+    await loadProcesses();
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+// ── Modal helpers ──
+function showModal(html) {
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-box">${html}</div></div>`;
+}
+function closeModal() {
+  document.getElementById('modalRoot').innerHTML = '';
+}
+
+// ── Helpers ──
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtDate(d) { if (!d) return '—'; const dt = new Date(d); return dt.toLocaleDateString('pt-PT'); }
+function deadlineClass(d) {
+  if (!d) return '';
+  const diff = (new Date(d) - new Date()) / 86400000;
+  if (diff < 0) return 'overdue';
+  if (diff < 5) return 'soon';
+  return '';
+}
+function statusBadgeClass(s) {
+  const map = {
+    'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting',
+    'Partial responses':'badge-partial','Ready for Excel':'badge-ready','Closed':'badge-closed','Cancelled':'badge-cancelled'
+  };
+  return map[s] || 'badge-active';
+}
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--danger)' : 'var(--accent)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

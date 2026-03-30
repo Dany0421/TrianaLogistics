@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Procurement System — Login</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/config.js" defer></script>
+<style>
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 40px 36px;
+    width: min(400px, 94vw);
+  }
+  .login-brand {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .login-title { font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 32px; }
+  .login-title span { color: var(--accent); }
+  .form-row { margin-bottom: 16px; }
+  .error-msg {
+    color: var(--danger);
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .btn-login { width: 100%; justify-content: center; padding: 13px; font-size: 14px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <div class="login-brand">Triana · Logistica</div>
+  <div class="login-title" id="loginTitle">Procurement <span>System</span></div>
+  <div class="form-row" id="nameRow" style="display:none">
+    <label>Nome</label>
+    <input type="text" id="name" placeholder="O teu nome" autocomplete="name">
+  </div>
+  <div class="form-row" id="roleRow" style="display:none">
+    <label>Papel</label>
+    <select id="role">
+      <option value="commercial">Comercial</option>
+      <option value="procurement">Procurement / Logística</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label>Email</label>
+    <input type="email" id="email" placeholder="email@triana.co.mz" autocomplete="username">
+  </div>
+  <div class="form-row">
+    <label>Password</label>
+    <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+  </div>
+  <div id="errorMsg" class="error-msg"></div>
+  <button class="btn btn-primary btn-login" id="submitBtn" onclick="doSubmit()">Entrar</button>
+  <div style="text-align:center;margin-top:16px;font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--muted)">
+    <span id="toggleMsg">Ainda não tens conta?</span>
+    <span onclick="toggleMode()" style="color:var(--accent);cursor:pointer;margin-left:6px" id="toggleLink">Registar</span>
+  </div>
+</div>
+
+<script>
+let isSignup = false;
+
+function toggleMode() {
+  isSignup = !isSignup;
+  document.getElementById('nameRow').style.display = isSignup ? 'block' : 'none';
+  document.getElementById('roleRow').style.display = isSignup ? 'block' : 'none';
+  document.getElementById('submitBtn').textContent = isSignup ? 'Criar conta' : 'Entrar';
+  document.getElementById('toggleMsg').textContent = isSignup ? 'Já tens conta?' : 'Ainda não tens conta?';
+  document.getElementById('toggleLink').textContent = isSignup ? 'Entrar' : 'Registar';
+  document.getElementById('errorMsg').style.display = 'none';
+}
+
+async function doSubmit() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const errEl    = document.getElementById('errorMsg');
+  errEl.style.display = 'none';
+
+  if (!email || !password) { errEl.textContent = 'Preenche email e password.'; errEl.style.display = 'block'; return; }
+
+  if (isSignup) {
+    if (!email.endsWith('@triana.co.mz')) { errEl.textContent = 'Apenas emails @triana.co.mz podem registar-se.'; errEl.style.display = 'block'; return; }
+    const name = document.getElementById('name').value.trim();
+    const role = document.getElementById('role').value;
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { name, role } } });
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+    errEl.style.color = 'var(--accent)';
+    errEl.textContent = 'Conta criada! Verifica o email para confirmar (ou entra já se o email confirmation estiver desligado).';
+    errEl.style.display = 'block';
+  } else {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+    window.location.href = 'dashboard.html';
+  }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Enter') doSubmit(); });
+
+window.addEventListener('load', async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) window.location.href = 'dashboard.html';
+});
+</script>
+</body>
+</html>
