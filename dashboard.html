@@ -47,6 +47,9 @@
         <option>Medium</option>
         <option>Low</option>
       </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="filterMine" onchange="renderList()"> Meus processos
+      </label>
       <div style="margin-left:auto">
         <button class="btn btn-primary" onclick="openCreateModal()">+ Novo Processo</button>
       </div>
@@ -66,12 +69,14 @@
 
 <script>
 let allProcesses = [];
+let procUsers = [];
 
 // ── Init ──
 window.addEventListener('load', async () => {
   const auth = await requireAuth('index.html');
   if (!auth) return;
   document.getElementById('topbarRight').innerHTML = renderUserChip();
+  procUsers = await API.getProcurementUsers();
   await loadProcesses();
 });
 
@@ -87,7 +92,7 @@ async function loadProcesses() {
 function renderStats() {
   const total    = allProcesses.length;
   const active   = allProcesses.filter(p => p.status === 'Active').length;
-  const waiting  = allProcesses.filter(p => p.status === 'Waiting for suppliers').length;
+  const waiting  = allProcesses.filter(p => p.status === 'Waiting for suppliers' || p.status === 'Waiting for internal info').length;
   const ready    = allProcesses.filter(p => p.status === 'Ready for Excel').length;
   const urgent   = allProcesses.filter(p => p.priority === 'Urgent').length;
 
@@ -100,7 +105,7 @@ function renderStats() {
       <div class="stat-number" style="color:var(--accent)">${active}</div>
       <div class="stat-label">Ativos</div>
     </div>
-    <div class="stat-card" onclick="setFilter('Waiting for suppliers')">
+    <div class="stat-card" onclick="setFilter('Waiting for internal info')">
       <div class="stat-number" style="color:#4fc3f7">${waiting}</div>
       <div class="stat-label">A aguardar</div>
     </div>
@@ -136,6 +141,7 @@ function renderList() {
   if (q)  list = list.filter(p => p.client_name?.toLowerCase().includes(q) || p.project_name?.toLowerCase().includes(q));
   if (fs) list = list.filter(p => p.status === fs);
   if (fp) list = list.filter(p => p.priority === fp);
+  if (document.getElementById('filterMine')?.checked) list = list.filter(p => p.assigned_to === currentUser.id);
 
   list.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || new Date(a.deadline||'9999') - new Date(b.deadline||'9999'));
 
@@ -154,6 +160,7 @@ function renderList() {
       <span class="priority-${(p.priority||'medium').toLowerCase()}" style="font-family:'IBM Plex Mono',monospace;font-size:12px">${p.priority||'Medium'}</span>
       <span class="badge ${statusBadgeClass(p.status)}">${p.status||'Active'}</span>
       <span class="deadline-chip ${deadlineClass(p.deadline)}">${p.deadline ? fmtDate(p.deadline) : '—'}</span>
+      ${p.assignee ? `<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);background:#0a1a0f;border:1px solid #1a3a2a;border-radius:3px;padding:2px 7px">${esc(p.assignee.name)}</span>` : '<span style="font-size:11px;color:var(--muted)">—</span>'}
       <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
         <button class="btn btn-ghost btn-sm" onclick="openCreateModal('${p.id}')">Editar</button>
         <button class="btn btn-danger btn-sm" onclick="confirmDelete('${p.id}')">×</button>
@@ -190,6 +197,12 @@ function openCreateModal(id = null) {
       <select id="f_status">
         ${['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'].map(v=>`<option ${p.status===v?'selected':''}>${v}</option>`).join('')}
       </select></div>` : ''}
+    <div class="form-row"><label>Responsável</label>
+      <select id="f_assigned">
+        <option value="">Não atribuído</option>
+        ${procUsers.map(u => `<option value="${u.id}" ${p?.assigned_to===u.id?'selected':''}>${esc(u.name||'')}</option>`).join('')}
+      </select>
+    </div>
     <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observações...">${esc(p?.notes||'')}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -208,6 +221,17 @@ async function saveProcess() {
   };
   const statusEl = document.getElementById('f_status');
   if (statusEl) fields.status = statusEl.value;
+  fields.assigned_to = document.getElementById('f_assigned').value || null;
+
+  // Auto-status: no assignee → waiting; newly assigned → active
+  if (!editingProcessId) {
+    if (!fields.assigned_to) fields.status = 'Waiting for internal info';
+  } else {
+    const prev = allProcesses.find(x => x.id === editingProcessId);
+    if (!prev?.assigned_to && fields.assigned_to && !statusEl) {
+      fields.status = 'Active';
+    }
+  }
 
   if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto são obrigatórios.', true); return; }
 
