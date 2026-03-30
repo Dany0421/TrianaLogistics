@@ -7,7 +7,7 @@ const API = {
   async getProcesses() {
     const { data, error } = await supabase
       .from('processes')
-      .select('*, profiles(name)')
+      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id)')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data;
@@ -16,11 +16,21 @@ const API = {
   async getProcess(id) {
     const { data, error } = await supabase
       .from('processes')
-      .select('*, profiles(name)')
+      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id)')
       .eq('id', id)
       .single();
     if (error) throw error;
     return data;
+  },
+
+  async getProcurementUsers() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, name, role')
+      .in('role', ['procurement', 'admin'])
+      .order('name');
+    if (error) throw error;
+    return data || [];
   },
 
   async createProcess(fields) {

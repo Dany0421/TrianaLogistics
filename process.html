@@ -243,10 +243,12 @@ async function loadMatchData() {
 function renderHeader() {
   document.getElementById('procTitle').textContent   = process.project_name;
   document.getElementById('procClient').textContent  = process.client_name;
+  const assigneeName = process.assignee?.name;
   document.getElementById('procMeta').innerHTML = `
     <span class="badge ${statusBadgeClass(process.status)}">${process.status}</span>
     <span class="priority-${(process.priority||'medium').toLowerCase()}" style="font-family:'IBM Plex Mono',monospace;font-size:12px">${process.priority}</span>
     ${process.deadline ? `<span class="deadline-chip ${deadlineClass(process.deadline)}">📅 ${fmtDate(process.deadline)}</span>` : ''}
+    ${assigneeName ? `<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);background:#0a1a0f;border:1px solid #1a3a2a;border-radius:3px;padding:2px 7px">${esc(assigneeName)}</span>` : ''}
     <button class="btn btn-ghost btn-sm" onclick="openEditModal()">Editar</button>
   `;
   document.title = `${process.project_name} — Procurement`;
