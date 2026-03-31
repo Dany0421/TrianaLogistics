@@ -4,7 +4,7 @@
 -- ============================================================
 
 -- ============================================================
--- 1. Fix processes table: add missing assigned_to column
+-- 1. Fix processes table: add missing assigned_to column + status CHECK
 -- ============================================================
 DO $$ BEGIN
   IF NOT EXISTS (
@@ -13,6 +13,13 @@ DO $$ BEGIN
   ) THEN
     ALTER TABLE processes ADD COLUMN assigned_to uuid REFERENCES profiles(id);
   END IF;
+END $$;
+
+-- Add status CHECK constraint if not already present
+DO $$ BEGIN
+  ALTER TABLE processes DROP CONSTRAINT IF EXISTS chk_process_status;
+  ALTER TABLE processes ADD CONSTRAINT chk_process_status
+    CHECK (status IN ('Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'));
 END $$;
 
 -- ============================================================
