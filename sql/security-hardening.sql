@@ -39,7 +39,7 @@ BEGIN
   END IF;
   RETURN new;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ============================================================
 -- 3. RLS: allow profile INSERT during signup (auth.uid() is NULL)
@@ -67,7 +67,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS prevent_role_change_trigger ON profiles;
 CREATE TRIGGER prevent_role_change_trigger
@@ -196,7 +196,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS check_bom_items_limit_trigger ON bom_items;
 CREATE TRIGGER check_bom_items_limit_trigger
@@ -218,7 +218,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS check_suppliers_limit_trigger ON suppliers;
 CREATE TRIGGER check_suppliers_limit_trigger
@@ -240,7 +240,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS check_quotation_items_limit_trigger ON quotation_items;
 CREATE TRIGGER check_quotation_items_limit_trigger
@@ -293,7 +293,7 @@ BEGIN
   END IF;
   RETURN NULL;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS audit_processes ON processes;
 CREATE TRIGGER audit_processes
@@ -330,7 +330,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS check_bom_versions_limit_trigger ON bom_versions;
 CREATE TRIGGER check_bom_versions_limit_trigger
@@ -352,7 +352,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS check_processes_limit_trigger ON processes;
 CREATE TRIGGER check_processes_limit_trigger
@@ -374,7 +374,7 @@ BEGIN
   END IF;
   RETURN OLD;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS prevent_process_delete_with_offers_trigger ON processes;
 CREATE TRIGGER prevent_process_delete_with_offers_trigger
@@ -389,7 +389,7 @@ RETURNS void AS $$
 BEGIN
   DELETE FROM public.audit_log WHERE created_at < now() - interval '1 year';
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ============================================================
 -- 17. Helper: delete user by email (use from SQL Editor)
@@ -406,4 +406,4 @@ BEGIN
   DELETE FROM public.profiles WHERE id = uid;
   DELETE FROM auth.users WHERE id = uid;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;

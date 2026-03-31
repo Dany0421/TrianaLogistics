@@ -11,8 +11,8 @@
 -- ============================================================
 create or replace function get_my_role()
 returns text as $$
-  select role from profiles where id = auth.uid();
-$$ language sql security definer stable;
+  select role from public.profiles where id = auth.uid();
+$$ language sql security definer stable set search_path = public;
 
 -- ============================================================
 -- Drop all permissive blanket policies
