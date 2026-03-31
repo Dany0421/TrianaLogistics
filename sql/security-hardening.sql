@@ -15,7 +15,6 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Add status CHECK constraint if not already present
 DO $$ BEGIN
   ALTER TABLE processes DROP CONSTRAINT IF EXISTS chk_process_status;
   ALTER TABLE processes ADD CONSTRAINT chk_process_status
@@ -25,17 +24,16 @@ END $$;
 -- ============================================================
 -- 2. Fix handle_new_user: NEVER trust client-supplied role
 --    Only creates profile for @triana.co.mz emails.
---    Without a profile, requireAuth() in the frontend will
---    sign out the user and redirect to login.
+--    Uses public.profiles (trigger runs in auth schema context).
 -- ============================================================
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger AS $$
 BEGIN
   IF new.email LIKE '%@triana.co.mz' THEN
-    INSERT INTO profiles (id, name, role)
+    INSERT INTO public.profiles (id, name, role)
     VALUES (
       new.id,
-      new.raw_user_meta_data->>'name',
+      COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
       'commercial'
     );
   END IF;
@@ -44,16 +42,27 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================
+-- 3. RLS: allow profile INSERT during signup (auth.uid() is NULL)
+-- ============================================================
+DROP POLICY IF EXISTS "profiles_insert_on_signup" ON profiles;
+CREATE POLICY "profiles_insert_on_signup"
+  ON profiles FOR INSERT
+  WITH CHECK (true);
+
+-- ============================================================
 -- 4. Prevent users from changing their own role via profile update
+--    Allows SQL Editor (auth.uid() IS NULL) to change roles.
 -- ============================================================
 CREATE OR REPLACE FUNCTION prevent_role_change()
 RETURNS trigger AS $$
 BEGIN
   IF OLD.role IS DISTINCT FROM NEW.role THEN
-    IF NOT EXISTS (
-      SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
-    ) THEN
-      RAISE EXCEPTION 'Only admins can change user roles.';
+    IF auth.uid() IS NOT NULL THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'
+      ) THEN
+        RAISE EXCEPTION 'Only admins can change user roles.';
+      END IF;
     END IF;
   END IF;
   RETURN NEW;
@@ -69,11 +78,9 @@ CREATE TRIGGER prevent_role_change_trigger
 -- 5. CHECK constraints — input length limits
 -- ============================================================
 DO $$ BEGIN
-  -- profiles
   ALTER TABLE profiles DROP CONSTRAINT IF EXISTS chk_name_length;
   ALTER TABLE profiles ADD CONSTRAINT chk_name_length CHECK (char_length(name) <= 100);
 
-  -- processes
   ALTER TABLE processes DROP CONSTRAINT IF EXISTS chk_client_name_length;
   ALTER TABLE processes ADD CONSTRAINT chk_client_name_length CHECK (char_length(client_name) <= 200);
   ALTER TABLE processes DROP CONSTRAINT IF EXISTS chk_project_name_length;
@@ -81,7 +88,6 @@ DO $$ BEGIN
   ALTER TABLE processes DROP CONSTRAINT IF EXISTS chk_notes_length;
   ALTER TABLE processes ADD CONSTRAINT chk_notes_length CHECK (char_length(notes) <= 5000);
 
-  -- suppliers
   ALTER TABLE suppliers DROP CONSTRAINT IF EXISTS chk_supplier_name_length;
   ALTER TABLE suppliers ADD CONSTRAINT chk_supplier_name_length CHECK (char_length(name) <= 200);
   ALTER TABLE suppliers DROP CONSTRAINT IF EXISTS chk_supplier_email_length;
@@ -95,7 +101,6 @@ DO $$ BEGIN
   ALTER TABLE suppliers DROP CONSTRAINT IF EXISTS chk_direitos_range;
   ALTER TABLE suppliers ADD CONSTRAINT chk_direitos_range CHECK (direitos >= 0 AND direitos <= 100);
 
-  -- bom_items
   ALTER TABLE bom_items DROP CONSTRAINT IF EXISTS chk_bom_description_length;
   ALTER TABLE bom_items ADD CONSTRAINT chk_bom_description_length CHECK (char_length(description) <= 500);
   ALTER TABLE bom_items DROP CONSTRAINT IF EXISTS chk_bom_part_number_length;
@@ -103,7 +108,6 @@ DO $$ BEGIN
   ALTER TABLE bom_items DROP CONSTRAINT IF EXISTS chk_bom_quantity_range;
   ALTER TABLE bom_items ADD CONSTRAINT chk_bom_quantity_range CHECK (quantity > 0 AND quantity < 1000000);
 
-  -- quotation_items
   ALTER TABLE quotation_items DROP CONSTRAINT IF EXISTS chk_quot_description_length;
   ALTER TABLE quotation_items ADD CONSTRAINT chk_quot_description_length CHECK (char_length(raw_description) <= 500);
   ALTER TABLE quotation_items DROP CONSTRAINT IF EXISTS chk_quot_price_range;
@@ -111,7 +115,6 @@ DO $$ BEGIN
   ALTER TABLE quotation_items DROP CONSTRAINT IF EXISTS chk_quot_currency;
   ALTER TABLE quotation_items ADD CONSTRAINT chk_quot_currency CHECK (currency IN ('MZN', 'USD', 'EUR', 'ZAR'));
 
-  -- installation_costs
   ALTER TABLE installation_costs DROP CONSTRAINT IF EXISTS chk_install_senior_count;
   ALTER TABLE installation_costs ADD CONSTRAINT chk_install_senior_count CHECK (senior_count >= 0 AND senior_count <= 100);
   ALTER TABLE installation_costs DROP CONSTRAINT IF EXISTS chk_install_senior_rate;
@@ -133,20 +136,36 @@ DO $$ BEGIN
 END $$;
 
 -- ============================================================
--- 6. Tighten RLS: bom_items update/delete only for procurement/admin
+-- 6. Tighten RLS: bom_items update/delete for procurement/admin
+--    or the commercial who created the process
 -- ============================================================
 DROP POLICY IF EXISTS "bom_items_update" ON bom_items;
 CREATE POLICY "bom_items_update"
   ON bom_items FOR UPDATE
-  USING (get_my_role() IN ('procurement', 'admin'));
+  USING (
+    get_my_role() IN ('procurement', 'admin')
+    OR EXISTS (
+      SELECT 1 FROM processes
+      WHERE processes.id = bom_items.process_id
+      AND processes.created_by = auth.uid()
+    )
+  );
 
 DROP POLICY IF EXISTS "bom_items_delete" ON bom_items;
 CREATE POLICY "bom_items_delete"
   ON bom_items FOR DELETE
-  USING (get_my_role() IN ('procurement', 'admin'));
+  USING (
+    get_my_role() IN ('procurement', 'admin')
+    OR EXISTS (
+      SELECT 1 FROM processes
+      WHERE processes.id = bom_items.process_id
+      AND processes.created_by = auth.uid()
+    )
+  );
 
 -- ============================================================
--- 7. Tighten storage: only procurement/admin can upload
+-- 7. Storage: commercials can upload to bom/,
+--    quotations/ restricted to procurement/admin
 -- ============================================================
 DROP POLICY IF EXISTS "storage_insert" ON storage.objects;
 CREATE POLICY "storage_insert"
@@ -154,7 +173,11 @@ CREATE POLICY "storage_insert"
   WITH CHECK (
     bucket_id = 'procurement-files'
     AND auth.role() = 'authenticated'
-    AND get_my_role() IN ('procurement', 'admin')
+    AND name NOT LIKE '%..%'
+    AND (
+      (name LIKE 'bom/%')
+      OR (name LIKE 'quotations/%' AND get_my_role() IN ('procurement', 'admin'))
+    )
   );
 
 -- ============================================================
@@ -245,30 +268,26 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 
--- Only admins can read audit log; nobody can modify via client
 CREATE POLICY "audit_log_select"
   ON audit_log FOR SELECT
   USING (get_my_role() = 'admin');
 
--- Insert only via triggers (SECURITY DEFINER), not via client
--- No insert policy for authenticated = blocked from client
-
 -- ============================================================
--- 12. Audit trigger function
+-- 12. Audit trigger function (uses public.audit_log explicitly)
 -- ============================================================
 CREATE OR REPLACE FUNCTION audit_trigger_fn()
 RETURNS trigger AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    INSERT INTO audit_log (user_id, action, table_name, record_id, new_data)
+    INSERT INTO public.audit_log (user_id, action, table_name, record_id, new_data)
     VALUES (auth.uid(), 'INSERT', TG_TABLE_NAME, NEW.id, to_jsonb(NEW));
     RETURN NEW;
   ELSIF TG_OP = 'UPDATE' THEN
-    INSERT INTO audit_log (user_id, action, table_name, record_id, old_data, new_data)
+    INSERT INTO public.audit_log (user_id, action, table_name, record_id, old_data, new_data)
     VALUES (auth.uid(), 'UPDATE', TG_TABLE_NAME, NEW.id, to_jsonb(OLD), to_jsonb(NEW));
     RETURN NEW;
   ELSIF TG_OP = 'DELETE' THEN
-    INSERT INTO audit_log (user_id, action, table_name, record_id, old_data)
+    INSERT INTO public.audit_log (user_id, action, table_name, record_id, old_data)
     VALUES (auth.uid(), 'DELETE', TG_TABLE_NAME, OLD.id, to_jsonb(OLD));
     RETURN OLD;
   END IF;
@@ -276,7 +295,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Attach audit triggers to critical tables
 DROP TRIGGER IF EXISTS audit_processes ON processes;
 CREATE TRIGGER audit_processes
   AFTER INSERT OR UPDATE OR DELETE ON processes
@@ -298,7 +316,7 @@ CREATE TRIGGER audit_profiles
   FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
 
 -- ============================================================
--- 13. Limit BOM versions per process (prevent version flooding)
+-- 13. Limit BOM versions per process
 -- ============================================================
 CREATE OR REPLACE FUNCTION check_bom_versions_limit()
 RETURNS trigger AS $$
@@ -320,7 +338,7 @@ CREATE TRIGGER check_bom_versions_limit_trigger
   FOR EACH ROW EXECUTE FUNCTION check_bom_versions_limit();
 
 -- ============================================================
--- 14. Limit processes per user (prevent mass creation abuse)
+-- 14. Limit processes per user
 -- ============================================================
 CREATE OR REPLACE FUNCTION check_processes_limit()
 RETURNS trigger AS $$
@@ -342,22 +360,7 @@ CREATE TRIGGER check_processes_limit_trigger
   FOR EACH ROW EXECUTE FUNCTION check_processes_limit();
 
 -- ============================================================
--- 15. Storage: restrict file paths to prevent path traversal
--- ============================================================
-DROP POLICY IF EXISTS "storage_insert" ON storage.objects;
-CREATE POLICY "storage_insert"
-  ON storage.objects FOR INSERT
-  WITH CHECK (
-    bucket_id = 'procurement-files'
-    AND auth.role() = 'authenticated'
-    AND get_my_role() IN ('procurement', 'admin')
-    AND name NOT LIKE '%..%'
-    AND (name LIKE 'bom/%' OR name LIKE 'quotations/%')
-  );
-
--- ============================================================
--- 16. Prevent deletion of processes that have selected_offers
---     (force explicit closing workflow)
+-- 15. Prevent deletion of processes that have selected_offers
 -- ============================================================
 CREATE OR REPLACE FUNCTION prevent_process_delete_with_offers()
 RETURNS trigger AS $$
@@ -379,12 +382,28 @@ CREATE TRIGGER prevent_process_delete_with_offers_trigger
   FOR EACH ROW EXECUTE FUNCTION prevent_process_delete_with_offers();
 
 -- ============================================================
--- 17. Auto-clean expired audit log entries (> 1 year)
---     Run manually or via pg_cron
+-- 16. Auto-clean expired audit log entries (> 1 year)
 -- ============================================================
 CREATE OR REPLACE FUNCTION clean_old_audit_logs()
 RETURNS void AS $$
 BEGIN
-  DELETE FROM audit_log WHERE created_at < now() - interval '1 year';
+  DELETE FROM public.audit_log WHERE created_at < now() - interval '1 year';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================
+-- 17. Helper: delete user by email (use from SQL Editor)
+-- ============================================================
+CREATE OR REPLACE FUNCTION delete_user_by_email(user_email text)
+RETURNS void AS $$
+DECLARE
+  uid uuid;
+BEGIN
+  SELECT id INTO uid FROM auth.users WHERE email = user_email;
+  IF uid IS NULL THEN
+    RAISE EXCEPTION 'User not found: %', user_email;
+  END IF;
+  DELETE FROM public.profiles WHERE id = uid;
+  DELETE FROM auth.users WHERE id = uid;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
