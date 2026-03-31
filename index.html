@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-Frame-Options" content="DENY">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co; img-src 'self' data:;">
 <title>Procurement System — Login</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="css/style.css">
@@ -46,13 +48,7 @@
     <label>Nome</label>
     <input type="text" id="name" placeholder="O teu nome" autocomplete="name">
   </div>
-  <div class="form-row" id="roleRow" style="display:none">
-    <label>Papel</label>
-    <select id="role">
-      <option value="commercial">Comercial</option>
-      <option value="procurement">Procurement / Logística</option>
-    </select>
-  </div>
+  <!-- Role is assigned server-side (always 'commercial'); admin promotes via DB -->
   <div class="form-row">
     <label>Email</label>
     <input type="email" id="email" placeholder="email@triana.co.mz" autocomplete="username">
@@ -71,11 +67,12 @@
 
 <script>
 let isSignup = false;
+let loginAttempts = 0;
+let lockoutUntil = 0;
 
 function toggleMode() {
   isSignup = !isSignup;
   document.getElementById('nameRow').style.display = isSignup ? 'block' : 'none';
-  document.getElementById('roleRow').style.display = isSignup ? 'block' : 'none';
   document.getElementById('submitBtn').textContent = isSignup ? 'Criar conta' : 'Entrar';
   document.getElementById('toggleMsg').textContent = isSignup ? 'Já tens conta?' : 'Ainda não tens conta?';
   document.getElementById('toggleLink').textContent = isSignup ? 'Entrar' : 'Registar';
@@ -87,21 +84,51 @@ async function doSubmit() {
   const password = document.getElementById('password').value;
   const errEl    = document.getElementById('errorMsg');
   errEl.style.display = 'none';
+  errEl.style.color = 'var(--danger)';
 
   if (!email || !password) { errEl.textContent = 'Preenche email e password.'; errEl.style.display = 'block'; return; }
 
+  // Rate limiting: lockout after 5 failed attempts for 60s
+  if (Date.now() < lockoutUntil) {
+    const secs = Math.ceil((lockoutUntil - Date.now()) / 1000);
+    errEl.textContent = `Demasiadas tentativas. Aguarda ${secs}s.`;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  // Email domain validation (also enforced server-side via trigger)
+  if (!email.endsWith('@triana.co.mz')) {
+    errEl.textContent = 'Apenas emails @triana.co.mz são permitidos.';
+    errEl.style.display = 'block';
+    return;
+  }
+
   if (isSignup) {
-    if (!email.endsWith('@triana.co.mz')) { errEl.textContent = 'Apenas emails @triana.co.mz podem registar-se.'; errEl.style.display = 'block'; return; }
     const name = document.getElementById('name').value.trim();
-    const role = document.getElementById('role').value;
-    const { error } = await supabase.auth.signUp({ email, password, options: { data: { name, role } } });
+    if (!name || name.length < 2) { errEl.textContent = 'Introduz o teu nome (mínimo 2 caracteres).'; errEl.style.display = 'block'; return; }
+    if (name.length > 100) { errEl.textContent = 'Nome demasiado longo (máximo 100 caracteres).'; errEl.style.display = 'block'; return; }
+    if (password.length < 8) { errEl.textContent = 'Password deve ter pelo menos 8 caracteres.'; errEl.style.display = 'block'; return; }
+    // Role is NOT sent to the server; trigger always assigns 'commercial'
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
     if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
     errEl.style.color = 'var(--accent)';
-    errEl.textContent = 'Conta criada! Verifica o email para confirmar (ou entra já se o email confirmation estiver desligado).';
+    errEl.textContent = 'Conta criada! Verifica o email para confirmar.';
     errEl.style.display = 'block';
   } else {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+    if (error) {
+      loginAttempts++;
+      if (loginAttempts >= 5) {
+        lockoutUntil = Date.now() + 60000;
+        loginAttempts = 0;
+        errEl.textContent = 'Demasiadas tentativas. Aguarda 60 segundos.';
+      } else {
+        errEl.textContent = 'Email ou password incorretos.';
+      }
+      errEl.style.display = 'block';
+      return;
+    }
+    loginAttempts = 0;
     window.location.href = 'dashboard.html';
   }
 }

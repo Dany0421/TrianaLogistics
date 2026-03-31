@@ -34,9 +34,10 @@ create table if not exists processes (
   project_name text not null,
   deadline date,
   priority text check (priority in ('Low','Medium','High','Urgent')) default 'Medium',
-  status text default 'Active',
+  status text check (status in ('Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled')) default 'Active',
   notes text,
   created_by uuid references profiles(id),
+  assigned_to uuid references profiles(id),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
