@@ -164,6 +164,9 @@ let suppliers = [];
 let bomVersions = [];
 let pendingBomItems = []; // items waiting for validation before saving
 let pendingDiff = null;   // diff result when uploading a BOM revision
+let pendingBomFile = null;  // File object held between handleBomUpload and confirmBom
+let pendingQuotFile = null; // File object held between handleQuotationUpload and confirmQuotation
+let quotationFilesMap = {}; // supplierId → latest quotation_files row
 let quotationMap = {};    // supplierId → items[]
 let matches = [];
 let selectedOffers = [];
@@ -204,25 +207,32 @@ async function loadAll() {
       renderBomTable(bomItems);
       const v = bomVersions[0];
       document.getElementById('bomVersionLabel').textContent = `BOM v${v.version_number} — ${v.original_name||''} (${bomItems.length} itens)`;
-      // Show "Nova Revisão" button if BOM already exists
+      // Show "Nova Revisão" button + "Ver ficheiro" if BOM already exists
       const bomBtn = document.querySelector('#tab-bom .section-header > div');
       if (bomBtn) {
         bomBtn.innerHTML = `
           <input type="file" id="bomFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleBomUpload(this)">
+          ${v.file_path ? `<button class="btn btn-ghost btn-sm" onclick="viewBomFile('${v.file_path}')">📄 Ver ficheiro</button>` : ''}
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bomFileInput').click()" style="border-color:#ff8800;color:#ff8800">📂 Nova Revisão (v${v.version_number+1})</button>
         `;
       }
     }
     if (!hasRole('commercial')) {
       if (suppliers.length) {
-        const [allQ, mtch, selOfrs] = await Promise.all([
+        const supplierIds = suppliers.map(s => s.id);
+        const [allQ, mtch, selOfrs, qFiles] = await Promise.all([
           Promise.all(suppliers.map(s => API.getQuotationItems(s.id))),
           API.getMatches(processId),
           API.getSelectedOffers(processId),
+          API.getQuotationFiles(supplierIds),
         ]);
         suppliers.forEach((s, i) => { quotationMap[s.id] = allQ[i]; });
         matches = mtch;
         selectedOffers = selOfrs;
+        quotationFilesMap = {};
+        for (const f of qFiles) {
+          if (!quotationFilesMap[f.supplier_id]) quotationFilesMap[f.supplier_id] = f;
+        }
       }
       installData = await API.getInstallation(processId);
       renderSuppliers();
@@ -324,6 +334,7 @@ async function handleBomUpload(input) {
     pendingBomItems = items.map(i => ({ ...i }));
   }
 
+  pendingBomFile = file;
   openBomValidationModal(file.name, techInfo);
 }
 
@@ -419,7 +430,15 @@ async function confirmBom() {
     const techInfo = { senior: g('ti_senior'), intermediate: g('ti_inter'), junior: g('ti_junior'), hours: g('ti_hours') };
 
     const versionNumber = (bomVersions[0]?.version_number || 0) + 1;
-    const version = await API.createBomVersion(processId, 'BOM upload', null, versionNumber);
+    let bomFilePath = null;
+    const bomFileName = pendingBomFile?.name || 'bom.xlsx';
+    if (pendingBomFile) {
+      const ext = bomFileName.split('.').pop();
+      bomFilePath = `bom/${processId}/v${versionNumber}_${Date.now()}.${ext}`;
+      await API.uploadFile('procurement-files', bomFilePath, pendingBomFile);
+      pendingBomFile = null;
+    }
+    const version = await API.createBomVersion(processId, bomFileName, bomFilePath, versionNumber);
 
     const itemsToSave = pendingBomItems.map(({ _diffStatus, _oldId, _oldQty, ...item }) => ({
       ...item,
@@ -536,7 +555,10 @@ function renderSuppliers() {
         </div>
         ${qCount ? `
         <div style="border-top:1px solid var(--border);padding-top:12px">
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">COTAÇÃO — ${qCount} ITENS</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px">COTAÇÃO — ${qCount} ITENS</div>
+            ${quotationFilesMap[s.id] ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewQuotFile('${quotationFilesMap[s.id].file_path}')">📄 Ver original</button>` : ''}
+          </div>
           <table style="width:100%;border-collapse:collapse;font-size:12px">
             ${qItems.slice(0,6).map(qi=>`<tr>
               <td style="padding:2px 0;color:var(--text)">${esc(qi.raw_description.length>55?qi.raw_description.substring(0,55)+'…':qi.raw_description)}</td>
@@ -649,6 +671,7 @@ function uploadQuotation(supplierId) {
 async function handleQuotationUpload(input) {
   if (!input.files.length || !currentQuotSuppId) return;
   const file = input.files[0];
+  pendingQuotFile = file;
   if (file.name.toLowerCase().endsWith('.pdf')) {
     await handlePdfQuotation(file);
   } else {
@@ -768,11 +791,36 @@ async function confirmQuotation() {
     await API.deleteQuotationItems(currentQuotSuppId);
     await API.saveQuotationItems(valid.map(i => ({ ...i, supplier_id: currentQuotSuppId })));
     quotationMap[currentQuotSuppId] = await API.getQuotationItems(currentQuotSuppId);
+
+    if (pendingQuotFile) {
+      const ext = pendingQuotFile.name.split('.').pop();
+      const filePath = `quotations/${currentQuotSuppId}/${Date.now()}.${ext}`;
+      await API.uploadFile('procurement-files', filePath, pendingQuotFile);
+      await API.saveQuotationFile(currentQuotSuppId, filePath, pendingQuotFile.name);
+      quotationFilesMap[currentQuotSuppId] = { file_path: filePath, original_name: pendingQuotFile.name };
+      pendingQuotFile = null;
+    }
+
     closeModal();
     showToast(`${valid.length} itens de cotação guardados.`);
     renderSuppliers();
     renderMatchingTab();
   } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+// ── File View ──
+async function viewBomFile(filePath) {
+  try {
+    const url = await API.getSignedUrl('procurement-files', filePath);
+    window.open(url, '_blank');
+  } catch(e) { showToast('Erro ao abrir ficheiro.', true); }
+}
+
+async function viewQuotFile(filePath) {
+  try {
+    const url = await API.getSignedUrl('procurement-files', filePath);
+    window.open(url, '_blank');
+  } catch(e) { showToast('Erro ao abrir ficheiro.', true); }
 }
 
 // ── Matching Tab ──

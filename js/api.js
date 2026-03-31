@@ -247,4 +247,25 @@ const API = {
     if (error) throw error;
     return data;
   },
+
+  async getSignedUrl(bucket, path, expiresIn = 3600) {
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+    if (error) throw error;
+    return data.signedUrl;
+  },
+
+  async saveQuotationFile(supplierId, filePath, originalName) {
+    const { error } = await supabase.from('quotation_files')
+      .insert({ supplier_id: supplierId, file_path: filePath, original_name: originalName });
+    if (error) throw error;
+  },
+
+  async getQuotationFiles(supplierIds) {
+    if (!supplierIds.length) return [];
+    const { data } = await supabase.from('quotation_files')
+      .select('*')
+      .in('supplier_id', supplierIds)
+      .order('uploaded_at', { ascending: false });
+    return data || [];
+  },
 };
