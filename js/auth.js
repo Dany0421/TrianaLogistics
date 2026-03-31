@@ -23,8 +23,14 @@ async function requireAuth(redirectTo = 'index.html') {
 
   currentUser = session.user;
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
-  currentProfile = profile;
 
+  if (!profile) {
+    await supabase.auth.signOut();
+    window.location.href = redirectTo;
+    return null;
+  }
+
+  currentProfile = profile;
   _startInactivityTimer(redirectTo);
 
   return { user: currentUser, profile };
