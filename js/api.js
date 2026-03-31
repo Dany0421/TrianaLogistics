@@ -1,6 +1,16 @@
 // ── API — all Supabase calls in one place ──
 
-// Processes
+function _sanitizeError(error) {
+  if (!error) return new Error('Unknown error');
+  const msg = error.message || String(error);
+  const blocked = ['relation', 'column', 'constraint', 'pg_', 'auth.', 'storage.', 'schema'];
+  if (blocked.some(k => msg.toLowerCase().includes(k))) {
+    console.error('[API]', msg);
+    return new Error('Operação não permitida.');
+  }
+  return error;
+}
+
 const API = {
 
   // ── Processes ──
@@ -9,7 +19,7 @@ const API = {
       .from('processes')
       .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id)')
       .order('created_at', { ascending: false });
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -19,7 +29,7 @@ const API = {
       .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id)')
       .eq('id', id)
       .single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -29,7 +39,7 @@ const API = {
       .select('id, name, role')
       .in('role', ['procurement', 'admin'])
       .order('name');
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data || [];
   },
 
@@ -39,7 +49,7 @@ const API = {
       .insert({ ...fields, created_by: currentUser.id })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -50,13 +60,13 @@ const API = {
       .eq('id', id)
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   async deleteProcess(id) {
     const { error } = await supabase.from('processes').delete().eq('id', id);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
   },
 
   // ── BOM Versions ──
@@ -66,7 +76,7 @@ const API = {
       .insert({ process_id: processId, original_name: originalName, file_path: filePath, version_number: versionNumber, uploaded_by: currentUser.id })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -76,14 +86,14 @@ const API = {
       .select('*')
       .eq('process_id', processId)
       .order('version_number', { ascending: false });
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   // ── BOM Items ──
   async saveBomItems(items) {
     const { data, error } = await supabase.from('bom_items').insert(items).select();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -92,7 +102,7 @@ const API = {
     if (versionId) q = q.eq('bom_version_id', versionId);
     q = q.order('sort_order');
     const { data, error } = await q;
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -103,31 +113,31 @@ const API = {
       .select('*')
       .eq('process_id', processId)
       .order('created_at');
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   async createSupplier(fields) {
     const { data, error } = await supabase.from('suppliers').insert(fields).select().single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   async updateSupplier(id, fields) {
     const { data, error } = await supabase.from('suppliers').update(fields).eq('id', id).select().single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   async deleteSupplier(id) {
     const { error } = await supabase.from('suppliers').delete().eq('id', id);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
   },
 
   // ── Quotation Items ──
   async saveQuotationItems(items) {
     const { data, error } = await supabase.from('quotation_items').insert(items).select();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -137,13 +147,13 @@ const API = {
       .select('*')
       .eq('supplier_id', supplierId)
       .order('created_at');
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   async deleteQuotationItems(supplierId) {
     const { error } = await supabase.from('quotation_items').delete().eq('supplier_id', supplierId);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
   },
 
   // ── Item Matches ──
@@ -152,7 +162,7 @@ const API = {
       .from('item_matches')
       .select('*, bom_items(*), quotation_items(*), suppliers(name)')
       .eq('process_id', processId);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -162,13 +172,13 @@ const API = {
       .upsert(match, { onConflict: 'bom_item_id,supplier_id' })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   async deleteMatch(id) {
     const { error } = await supabase.from('item_matches').delete().eq('id', id);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
   },
 
   async copyItemMatches(oldBomItemId, newBomItemId, processId) {
@@ -183,7 +193,7 @@ const API = {
       confidence: m.confidence,
     }));
     const { error } = await supabase.from('item_matches').insert(copies);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
   },
 
   async copySelectedOffer(oldBomItemId, newBomItemId, processId) {
@@ -197,7 +207,7 @@ const API = {
       quotation_item_id: offer.quotation_item_id,
       selected_by: offer.selected_by,
     });
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
   },
 
   // ── Selected Offers ──
@@ -206,7 +216,7 @@ const API = {
       .from('selected_offers')
       .select('*, suppliers(name), quotation_items(*)')
       .eq('process_id', processId);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
@@ -216,13 +226,13 @@ const API = {
       .upsert({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotationItemId, selected_by: currentUser.id }, { onConflict: 'process_id,bom_item_id' })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   async deleteSelectedOffer(processId, bomItemId) {
     const { error } = await supabase.from('selected_offers').delete().eq('process_id', processId).eq('bom_item_id', bomItemId);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
   },
 
   // ── Installation Costs ──
@@ -237,27 +247,29 @@ const API = {
       .upsert({ process_id: processId, ...fields, updated_at: new Date().toISOString() }, { onConflict: 'process_id' })
       .select()
       .single();
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   // ── File upload ──
   async uploadFile(bucket, path, file) {
+    if (path.includes('..')) throw new Error('Caminho inválido.');
     const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data;
   },
 
   async getSignedUrl(bucket, path, expiresIn = 3600) {
+    if (path.includes('..')) throw new Error('Caminho inválido.');
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
     return data.signedUrl;
   },
 
   async saveQuotationFile(supplierId, filePath, originalName) {
     const { error } = await supabase.from('quotation_files')
       .insert({ supplier_id: supplierId, file_path: filePath, original_name: originalName });
-    if (error) throw error;
+    if (error) throw _sanitizeError(error);
   },
 
   async getQuotationFiles(supplierIds) {
