@@ -41,23 +41,15 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================
--- 3. Server-side email domain restriction on signup
---    Blocks signups from non-@triana.co.mz emails
+-- 3. Email domain restriction
+--    Do NOT use triggers on auth.users — Supabase wraps errors
+--    as "Database error saving new user". Instead configure this
+--    in the Supabase Dashboard:
+--    Authentication > Settings > Restrict email domain > triana.co.mz
 -- ============================================================
-CREATE OR REPLACE FUNCTION enforce_email_domain()
-RETURNS trigger AS $$
-BEGIN
-  IF new.email IS NULL OR new.email NOT LIKE '%@triana.co.mz' THEN
-    RAISE EXCEPTION 'Only @triana.co.mz emails are allowed to register.';
-  END IF;
-  RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
+-- Clean up if previously applied:
 DROP TRIGGER IF EXISTS enforce_email_domain_trigger ON auth.users;
-CREATE TRIGGER enforce_email_domain_trigger
-  BEFORE INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION enforce_email_domain();
+DROP FUNCTION IF EXISTS enforce_email_domain();
 
 -- ============================================================
 -- 4. Prevent users from changing their own role via profile update
