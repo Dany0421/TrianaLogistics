@@ -988,37 +988,59 @@ function openMatchModal(bomItemId, supplierId) {
 async function linkItem(bomItemId, supplierId, quotItemId) {
   if (!UUID_RE.test(bomItemId) || !UUID_RE.test(supplierId) || !UUID_RE.test(quotItemId)) return;
   try {
-    await API.saveMatch({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId, match_type: 'manual' });
-    await loadMatchData();
+    // Optimistic update — reflect change immediately
+    const qi = (quotationMap[supplierId] || []).find(q => q.id === quotItemId);
+    const existing = matches.findIndex(m => m.bom_item_id === bomItemId && m.supplier_id === supplierId);
+    const optimistic = { id: '_tmp', process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId, match_type: 'manual', quotation_items: qi };
+    if (existing >= 0) matches[existing] = optimistic;
+    else matches.push(optimistic);
     closeModal();
     renderMatchingTab();
     showToast('Item ligado.');
-  } catch(e) { showToast('Erro: ' + e.message, true); }
+    // Persist and update local id
+    const saved = await API.saveMatch({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId, match_type: 'manual' });
+    const idx = matches.findIndex(m => m.bom_item_id === bomItemId && m.supplier_id === supplierId);
+    if (idx >= 0) matches[idx] = { ...matches[idx], ...saved, quotation_items: qi };
+  } catch(e) {
+    await loadMatchData(); renderMatchingTab();
+    showToast('Erro: ' + e.message, true);
+  }
 }
 
 async function unlinkItem(bomItemId, supplierId, matchId) {
   if (!UUID_RE.test(bomItemId) || !UUID_RE.test(supplierId) || !UUID_RE.test(matchId)) return;
   try {
-    await API.deleteMatch(matchId);
-    // If this supplier was the selected offer for this bom item, remove it too
-    if (selectedOffers.find(o => o.bom_item_id === bomItemId && o.supplier_id === supplierId)) {
-      await API.deleteSelectedOffer(processId, bomItemId);
-    }
-    await loadMatchData();
+    const wasSelected = !!selectedOffers.find(o => o.bom_item_id === bomItemId && o.supplier_id === supplierId);
+    // Optimistic update
+    matches = matches.filter(m => m.id !== matchId);
+    if (wasSelected) selectedOffers = selectedOffers.filter(o => !(o.bom_item_id === bomItemId && o.supplier_id === supplierId));
     closeModal();
     renderMatchingTab();
-  } catch(e) { showToast('Erro: ' + e.message, true); }
+    // Persist
+    await API.deleteMatch(matchId);
+    if (wasSelected) await API.deleteSelectedOffer(processId, bomItemId);
+  } catch(e) {
+    await loadMatchData(); renderMatchingTab();
+    showToast('Erro: ' + e.message, true);
+  }
 }
 
 async function selectOffer(bomItemId, supplierId, quotItemId) {
   if (!UUID_RE.test(bomItemId) || !UUID_RE.test(supplierId) || !UUID_RE.test(quotItemId)) return;
   try {
-    await API.selectOffer(processId, bomItemId, supplierId, quotItemId);
-    await loadMatchData();
+    const qi = (quotationMap[supplierId] || []).find(q => q.id === quotItemId);
+    // Optimistic update
+    selectedOffers = selectedOffers.filter(o => o.bom_item_id !== bomItemId);
+    selectedOffers.push({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId, suppliers: suppliers.find(s => s.id === supplierId), quotation_items: qi });
     closeModal();
     renderMatchingTab();
     showToast('Oferta selecionada.');
-  } catch(e) { showToast('Erro: ' + e.message, true); }
+    // Persist
+    await API.selectOffer(processId, bomItemId, supplierId, quotItemId);
+  } catch(e) {
+    await loadMatchData(); renderMatchingTab();
+    showToast('Erro: ' + e.message, true);
+  }
 }
 
 async function runAutoMatch() {
@@ -1048,7 +1070,7 @@ async function runAutoMatch() {
   if (!newMatches.length) { showToast('Nenhum match automático encontrado.'); return; }
 
   try {
-    for (const m of newMatches) await API.saveMatch(m);
+    await Promise.all(newMatches.map(m => API.saveMatch(m)));
     await loadMatchData();
     renderMatchingTab();
     showToast(`${newMatches.length} match(es) automático(s) criado(s).`);
