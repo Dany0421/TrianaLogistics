@@ -24,32 +24,24 @@ END $$;
 
 -- ============================================================
 -- 2. Fix handle_new_user: NEVER trust client-supplied role
---    All new signups get 'commercial'. Only an admin can
---    promote someone to 'procurement' or 'admin' via SQL.
+--    Only creates profile for @triana.co.mz emails.
+--    Without a profile, requireAuth() in the frontend will
+--    sign out the user and redirect to login.
 -- ============================================================
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO profiles (id, name, role)
-  VALUES (
-    new.id,
-    new.raw_user_meta_data->>'name',
-    'commercial'  -- always commercial, admin promotes later
-  );
+  IF new.email LIKE '%@triana.co.mz' THEN
+    INSERT INTO profiles (id, name, role)
+    VALUES (
+      new.id,
+      new.raw_user_meta_data->>'name',
+      'commercial'
+    );
+  END IF;
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- ============================================================
--- 3. Email domain restriction
---    Do NOT use triggers on auth.users — Supabase wraps errors
---    as "Database error saving new user". Instead configure this
---    in the Supabase Dashboard:
---    Authentication > Settings > Restrict email domain > triana.co.mz
--- ============================================================
--- Clean up if previously applied:
-DROP TRIGGER IF EXISTS enforce_email_domain_trigger ON auth.users;
-DROP FUNCTION IF EXISTS enforce_email_domain();
 
 -- ============================================================
 -- 4. Prevent users from changing their own role via profile update
