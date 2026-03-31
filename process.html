@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co; img-src 'self' data:; worker-src blob: https://unpkg.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:; worker-src blob: https://unpkg.com;">
 <title>Processo — Procurement System</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -231,26 +231,30 @@ async function loadAll() {
       }
     }
     if (!hasRole('commercial')) {
-      if (suppliers.length) {
-        const supplierIds = suppliers.map(s => s.id);
-        const [allQ, mtch, selOfrs, qFiles] = await Promise.all([
-          Promise.all(suppliers.map(s => API.getQuotationItems(s.id))),
-          API.getMatches(processId),
-          API.getSelectedOffers(processId),
-          API.getQuotationFiles(supplierIds),
-        ]);
-        suppliers.forEach((s, i) => { quotationMap[s.id] = allQ[i]; });
-        matches = mtch;
-        selectedOffers = selOfrs;
-        quotationFilesMap = {};
-        for (const f of qFiles) {
-          if (!quotationFilesMap[f.supplier_id]) quotationFilesMap[f.supplier_id] = f;
-        }
+      const supplierIds = suppliers.map(s => s.id);
+      const [allQFlat, mtch, selOfrs, qFiles, inst] = await Promise.all([
+        API.getQuotationItemsForSuppliers(supplierIds),
+        API.getMatches(processId),
+        API.getSelectedOffers(processId),
+        API.getQuotationFiles(supplierIds),
+        API.getInstallation(processId),
+      ]);
+      // Group quotation items by supplier
+      quotationMap = {};
+      for (const qi of allQFlat) {
+        if (!quotationMap[qi.supplier_id]) quotationMap[qi.supplier_id] = [];
+        quotationMap[qi.supplier_id].push(qi);
       }
-      installData = await API.getInstallation(processId);
+      matches = mtch;
+      selectedOffers = selOfrs;
+      quotationFilesMap = {};
+      for (const f of qFiles) {
+        if (!quotationFilesMap[f.supplier_id]) quotationFilesMap[f.supplier_id] = f;
+      }
+      installData = inst;
       renderSuppliers();
-      renderMatchingTab();
       renderInstallTab();
+      // Matching tab is rendered lazily on first switch
     }
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
@@ -293,6 +297,7 @@ function switchTab(name) {
   document.querySelectorAll(`[onclick="switchTab('${name}')"]`).forEach(t => t.classList.add('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'matching') renderMatchingTab();
 }
 
 // ── BOM Diff ──
@@ -1277,20 +1282,44 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, inst) {
 
 async function generateExcel() {
   if (hasRole('commercial')) { showToast('Sem permissão para gerar Excel.', true); return; }
-  if (!selectedOffers.length) { showToast('Nenhum item selecionado no Matching.', true); return; }
 
-  // Group selected offers by supplier
-  const supplierItems = {}; // supplierId → [{part, model, qty, price}]
-  for (const offer of selectedOffers) {
-    const bi = bomItems.find(b => b.id === offer.bom_item_id);
-    const qi = (quotationMap[offer.supplier_id] || []).find(q => q.id === offer.quotation_item_id);
-    if (!bi || !qi) continue;
-    if (!supplierItems[offer.supplier_id]) supplierItems[offer.supplier_id] = [];
-    supplierItems[offer.supplier_id].push({ part: bi.part_number || '', model: bi.description, qty: String(bi.quantity), price: String(qi.price) });
+  // Build selected offer lookup
+  const selLookup = {};
+  for (const o of selectedOffers) selLookup[o.bom_item_id] = o;
+
+  // Build match lookup: bomItemId → supplierId → match
+  const matchLookup = {};
+  for (const m of matches) {
+    if (!matchLookup[m.bom_item_id]) matchLookup[m.bom_item_id] = {};
+    matchLookup[m.bom_item_id][m.supplier_id] = m;
+  }
+
+  // Group items by supplier: confirmed offer first, else any match that has a price
+  const supplierItems = {};
+  for (const bi of bomItems) {
+    const confirmed = selLookup[bi.id];
+    if (confirmed) {
+      const qi = (quotationMap[confirmed.supplier_id] || []).find(q => q.id === confirmed.quotation_item_id);
+      if (!qi) continue;
+      if (!supplierItems[confirmed.supplier_id]) supplierItems[confirmed.supplier_id] = [];
+      supplierItems[confirmed.supplier_id].push({ part: bi.part_number || '', model: bi.description, qty: String(bi.quantity), price: String(qi.price) });
+    } else {
+      // No confirmed offer — use first match that has a price
+      const itemMatches = matchLookup[bi.id];
+      if (!itemMatches) continue;
+      for (const [suppId, m] of Object.entries(itemMatches)) {
+        const qi = (quotationMap[suppId] || []).find(q => q.id === m.quotation_item_id);
+        if (qi && qi.price != null) {
+          if (!supplierItems[suppId]) supplierItems[suppId] = [];
+          supplierItems[suppId].push({ part: bi.part_number || '', model: bi.description, qty: String(bi.quantity), price: String(qi.price) });
+          break; // use only one supplier per item
+        }
+      }
+    }
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
-  if (!activeSuppliers.length) { showToast('Nenhum item com oferta selecionada.', true); return; }
+  if (!activeSuppliers.length) { showToast('Sem itens com preço no Matching.', true); return; }
 
   const inst = installData ? {
     sc: installData.senior_count||0, sr: installData.senior_rate||0, sh: installData.senior_hours||0,
