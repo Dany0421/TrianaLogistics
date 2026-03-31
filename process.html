@@ -466,8 +466,8 @@ async function confirmBom() {
     const savedItems = await API.saveBomItems(itemsToSave);
 
     // Copy matches for unchanged/qty_changed items from previous version
-    if (pendingDiff && savedItems?.length) {
-      // Build map: sort_order → new item id (savedItems returned in insert order)
+    // Only procurement/admin can write to item_matches and selected_offers
+    if (pendingDiff && savedItems?.length && !hasRole('commercial')) {
       const preserved = pendingBomItems
         .map((item, idx) => ({ item, newId: savedItems[idx]?.id }))
         .filter(({ item, newId }) => newId && item._oldId &&
@@ -476,7 +476,6 @@ async function confirmBom() {
       await Promise.all(preserved.map(({ item, newId }) =>
         API.copyItemMatches(item._oldId, newId, processId)
       ));
-      // Copy selected offers for unchanged items only
       const unchangedOffers = preserved.filter(({ item }) => item._diffStatus === 'unchanged');
       await Promise.all(unchangedOffers.map(({ item, newId }) =>
         API.copySelectedOffer(item._oldId, newId, processId)
