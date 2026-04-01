@@ -151,6 +151,17 @@ const API = {
     return data;
   },
 
+  async getQuotationItemsForSuppliers(supplierIds) {
+    if (!supplierIds.length) return [];
+    const { data, error } = await supabase
+      .from('quotation_items')
+      .select('*')
+      .in('supplier_id', supplierIds)
+      .order('created_at');
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
   async deleteQuotationItems(supplierId) {
     const { error } = await supabase.from('quotation_items').delete().eq('supplier_id', supplierId);
     if (error) throw _sanitizeError(error);
