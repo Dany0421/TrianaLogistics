@@ -616,28 +616,40 @@ function toggleSupplier(i) {
 
 function openRFQModal(supplierIdx) {
   const s = suppliers[supplierIdx];
-  showModal(`
-    <div class="modal-tag">Pedido de Cotação</div>
-    <div class="modal-title" style="font-size:15px;margin-bottom:4px">${esc(s.name)}</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${esc(s.email)}</div>
+  // Group items by category for display
+  let lastCat = null;
+  const itemRows = bomItems.map((bi, idx) => {
+    let catHeader = '';
+    if (bi.category && bi.category !== lastCat) {
+      catHeader = `<div style="background:var(--surface2);padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)">${esc(bi.category)}</div>`;
+      lastCat = bi.category;
+    }
+    return `${catHeader}<label style="display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s" onmouseover="this.style.background='rgba(59,130,246,.05)'" onmouseout="this.style.background=''">
+      <input type="checkbox" class="rfq-item-cb" value="${idx}" checked style="margin-top:3px;width:auto">
+      <div>
+        <div style="font-size:13px;color:var(--text);line-height:1.4">${esc(bi.description)}</div>
+        ${bi.part_number ? `<div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">${esc(bi.part_number)}</div>` : ''}
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px">× ${bi.quantity} ${bi.unit||''}</div>
+    </label>`;
+  }).join('');
+
+  showModalLg(`
+    <div class="modal-tag">Pedido de Cotação — RFQ</div>
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
+      <div class="modal-title" style="margin-bottom:0">${esc(s.name)}</div>
+      <div style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">${esc(s.email)}</div>
+    </div>
     ${!bomItems.length
-      ? `<div style="color:var(--muted);font-size:13px;margin-bottom:16px">Carrega o BOM primeiro.</div>`
-      : `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
-          <span>SELECIONA OS ITENS A PEDIR</span>
-          <label style="cursor:pointer;font-size:10px;letter-spacing:0;text-transform:none;font-weight:400">
-            <input type="checkbox" id="rfq_all" onchange="toggleAllRFQ(this.checked)" checked> Selecionar tudo
+      ? `<div style="color:var(--muted);font-size:13px;margin:20px 0">Carrega o BOM primeiro.</div>`
+      : `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase">Seleciona os itens a pedir</div>
+          <label style="cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;text-transform:none;letter-spacing:0;font-weight:400;margin-bottom:0">
+            <input type="checkbox" id="rfq_all" onchange="toggleAllRFQ(this.checked)" checked style="width:auto"> Selecionar tudo
           </label>
         </div>
-        <div style="max-height:320px;overflow-y:auto;margin-bottom:16px;border:1px solid var(--border);border-radius:4px">
-          ${bomItems.map((bi, idx) => `
-            <label style="display:flex;align-items:center;gap:10px;padding:7px 10px;cursor:pointer;border-bottom:1px solid #1a1a1a">
-              <input type="checkbox" class="rfq-item-cb" value="${idx}" checked>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(bi.description)}</div>
-                ${bi.part_number ? `<div style="font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
-              </div>
-              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap">Qty: ${bi.quantity}</div>
-            </label>`).join('')}
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:420px;overflow-y:auto;margin-bottom:16px">
+          ${itemRows}
         </div>`}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -659,24 +671,39 @@ function sendRFQ(supplierIdx) {
 
   const subject = `Pedido de Cotação — ${process.project_name} — ${process.client_name}`;
 
-  const COL_ART = 16, COL_DESC = 42, COL_QTY = 14;
-  const pad = (v, n) => String(v || '').substring(0, n).padEnd(n);
-  const lines = [];
-  lines.push(pad('Artigo', COL_ART) + pad('Descrição', COL_DESC) + pad('Quantidade', COL_QTY) + 'Unidade');
-  lines.push('-'.repeat(COL_ART + COL_DESC + COL_QTY + 10));
+  // Box-drawing table (renders in Outlook/Gmail with monospace font)
+  const A = 14, D = 36, Q = 8, U = 8;
+  const p = (v, n) => String(v||'').substring(0, n).padEnd(n);
+  const d = n => '─'.repeat(n);
+  const sA = d(A+2), sD = d(D+2), sQ = d(Q+2), sU = d(U+2);
+  const FULL = (A+2)+1+(D+2)+1+(Q+2)+1+(U+2); // inner width for full-span rows
+  const center = (s, w) => { const l = Math.max(0, Math.floor((w-s.length)/2)); return ' '.repeat(l)+s+' '.repeat(Math.max(0,w-l-s.length)); };
 
-  let lastCat = null;
+  const dataRow = bi => `│ ${p(bi.part_number,A)} │ ${p(bi.description,D)} │ ${p(bi.quantity,Q)} │ ${p(bi.unit||'Unidade',U)} │`;
+  const sepRow  = ()  => `├${sA}┼${sD}┼${sQ}┼${sU}┤`;
+  const catTop  = ()  => `├${'─'.repeat(FULL)}┤`;
+  const catName = c   => `│${center(c.toUpperCase(), FULL)}│`;
+  const catBot  = ()  => `├${sA}┬${sD}┬${sQ}┬${sU}┤`;
+
+  const lines = [];
+  lines.push(`┌${sA}┬${sD}┬${sQ}┬${sU}┐`);
+  lines.push(`│ ${p('Artigo',A)} │ ${p('Descrição',D)} │ ${p('Qtd.',Q)} │ ${p('Unidade',U)} │`);
+
+  let lastCat = undefined;
   for (const bi of selected) {
-    if (bi.category && bi.category !== lastCat) {
-      lines.push('');
-      const cat = bi.category.toUpperCase();
-      const indent = Math.max(0, Math.floor((COL_ART + COL_DESC - cat.length) / 2));
-      lines.push(' '.repeat(indent) + cat);
-      lines.push('');
+    if (bi.category !== lastCat) {
+      if (bi.category) {
+        lines.push(catTop());
+        lines.push(catName(bi.category));
+        lines.push(catBot());
+      } else {
+        lines.push(sepRow());
+      }
       lastCat = bi.category;
     }
-    lines.push(pad(bi.part_number, COL_ART) + pad(bi.description, COL_DESC) + pad(bi.quantity, COL_QTY) + (bi.unit || 'Unidade'));
+    lines.push(dataRow(bi));
   }
+  lines.push(`└${sA}┴${sD}┴${sQ}┴${sU}┘`);
 
   const body = [
     'Boa tarde, Prezados,',
