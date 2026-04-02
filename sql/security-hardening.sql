@@ -147,7 +147,7 @@ CREATE POLICY "bom_items_update"
     OR EXISTS (
       SELECT 1 FROM processes
       WHERE processes.id = bom_items.process_id
-      AND processes.created_by = (select auth.uid())
+      AND processes.created_by = auth.uid()
     )
   );
 
@@ -159,7 +159,7 @@ CREATE POLICY "bom_items_delete"
     OR EXISTS (
       SELECT 1 FROM processes
       WHERE processes.id = bom_items.process_id
-      AND processes.created_by = (select auth.uid())
+      AND processes.created_by = auth.uid()
     )
   );
 
@@ -172,7 +172,7 @@ CREATE POLICY "storage_insert"
   ON storage.objects FOR INSERT
   WITH CHECK (
     bucket_id = 'procurement-files'
-    AND (select auth.role()) = 'authenticated'
+    AND auth.role() = 'authenticated'
     AND name NOT LIKE '%..%'
     AND (
       (name LIKE 'bom/%')

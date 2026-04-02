@@ -31,53 +31,67 @@ drop policy if exists "auth_all" on installation_costs;
 -- ============================================================
 -- profiles
 -- ============================================================
+-- Read: all authenticated users (needed to display names/roles in UI)
 create policy "profiles_select"
   on profiles for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
+-- Update own profile (name etc) — but CANNOT change own role
 create policy "profiles_update_own"
   on profiles for update
-  using ((select auth.uid()) = id)
+  using (auth.uid() = id)
   with check (
-    (select auth.uid()) = id
-    AND role = (select role from public.profiles where id = (select auth.uid()))
+    auth.uid() = id
+    AND role = (select role from profiles where id = auth.uid())
   );
+
+-- Insert: handled only by the trigger on auth.users — block direct client inserts
+-- (no insert policy = blocked for anon/authenticated client)
+
+-- Delete: nobody via client
+-- (no delete policy = blocked)
 
 -- ============================================================
 -- processes
 -- ============================================================
+-- Read: all authenticated (commercial and procurement both see all processes)
 create policy "processes_select"
   on processes for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
+-- Create: any authenticated user (commercial creates, procurement can too)
 create policy "processes_insert"
   on processes for insert
-  with check ((select auth.role()) = 'authenticated');
+  with check (auth.role() = 'authenticated');
 
+-- Update: commercial can only edit their own processes; procurement/admin can edit all
 create policy "processes_update"
   on processes for update
   using (
     get_my_role() in ('procurement', 'admin')
-    OR created_by = (select auth.uid())
+    OR created_by = auth.uid()
   );
 
+-- Delete: only admin or the creator
 create policy "processes_delete"
   on processes for delete
   using (
     get_my_role() = 'admin'
-    OR created_by = (select auth.uid())
+    OR created_by = auth.uid()
   );
 
 -- ============================================================
 -- bom_versions
+-- Commercial uploads BOM → needs insert
+-- Procurement/admin can delete old versions
 -- ============================================================
 create policy "bom_versions_select"
   on bom_versions for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 create policy "bom_versions_insert"
   on bom_versions for insert
-  with check ((select auth.role()) = 'authenticated');
+  with check (auth.role() = 'authenticated');
 
 create policy "bom_versions_delete"
   on bom_versions for delete
@@ -85,43 +99,31 @@ create policy "bom_versions_delete"
 
 -- ============================================================
 -- bom_items
+-- Commercial can insert (after BOM validation)
+-- Procurement/admin can update/delete (e.g. on revision handling)
 -- ============================================================
 create policy "bom_items_select"
   on bom_items for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 create policy "bom_items_insert"
   on bom_items for insert
-  with check ((select auth.role()) = 'authenticated');
+  with check (auth.role() = 'authenticated');
 
 create policy "bom_items_update"
   on bom_items for update
-  using (
-    get_my_role() in ('procurement', 'admin')
-    OR EXISTS (
-      SELECT 1 FROM processes
-      WHERE processes.id = bom_items.process_id
-      AND processes.created_by = (select auth.uid())
-    )
-  );
+  using (auth.role() = 'authenticated');
 
 create policy "bom_items_delete"
   on bom_items for delete
-  using (
-    get_my_role() in ('procurement', 'admin')
-    OR EXISTS (
-      SELECT 1 FROM processes
-      WHERE processes.id = bom_items.process_id
-      AND processes.created_by = (select auth.uid())
-    )
-  );
+  using (auth.role() = 'authenticated');
 
 -- ============================================================
 -- suppliers — procurement/admin only
 -- ============================================================
 create policy "suppliers_select"
   on suppliers for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 create policy "suppliers_insert"
   on suppliers for insert
@@ -140,7 +142,7 @@ create policy "suppliers_delete"
 -- ============================================================
 create policy "quotation_files_select"
   on quotation_files for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 create policy "quotation_files_insert"
   on quotation_files for insert
@@ -155,7 +157,7 @@ create policy "quotation_files_delete"
 -- ============================================================
 create policy "quotation_items_select"
   on quotation_items for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 create policy "quotation_items_insert"
   on quotation_items for insert
@@ -174,7 +176,7 @@ create policy "quotation_items_delete"
 -- ============================================================
 create policy "item_matches_select"
   on item_matches for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 create policy "item_matches_insert"
   on item_matches for insert
@@ -193,7 +195,7 @@ create policy "item_matches_delete"
 -- ============================================================
 create policy "selected_offers_select"
   on selected_offers for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 create policy "selected_offers_insert"
   on selected_offers for insert
@@ -212,7 +214,7 @@ create policy "selected_offers_delete"
 -- ============================================================
 create policy "installation_costs_select"
   on installation_costs for select
-  using ((select auth.role()) = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 create policy "installation_costs_insert"
   on installation_costs for insert
@@ -228,25 +230,19 @@ create policy "installation_costs_delete"
 
 -- ============================================================
 -- Storage bucket RLS — procurement-files bucket
+-- Run this after creating the bucket
 -- ============================================================
+-- Only authenticated users can upload files
 insert into storage.buckets (id, name, public) values ('procurement-files', 'procurement-files', false)
   on conflict do nothing;
 
 create policy "storage_select"
   on storage.objects for select
-  using (bucket_id = 'procurement-files' AND (select auth.role()) = 'authenticated');
+  using (bucket_id = 'procurement-files' AND auth.role() = 'authenticated');
 
 create policy "storage_insert"
   on storage.objects for insert
-  with check (
-    bucket_id = 'procurement-files'
-    AND (select auth.role()) = 'authenticated'
-    AND name NOT LIKE '%..%'
-    AND (
-      (name LIKE 'bom/%')
-      OR (name LIKE 'quotations/%' AND get_my_role() IN ('procurement', 'admin'))
-    )
-  );
+  with check (bucket_id = 'procurement-files' AND auth.role() = 'authenticated');
 
 create policy "storage_delete"
   on storage.objects for delete

@@ -156,27 +156,6 @@ create table if not exists installation_costs (
 );
 
 -- ============================================================
--- Indexes on foreign keys (performance)
--- ============================================================
-
-create index if not exists idx_bom_items_process_id on bom_items(process_id);
-create index if not exists idx_bom_items_bom_version_id on bom_items(bom_version_id);
-create index if not exists idx_bom_versions_process_id on bom_versions(process_id);
-create index if not exists idx_bom_versions_uploaded_by on bom_versions(uploaded_by);
-create index if not exists idx_item_matches_process_id on item_matches(process_id);
-create index if not exists idx_item_matches_supplier_id on item_matches(supplier_id);
-create index if not exists idx_item_matches_quotation_item_id on item_matches(quotation_item_id);
-create index if not exists idx_processes_created_by on processes(created_by);
-create index if not exists idx_processes_assigned_to on processes(assigned_to);
-create index if not exists idx_quotation_files_supplier_id on quotation_files(supplier_id);
-create index if not exists idx_quotation_items_supplier_id on quotation_items(supplier_id);
-create index if not exists idx_selected_offers_bom_item_id on selected_offers(bom_item_id);
-create index if not exists idx_selected_offers_supplier_id on selected_offers(supplier_id);
-create index if not exists idx_selected_offers_quotation_item_id on selected_offers(quotation_item_id);
-create index if not exists idx_selected_offers_selected_by on selected_offers(selected_by);
-create index if not exists idx_suppliers_process_id on suppliers(process_id);
-
--- ============================================================
 -- RLS — Row Level Security
 -- ============================================================
 
@@ -190,6 +169,18 @@ alter table quotation_items enable row level security;
 alter table item_matches enable row level security;
 alter table selected_offers enable row level security;
 alter table installation_costs enable row level security;
+
+-- Authenticated users can read/write everything (tighten per role later)
+create policy "auth_all" on profiles for all using (auth.role() = 'authenticated');
+create policy "auth_all" on processes for all using (auth.role() = 'authenticated');
+create policy "auth_all" on bom_versions for all using (auth.role() = 'authenticated');
+create policy "auth_all" on bom_items for all using (auth.role() = 'authenticated');
+create policy "auth_all" on suppliers for all using (auth.role() = 'authenticated');
+create policy "auth_all" on quotation_files for all using (auth.role() = 'authenticated');
+create policy "auth_all" on quotation_items for all using (auth.role() = 'authenticated');
+create policy "auth_all" on item_matches for all using (auth.role() = 'authenticated');
+create policy "auth_all" on selected_offers for all using (auth.role() = 'authenticated');
+create policy "auth_all" on installation_costs for all using (auth.role() = 'authenticated');
 
 -- ============================================================
 -- Storage bucket for BOM and quotation files
