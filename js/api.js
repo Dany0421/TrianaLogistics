@@ -291,4 +291,123 @@ const API = {
       .order('uploaded_at', { ascending: false });
     return data || [];
   },
+
+  // ── Clone Process ──
+  async cloneProcess(sourceId, fields, { copyBom = true, copySuppliers = true, copyQuotations = true } = {}) {
+    // 1. Fetch source data in parallel
+    const [bomVersions, sourceSuppliers] = await Promise.all([
+      copyBom       ? API.getBomVersions(sourceId) : Promise.resolve([]),
+      copySuppliers ? API.getSuppliers(sourceId)   : Promise.resolve([]),
+    ]);
+    const latestVersion = bomVersions[0] || null;
+    const sourceBomItems = (copyBom && latestVersion)
+      ? await API.getBomItems(sourceId, latestVersion.id)
+      : [];
+
+    let sourceQuotItems = [], sourceMatches = [], sourceOffers = [];
+    if (copySuppliers && copyQuotations && sourceSuppliers.length) {
+      const supIds = sourceSuppliers.map(s => s.id);
+      [sourceQuotItems, sourceMatches, sourceOffers] = await Promise.all([
+        API.getQuotationItemsForSuppliers(supIds),
+        API.getMatches(sourceId),
+        API.getSelectedOffers(sourceId),
+      ]);
+    }
+
+    // 2. Create new process
+    const newProc = await API.createProcess(fields);
+    const newId = newProc.id;
+
+    // 3. Clone BOM → build bomItemMap (oldId → newId)
+    const bomItemMap = {};
+    if (copyBom && latestVersion && sourceBomItems.length) {
+      const newVer = await API.createBomVersion(newId, latestVersion.original_name, latestVersion.file_path, 1);
+      const newItems = sourceBomItems.map(bi => ({
+        process_id:     newId,
+        bom_version_id: newVer.id,
+        part_number:    bi.part_number,
+        description:    bi.description,
+        quantity:       bi.quantity,
+        unit:           bi.unit,
+        category:       bi.category,
+        sort_order:     bi.sort_order,
+      }));
+      const savedItems = await API.saveBomItems(newItems);
+      savedItems.forEach((ni, idx) => { bomItemMap[sourceBomItems[idx].id] = ni.id; });
+    }
+
+    // 4. Clone suppliers → build supplierMap + quotItemMap
+    const supplierMap = {};
+    const quotItemMap = {};
+    if (copySuppliers && sourceSuppliers.length) {
+      for (const s of sourceSuppliers) {
+        const newS = await API.createSupplier({
+          process_id: newId,
+          name:       s.name,
+          email:      s.email,
+          status:     'Not contacted',
+          notes:      s.notes,
+          is_foreign: s.is_foreign,
+          cambio:     s.cambio,
+          transport:  s.transport,
+          direitos:   s.direitos,
+        });
+        supplierMap[s.id] = newS.id;
+
+        if (copyQuotations) {
+          const items = sourceQuotItems.filter(qi => qi.supplier_id === s.id);
+          if (items.length) {
+            const newQItems = items.map(qi => ({
+              supplier_id: newS.id,
+              part_number: qi.part_number,
+              description: qi.description,
+              price:       qi.price,
+              currency:    qi.currency,
+              unit:        qi.unit,
+              notes:       qi.notes,
+            }));
+            const savedQ = await API.saveQuotationItems(newQItems);
+            savedQ.forEach((nq, idx) => { quotItemMap[items[idx].id] = nq.id; });
+          }
+        }
+      }
+
+      // 5. Rebuild item_matches with new IDs
+      if (copyBom && copyQuotations && sourceMatches.length) {
+        const newMatches = sourceMatches
+          .filter(m => bomItemMap[m.bom_item_id] && supplierMap[m.supplier_id] && quotItemMap[m.quotation_item_id])
+          .map(m => ({
+            process_id:        newId,
+            bom_item_id:       bomItemMap[m.bom_item_id],
+            supplier_id:       supplierMap[m.supplier_id],
+            quotation_item_id: quotItemMap[m.quotation_item_id],
+            match_type:        m.match_type,
+            confidence:        m.confidence,
+          }));
+        if (newMatches.length) {
+          const { error } = await supabase.from('item_matches').insert(newMatches);
+          if (error) throw _sanitizeError(error);
+        }
+      }
+
+      // 6. Rebuild selected_offers with new IDs
+      if (copyBom && copyQuotations && sourceOffers.length) {
+        const newOffers = sourceOffers
+          .filter(o => bomItemMap[o.bom_item_id] && supplierMap[o.supplier_id] && quotItemMap[o.quotation_item_id])
+          .map(o => ({
+            process_id:        newId,
+            bom_item_id:       bomItemMap[o.bom_item_id],
+            supplier_id:       supplierMap[o.supplier_id],
+            quotation_item_id: quotItemMap[o.quotation_item_id],
+            selected_by:       currentUser.id,
+          }));
+        if (newOffers.length) {
+          const { error } = await supabase.from('selected_offers').insert(newOffers);
+          if (error) throw _sanitizeError(error);
+        }
+      }
+    }
+
+    return newProc;
+  },
 };
