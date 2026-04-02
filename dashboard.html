@@ -174,6 +174,7 @@ function renderList() {
       ${p.assignee ? `<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px">${esc(p.assignee.name)}</span>` : '<span style="font-size:11px;color:var(--muted)">—</span>'}
       <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
         <button class="btn btn-ghost btn-sm" onclick="openCreateModal('${p.id}')">Editar</button>
+        <button class="btn btn-ghost btn-sm" onclick="openCloneModal('${p.id}')">Clone</button>
         <button class="btn btn-danger btn-sm" onclick="confirmDelete('${p.id}')">×</button>
       </div>
     </div>`).join('')}</div>`;
@@ -293,6 +294,73 @@ async function doDelete(id) {
     showToast('Processo apagado.');
     await loadProcesses();
   } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+// ── Clone ──
+function openCloneModal(id) {
+  if (!UUID_RE.test(id)) return;
+  const p = allProcesses.find(x => x.id === id);
+  showModal(`
+    <div class="modal-tag">Clonar Processo</div>
+    <div class="modal-title">Duplicar "${esc(p.project_name)}"</div>
+    <div class="form-grid-2">
+      <div><label>Nome do Projeto</label><input id="cl_project" value="${esc(p.project_name)} [Clone]"></div>
+      <div><label>Cliente</label><input id="cl_client" value="${esc(p.client_name)}"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin:16px 0">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)">
+        <input type="checkbox" id="cl_bom" checked onchange="updateCloneUI()"> Copiar itens do BOM
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)">
+        <input type="checkbox" id="cl_sup" checked onchange="updateCloneUI()"> Copiar fornecedores
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)" id="cl_quot_row">
+        <input type="checkbox" id="cl_quot" checked> Copiar cotações e preços
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="doClone('${id}')">Clonar</button>
+    </div>
+  `);
+}
+
+function updateCloneUI() {
+  const supChecked = document.getElementById('cl_sup').checked;
+  const quotRow = document.getElementById('cl_quot_row');
+  const quotCb  = document.getElementById('cl_quot');
+  quotRow.style.opacity       = supChecked ? '1' : '.35';
+  quotRow.style.pointerEvents = supChecked ? '' : 'none';
+  if (!supChecked) quotCb.checked = false;
+}
+
+async function doClone(sourceId) {
+  if (!UUID_RE.test(sourceId)) return;
+  const project_name   = document.getElementById('cl_project').value.trim();
+  const client_name    = document.getElementById('cl_client').value.trim();
+  const copyBom        = document.getElementById('cl_bom').checked;
+  const copySuppliers  = document.getElementById('cl_sup').checked;
+  const copyQuotations = document.getElementById('cl_quot').checked;
+
+  if (!project_name || !client_name) { showToast('Preenche nome e cliente.', true); return; }
+  if (project_name.length > 200 || client_name.length > 200) { showToast('Nome demasiado longo.', true); return; }
+
+  const src = allProcesses.find(x => x.id === sourceId);
+  const fields = {
+    project_name,
+    client_name,
+    priority: src.priority || 'Medium',
+    status:   'Active',
+    notes:    src.notes || null,
+    deadline: null,
+  };
+
+  try {
+    const newProc = await API.cloneProcess(sourceId, fields, { copyBom, copySuppliers, copyQuotations });
+    closeModal();
+    showToast('Processo clonado.');
+    window.location.href = `process.html?id=${newProc.id}`;
+  } catch(e) { showToast('Erro ao clonar: ' + e.message, true); }
 }
 
 // ── Modal helpers ──

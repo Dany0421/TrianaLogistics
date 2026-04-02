@@ -17,7 +17,6 @@
   <!-- Left brand panel -->
   <div class="login-panel-left">
     <div class="login-panel-left-content">
-      <!-- Wordmark -->
       <div class="login-wordmark">
         <div class="login-logo-mark">T</div>
         <div>
@@ -25,13 +24,9 @@
           <div class="login-co-sub">Logística &amp; Procurement</div>
         </div>
       </div>
-
-      <!-- Tagline -->
       <div class="login-panel-tagline">
         Gestão de procurement<br><span>centralizada e eficiente.</span>
       </div>
-
-      <!-- Footnote -->
       <div class="login-panel-footnote">Sistema interno · Acesso restrito</div>
     </div>
   </div>
@@ -43,27 +38,42 @@
       <div class="login-form-title" id="loginTitle">Bem-vindo de volta</div>
       <div class="login-form-sub" id="loginSub">Introduz as tuas credenciais para entrar.</div>
 
+      <!-- Name row (signup only) -->
       <div class="form-row" id="nameRow" style="display:none">
         <label>Nome</label>
         <input type="text" id="name" placeholder="O teu nome" autocomplete="name">
       </div>
-      <!-- Role is assigned server-side (always 'commercial'); admin promotes via DB -->
-      <div class="form-row">
+
+      <!-- Email row (login / signup / reset) -->
+      <div class="form-row" id="emailRow">
         <label>Email</label>
         <input type="email" id="email" placeholder="email@triana.co.mz" autocomplete="username">
       </div>
-      <div class="form-row">
-        <label>Password</label>
+
+      <!-- Password row (login / signup / new-password) -->
+      <div class="form-row" id="passwordRow">
+        <label id="passwordLabel">Password</label>
         <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+
+      <!-- Confirm password row (new-password only) -->
+      <div class="form-row" id="confirmRow" style="display:none">
+        <label>Confirmar nova password</label>
+        <input type="password" id="confirmPassword" placeholder="••••••••" autocomplete="new-password">
       </div>
 
       <div id="errorMsg" class="login-error-msg"></div>
 
       <button class="btn btn-primary btn-login" id="submitBtn" onclick="doSubmit()">Entrar</button>
 
+      <!-- Forgot password link (login mode only) -->
+      <div id="forgotRow" style="text-align:right;margin-top:10px">
+        <span onclick="setMode('reset')" style="font-size:12px;color:var(--muted);cursor:pointer;transition:.15s" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">Esqueceste a password?</span>
+      </div>
+
       <div class="login-toggle">
         <span id="toggleMsg">Ainda não tens conta?</span>
-        <span onclick="toggleMode()" class="login-toggle-link" id="toggleLink">Registar</span>
+        <span onclick="toggleSignup()" class="login-toggle-link" id="toggleLink">Registar</span>
       </div>
     </div>
   </div>
@@ -71,78 +81,144 @@
 </div>
 
 <script>
-let isSignup = false;
+// modes: 'login' | 'signup' | 'reset' | 'new-password'
+let mode = 'login';
 let loginAttempts = 0;
-let lockoutUntil = 0;
+let lockoutUntil  = 0;
 
-function toggleMode() {
-  isSignup = !isSignup;
-  document.getElementById('nameRow').style.display = isSignup ? 'block' : 'none';
-  document.getElementById('submitBtn').textContent = isSignup ? 'Criar conta' : 'Entrar';
-  document.getElementById('loginTitle').textContent = isSignup ? 'Criar conta' : 'Bem-vindo de volta';
-  document.getElementById('loginSub').textContent = isSignup ? 'Preenche os campos abaixo para criar a tua conta.' : 'Introduz as tuas credenciais para entrar.';
-  document.getElementById('toggleMsg').textContent = isSignup ? 'Já tens conta?' : 'Ainda não tens conta?';
-  document.getElementById('toggleLink').textContent = isSignup ? 'Entrar' : 'Registar';
-  document.getElementById('errorMsg').style.display = 'none';
+function setMode(m) {
+  mode = m;
+  const errEl = document.getElementById('errorMsg');
+  errEl.style.display = 'none';
+  errEl.style.color   = 'var(--danger)';
+
+  const show = id => document.getElementById(id).style.display = '';
+  const hide = id => document.getElementById(id).style.display = 'none';
+
+  // Reset all rows first
+  hide('nameRow'); show('emailRow'); show('passwordRow'); hide('confirmRow');
+  hide('forgotRow');
+  document.getElementById('toggleMsg').parentElement.style.display = '';
+
+  if (m === 'login') {
+    document.getElementById('loginTitle').textContent = 'Bem-vindo de volta';
+    document.getElementById('loginSub').textContent   = 'Introduz as tuas credenciais para entrar.';
+    document.getElementById('submitBtn').textContent  = 'Entrar';
+    document.getElementById('passwordLabel').textContent = 'Password';
+    document.getElementById('password').autocomplete  = 'current-password';
+    show('forgotRow');
+    document.getElementById('toggleMsg').textContent  = 'Ainda não tens conta?';
+    document.getElementById('toggleLink').textContent = 'Registar';
+  } else if (m === 'signup') {
+    show('nameRow');
+    document.getElementById('loginTitle').textContent = 'Criar conta';
+    document.getElementById('loginSub').textContent   = 'Preenche os campos abaixo para criar a tua conta.';
+    document.getElementById('submitBtn').textContent  = 'Criar conta';
+    document.getElementById('passwordLabel').textContent = 'Password';
+    document.getElementById('password').autocomplete  = 'new-password';
+    document.getElementById('toggleMsg').textContent  = 'Já tens conta?';
+    document.getElementById('toggleLink').textContent = 'Entrar';
+  } else if (m === 'reset') {
+    hide('passwordRow');
+    document.getElementById('loginTitle').textContent = 'Recuperar password';
+    document.getElementById('loginSub').textContent   = 'Indica o teu email e enviamos um link para redefinir a password.';
+    document.getElementById('submitBtn').textContent  = 'Enviar link';
+    document.getElementById('toggleMsg').textContent  = 'Voltar ao';
+    document.getElementById('toggleLink').textContent = 'Login';
+  } else if (m === 'new-password') {
+    hide('emailRow');
+    show('confirmRow');
+    document.getElementById('loginTitle').textContent = 'Nova password';
+    document.getElementById('loginSub').textContent   = 'Define a tua nova password.';
+    document.getElementById('submitBtn').textContent  = 'Guardar password';
+    document.getElementById('passwordLabel').textContent = 'Nova password';
+    document.getElementById('password').autocomplete  = 'new-password';
+    document.getElementById('toggleMsg').parentElement.style.display = 'none';
+  }
+}
+
+function toggleSignup() {
+  setMode(mode === 'signup' ? 'login' : (mode === 'reset' ? 'login' : 'signup'));
 }
 
 async function doSubmit() {
-  const email    = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
-  const errEl    = document.getElementById('errorMsg');
+  const errEl = document.getElementById('errorMsg');
   errEl.style.display = 'none';
-  errEl.style.color = 'var(--danger)';
+  errEl.style.color   = 'var(--danger)';
 
-  if (!email || !password) { errEl.textContent = 'Preenche email e password.'; errEl.style.display = 'block'; return; }
+  const email    = document.getElementById('email')?.value.trim() || '';
+  const password = document.getElementById('password')?.value     || '';
 
-  // Rate limiting: lockout after 5 failed attempts for 60s
-  if (Date.now() < lockoutUntil) {
-    const secs = Math.ceil((lockoutUntil - Date.now()) / 1000);
-    errEl.textContent = `Demasiadas tentativas. Aguarda ${secs}s.`;
-    errEl.style.display = 'block';
-    return;
-  }
-
-  // Email domain validation (also enforced server-side via trigger)
-  if (!email.endsWith('@triana.co.mz')) {
-    errEl.textContent = 'Apenas emails @triana.co.mz são permitidos.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  if (isSignup) {
-    const name = document.getElementById('name').value.trim();
-    if (!name || name.length < 2) { errEl.textContent = 'Introduz o teu nome (mínimo 2 caracteres).'; errEl.style.display = 'block'; return; }
-    if (name.length > 100) { errEl.textContent = 'Nome demasiado longo (máximo 100 caracteres).'; errEl.style.display = 'block'; return; }
-    if (password.length < 8) { errEl.textContent = 'Password deve ter pelo menos 8 caracteres.'; errEl.style.display = 'block'; return; }
-    // Role is NOT sent to the server; trigger always assigns 'commercial'
-    const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
-    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
-    errEl.style.color = 'var(--accent)';
-    errEl.textContent = 'Conta criada! Verifica o email para confirmar.';
-    errEl.style.display = 'block';
-  } else {
+  if (mode === 'login') {
+    if (!email || !password) { errEl.textContent = 'Preenche email e password.'; errEl.style.display = 'block'; return; }
+    if (Date.now() < lockoutUntil) {
+      errEl.textContent = `Demasiadas tentativas. Aguarda ${Math.ceil((lockoutUntil - Date.now()) / 1000)}s.`;
+      errEl.style.display = 'block'; return;
+    }
+    if (!email.endsWith('@triana.co.mz')) { errEl.textContent = 'Apenas emails @triana.co.mz são permitidos.'; errEl.style.display = 'block'; return; }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       loginAttempts++;
-      if (loginAttempts >= 5) {
-        lockoutUntil = Date.now() + 60000;
-        loginAttempts = 0;
-        errEl.textContent = 'Demasiadas tentativas. Aguarda 60 segundos.';
-      } else {
-        errEl.textContent = 'Email ou password incorretos.';
-      }
-      errEl.style.display = 'block';
-      return;
+      if (loginAttempts >= 5) { lockoutUntil = Date.now() + 60000; loginAttempts = 0; errEl.textContent = 'Demasiadas tentativas. Aguarda 60 segundos.'; }
+      else { errEl.textContent = 'Email ou password incorretos.'; }
+      errEl.style.display = 'block'; return;
     }
     loginAttempts = 0;
     window.location.href = 'dashboard.html';
+
+  } else if (mode === 'signup') {
+    const name = document.getElementById('name').value.trim();
+    if (!email || !password) { errEl.textContent = 'Preenche todos os campos.'; errEl.style.display = 'block'; return; }
+    if (!email.endsWith('@triana.co.mz')) { errEl.textContent = 'Apenas emails @triana.co.mz são permitidos.'; errEl.style.display = 'block'; return; }
+    if (!name || name.length < 2) { errEl.textContent = 'Introduz o teu nome (mínimo 2 caracteres).'; errEl.style.display = 'block'; return; }
+    if (name.length > 100) { errEl.textContent = 'Nome demasiado longo (máximo 100 caracteres).'; errEl.style.display = 'block'; return; }
+    if (password.length < 8) { errEl.textContent = 'Password deve ter pelo menos 8 caracteres.'; errEl.style.display = 'block'; return; }
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+    errEl.style.color   = 'var(--accent)';
+    errEl.textContent   = 'Conta criada! Verifica o email para confirmar.';
+    errEl.style.display = 'block';
+
+  } else if (mode === 'reset') {
+    if (!email) { errEl.textContent = 'Introduz o teu email.'; errEl.style.display = 'block'; return; }
+    if (!email.endsWith('@triana.co.mz')) { errEl.textContent = 'Apenas emails @triana.co.mz são permitidos.'; errEl.style.display = 'block'; return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname,
+    });
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+    errEl.style.color   = 'var(--accent)';
+    errEl.textContent   = 'Link enviado! Verifica o teu email.';
+    errEl.style.display = 'block';
+    document.getElementById('submitBtn').disabled = true;
+
+  } else if (mode === 'new-password') {
+    const confirm = document.getElementById('confirmPassword').value;
+    if (password.length < 8) { errEl.textContent = 'A password deve ter pelo menos 8 caracteres.'; errEl.style.display = 'block'; return; }
+    if (password !== confirm) { errEl.textContent = 'As passwords não coincidem.'; errEl.style.display = 'block'; return; }
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+    errEl.style.color   = 'var(--accent)';
+    errEl.textContent   = 'Password atualizada! A redirecionar...';
+    errEl.style.display = 'block';
+    setTimeout(() => window.location.href = 'dashboard.html', 1500);
   }
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Enter') doSubmit(); });
 
 window.addEventListener('load', async () => {
+  // Check for recovery token in URL hash (Supabase sends: #access_token=...&type=recovery)
+  const hash   = window.location.hash;
+  const params = new URLSearchParams(hash.replace('#', '?'));
+  if (params.get('type') === 'recovery') {
+    // Let Supabase process the session from the URL
+    const { data, error } = await supabase.auth.getSession();
+    if (!error && data.session) {
+      setMode('new-password');
+      return;
+    }
+  }
+
   const { data: { session } } = await supabase.auth.getSession();
   if (session) window.location.href = 'dashboard.html';
 });
