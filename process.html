@@ -16,52 +16,53 @@
 <script src="js/api.js"></script>
 <script src="js/bom-parser.js"></script>
 <style>
-  .back-link { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:20px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+  .back-link { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:20px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; transition:.15s; }
   .back-link:hover { color:var(--accent); }
   .process-header { margin-bottom:28px; }
-  .process-title { font-size:22px; font-weight:600; color:#fff; margin-bottom:4px; }
+  .process-title { font-size:22px; font-weight:700; color:#fff; margin-bottom:4px; letter-spacing:-.3px; }
   .process-sub { font-size:14px; color:var(--muted); margin-bottom:12px; }
   .process-meta { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:24px; }
-  .tab { padding:10px 20px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; transition:.15s; }
+  .tab { padding:10px 20px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; transition:.15s; letter-spacing:.3px; }
   .tab:hover { color:var(--text); }
   .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
   .tab-panel { display:none; }
   .tab-panel.active { display:block; }
   /* BOM validation table */
   .bom-validate-table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:16px; }
-  .bom-validate-table th { text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--border); }
-  .bom-validate-table td { padding:3px 4px; border-bottom:1px solid #1a1a1a; vertical-align:middle; }
+  .bom-validate-table th { text-align:left; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.8px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--border); }
+  .bom-validate-table td { padding:3px 4px; border-bottom:1px solid var(--border); vertical-align:middle; }
   .bom-validate-table td input { padding:5px 7px; font-size:12px; }
-  .bom-validate-table tr.cat-row td { background:var(--surface2); color:var(--accent2); font-family:'IBM Plex Mono',monospace; font-size:11px; padding:5px 8px; font-weight:600; }
+  .bom-validate-table tr.cat-row td { background:var(--surface2); color:var(--accent2); font-family:'JetBrains Mono',monospace; font-size:10px; padding:6px 8px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; }
   /* Supplier card */
-  .supplier-card { background:var(--surface); border:1px solid var(--border); border-radius:6px; margin-bottom:10px; overflow:hidden; }
-  .supplier-card-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--surface2); border-bottom:1px solid var(--border); cursor:pointer; }
-  .supplier-card-body { padding:16px; display:none; }
+  .supplier-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:10px; overflow:hidden; transition:border-color .15s; }
+  .supplier-card:hover { border-color:rgba(59,130,246,.3); }
+  .supplier-card-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:var(--surface2); border-bottom:1px solid var(--border); cursor:pointer; }
+  .supplier-card-body { padding:18px; display:none; }
   .supplier-card-body.open { display:block; }
   .supplier-status-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
-  .foreign-box { display:none; background:#1a1200; border:1px solid #3a2a00; border-radius:4px; padding:12px; margin-bottom:12px; }
+  .foreign-box { display:none; background:rgba(251,191,36,.05); border:1px solid rgba(251,191,36,.2); border-radius:8px; padding:12px; margin-bottom:12px; }
   .foreign-box.show { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
   /* Matching table */
   .match-table { width:100%; border-collapse:collapse; font-size:13px; }
-  .match-table th { text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
-  .match-table td { padding:4px 6px; border-bottom:1px solid #1a1a1a; vertical-align:middle; }
-  .match-table tr.match-cat-row td { background:var(--surface2); color:var(--accent2); font-family:'IBM Plex Mono',monospace; font-size:11px; padding:5px 10px; }
-  .match-cell { border-radius:4px; padding:6px 8px; cursor:pointer; border:1px solid transparent; transition:.15s; min-height:36px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
-  .match-cell:hover { border-color:var(--border); background:var(--surface); }
-  .match-cell.match-empty { color:#444; border:1px dashed #2a2a2a; font-size:18px; }
-  .match-cell.match-empty:hover { border-color:#555; color:var(--muted); }
-  .match-cell.match-selected { background:#061a0f; border-color:var(--accent); }
-  .match-cell.match-lowest { background:#06101a; border-color:#4fc3f7; }
-  .coverage-bar { height:4px; background:#222; border-radius:2px; flex:1; max-width:300px; }
-  .coverage-bar-fill { height:100%; border-radius:2px; background:var(--accent); transition:width .3s; }
+  .match-table th { text-align:left; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.8px; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .match-table td { padding:4px 6px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .match-table tr.match-cat-row td { background:var(--surface2); color:var(--accent); font-family:'JetBrains Mono',monospace; font-size:10px; padding:6px 10px; letter-spacing:.8px; text-transform:uppercase; }
+  .match-cell { border-radius:6px; padding:6px 8px; cursor:pointer; border:1px solid transparent; transition:.15s; min-height:36px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  .match-cell:hover { border-color:var(--border); background:var(--surface2); }
+  .match-cell.match-empty { color:#334; border:1px dashed var(--border); font-size:18px; }
+  .match-cell.match-empty:hover { border-color:var(--muted); color:var(--muted); }
+  .match-cell.match-selected { background:rgba(59,130,246,.1); border-color:var(--accent); }
+  .match-cell.match-lowest { background:rgba(129,140,248,.08); border-color:var(--accent2); }
+  .coverage-bar { height:4px; background:var(--border); border-radius:2px; flex:1; max-width:300px; }
+  .coverage-bar-fill { height:100%; border-radius:2px; background:var(--accent); transition:width .4s; }
   /* Match pick list in modal */
-  .match-pick-row { display:flex; align-items:center; gap:12px; padding:8px 10px; border-radius:4px; cursor:pointer; border:1px solid transparent; margin-bottom:4px; }
+  .match-pick-row { display:flex; align-items:center; gap:12px; padding:8px 10px; border-radius:6px; cursor:pointer; border:1px solid transparent; margin-bottom:4px; transition:.12s; }
   .match-pick-row:hover { background:var(--surface2); border-color:var(--border); }
-  .match-pick-row.linked { background:#061a0f; border-color:#1a3a2a; }
+  .match-pick-row.linked { background:rgba(59,130,246,.08); border-color:rgba(59,130,246,.3); }
   /* Quotation badge on supplier card */
-  .quot-badge { font-family:'IBM Plex Mono',monospace; font-size:10px; background:var(--surface2); border:1px solid var(--border); border-radius:3px; padding:2px 6px; color:var(--muted); }
-  .quot-badge.has-items { color:var(--accent2); border-color:#2a4a3a; background:#0a1a10; }
+  .quot-badge { font-family:'JetBrains Mono',monospace; font-size:10px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:2px 8px; color:var(--muted); }
+  .quot-badge.has-items { color:var(--accent2); border-color:rgba(129,140,248,.3); background:rgba(129,140,248,.08); }
 </style>
 </head>
 <body>
@@ -90,6 +91,7 @@
         <span class="section-tag" id="bomVersionLabel">Sem BOM carregado</span>
         <div style="display:flex;gap:8px">
           <input type="file" id="bomFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleBomUpload(this)">
+          <button class="btn btn-ghost btn-sm" onclick="openManualBomEntry()">✏ Manual</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bomFileInput').click()">📂 Carregar BOM</button>
         </div>
       </div>
@@ -275,7 +277,7 @@ function renderHeader() {
     <span class="badge ${statusBadgeClass(process.status)}">${process.status}</span>
     <span class="priority-${(process.priority||'medium').toLowerCase()}" style="font-family:'IBM Plex Mono',monospace;font-size:12px">${process.priority}</span>
     ${process.deadline ? `<span class="deadline-chip ${deadlineClass(process.deadline)}">📅 ${fmtDate(process.deadline)}</span>` : ''}
-    ${assigneeName ? `<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);background:#0a1a0f;border:1px solid #1a3a2a;border-radius:3px;padding:2px 7px">${esc(assigneeName)}</span>` : ''}
+    ${assigneeName ? `<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px">${esc(assigneeName)}</span>` : ''}
     <button class="btn btn-ghost btn-sm" onclick="openEditModal()">Editar</button>
   `;
   document.title = `${process.project_name} — Procurement`;
@@ -364,7 +366,7 @@ function diffStatusBadge(status) {
   const map = {
     qty_changed: ['#3a3000','#ffcc00','Qty ↑↓'],
     changed:     ['#3a1500','#ff8800','Alterado'],
-    new:         ['#0a2a0a','#44cc44','Novo'],
+    new:         ['rgba(59,130,246,.15)','#60a5fa','Novo'],
   };
   const [bg, color, label] = map[status] || ['#333','#aaa', status];
   return `<span style="background:${bg};color:${color};border:1px solid ${color};border-radius:3px;font-size:10px;padding:1px 5px;font-family:'IBM Plex Mono',monospace">${label}</span>`;
@@ -383,7 +385,7 @@ function openBomValidationModal(fileName, techInfo) {
       ${counts.unchanged ? `<span style="color:var(--muted)">${counts.unchanged} iguais</span>` : ''}
       ${counts.qty_changed ? `<span style="color:#ffcc00">${counts.qty_changed} qty alterada</span>` : ''}
       ${counts.changed ? `<span style="color:#ff8800">${counts.changed} alterados</span>` : ''}
-      ${counts.new ? `<span style="color:#44cc44">${counts.new} novos</span>` : ''}
+      ${counts.new ? `<span style="color:#60a5fa">${counts.new} novos</span>` : ''}
       ${removed.length ? `<span style="color:#ff4444">${removed.length} removidos</span>` : ''}
     </div>`;
   }
@@ -412,8 +414,8 @@ function openBomValidationModal(fileName, techInfo) {
       <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#ff4444;letter-spacing:1px;margin-bottom:6px">REMOVIDOS DO BOM (${removed.length})</div>
       ${removed.map(r => `<div style="color:#ff8888;padding:2px 0">${esc(r.part_number ? r.part_number+' — ' : '')}${esc(r.description)}</div>`).join('')}
     </div>` : ''}
-    <div style="background:#0a1a0f;border:1px solid #1a3a2a;border-radius:4px;padding:12px;margin-bottom:16px;font-size:12px">
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:1px;margin-bottom:10px">TÉCNICOS DE INSTALAÇÃO</div>
+    <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.18);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">TÉCNICOS DE INSTALAÇÃO</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
         <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Senior (nº)</label><input type="number" id="ti_senior" value="${techInfo.senior||0}" min="0" style="width:100%"></div>
         <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Intermédio (nº)</label><input type="number" id="ti_inter" value="${techInfo.intermediate||0}" min="0" style="width:100%"></div>
@@ -423,11 +425,24 @@ function openBomValidationModal(fileName, techInfo) {
       <div style="margin-top:6px;color:var(--muted);font-size:11px">Pré-preenchido do BOM. Edita se necessário — será guardado nos custos de instalação.</div>
     </div>
     <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="addBomRow()">+ Linha</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="confirmBom()">Confirmar e Guardar</button>
     </div>
   `);
   renderBomValTable();
+}
+
+function addBomRow() {
+  pendingBomItems.push({ part_number: null, description: '', quantity: 1, unit: '', category: pendingBomItems.length ? pendingBomItems[pendingBomItems.length-1].category : '' });
+  renderBomValTable();
+}
+
+function openManualBomEntry() {
+  pendingBomItems = [];
+  pendingDiff = null;
+  pendingBomFile = null;
+  openBomValidationModal('Entrada Manual', { senior: 0, intermediate: 0, junior: 0, hours: 0 });
 }
 
 function renderBomValTable() {
@@ -561,6 +576,8 @@ function renderSuppliers() {
           <span class="quot-badge ${qCount?'has-items':''}">${qCount ? `${qCount} itens cotação` : 'sem cotação'}</span>
         </div>
         <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+          ${s.email ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openRFQModal(${i})">✉ RFQ</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openManualQuotEntry('${s.id}')">✏ Manual</button>
           <button class="btn btn-ghost btn-sm" onclick="uploadQuotation('${s.id}')">📎 Cotação</button>
           <button class="btn btn-ghost btn-sm" onclick="openSupplierModal(${i})">Editar</button>
           <button class="btn btn-danger btn-sm" onclick="deleteSupplier('${s.id}')">×</button>
@@ -595,6 +612,86 @@ function renderSuppliers() {
 function toggleSupplier(i) {
   const el = document.getElementById('suppBody-' + i);
   el.classList.toggle('open');
+}
+
+function openRFQModal(supplierIdx) {
+  const s = suppliers[supplierIdx];
+  showModal(`
+    <div class="modal-tag">Pedido de Cotação</div>
+    <div class="modal-title" style="font-size:15px;margin-bottom:4px">${esc(s.name)}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${esc(s.email)}</div>
+    ${!bomItems.length
+      ? `<div style="color:var(--muted);font-size:13px;margin-bottom:16px">Carrega o BOM primeiro.</div>`
+      : `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+          <span>SELECIONA OS ITENS A PEDIR</span>
+          <label style="cursor:pointer;font-size:10px;letter-spacing:0;text-transform:none;font-weight:400">
+            <input type="checkbox" id="rfq_all" onchange="toggleAllRFQ(this.checked)" checked> Selecionar tudo
+          </label>
+        </div>
+        <div style="max-height:320px;overflow-y:auto;margin-bottom:16px;border:1px solid var(--border);border-radius:4px">
+          ${bomItems.map((bi, idx) => `
+            <label style="display:flex;align-items:center;gap:10px;padding:7px 10px;cursor:pointer;border-bottom:1px solid #1a1a1a">
+              <input type="checkbox" class="rfq-item-cb" value="${idx}" checked>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(bi.description)}</div>
+                ${bi.part_number ? `<div style="font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap">Qty: ${bi.quantity}</div>
+            </label>`).join('')}
+        </div>`}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      ${bomItems.length ? `<button class="btn btn-primary" onclick="sendRFQ(${supplierIdx})">✉ Gerar Email</button>` : ''}
+    </div>
+  `);
+}
+
+function toggleAllRFQ(checked) {
+  document.querySelectorAll('.rfq-item-cb').forEach(cb => cb.checked = checked);
+}
+
+function sendRFQ(supplierIdx) {
+  const s = suppliers[supplierIdx];
+  const selected = [...document.querySelectorAll('.rfq-item-cb:checked')]
+    .map(cb => bomItems[parseInt(cb.value)])
+    .filter(Boolean);
+  if (!selected.length) { showToast('Seleciona pelo menos um item.', true); return; }
+
+  const subject = `Pedido de Cotação — ${process.project_name} — ${process.client_name}`;
+
+  const COL_ART = 16, COL_DESC = 42, COL_QTY = 14;
+  const pad = (v, n) => String(v || '').substring(0, n).padEnd(n);
+  const lines = [];
+  lines.push(pad('Artigo', COL_ART) + pad('Descrição', COL_DESC) + pad('Quantidade', COL_QTY) + 'Unidade');
+  lines.push('-'.repeat(COL_ART + COL_DESC + COL_QTY + 10));
+
+  let lastCat = null;
+  for (const bi of selected) {
+    if (bi.category && bi.category !== lastCat) {
+      lines.push('');
+      const cat = bi.category.toUpperCase();
+      const indent = Math.max(0, Math.floor((COL_ART + COL_DESC - cat.length) / 2));
+      lines.push(' '.repeat(indent) + cat);
+      lines.push('');
+      lastCat = bi.category;
+    }
+    lines.push(pad(bi.part_number, COL_ART) + pad(bi.description, COL_DESC) + pad(bi.quantity, COL_QTY) + (bi.unit || 'Unidade'));
+  }
+
+  const body = [
+    'Boa tarde, Prezados,',
+    '',
+    'Espero que este e-mail os encontre bem.',
+    '',
+    'Queria solicitar uma cotação para o equipamento abaixo:',
+    '',
+    ...lines,
+    '',
+  ].join('\n');
+
+  const mailto = `mailto:${encodeURIComponent(s.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.open(mailto, '_blank');
+  closeModal();
 }
 
 let editingSupplierIdx = null;
@@ -673,13 +770,28 @@ async function saveSupplier() {
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
 
-async function deleteSupplier(id) {
+function deleteSupplier(id) {
   if (!UUID_RE.test(id)) return;
-  if (!confirm('Apagar fornecedor?')) return;
+  const s = suppliers.find(x => x.id === id);
+  showModal(`
+    <div class="modal-tag">Confirmar</div>
+    <div class="modal-title">Apagar Fornecedor</div>
+    <div style="color:var(--muted);font-size:14px;margin-bottom:24px">Apagar <strong style="color:#fff">${esc(s?.name||'')}</strong>? Esta ação não pode ser desfeita.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="doDeleteSupplier('${id}')">Apagar</button>
+    </div>
+  `);
+}
+
+async function doDeleteSupplier(id) {
+  if (!UUID_RE.test(id)) return;
   try {
     await API.deleteSupplier(id);
-    suppliers = await API.getSuppliers(processId);
+    suppliers = suppliers.filter(s => s.id !== id);
+    closeModal();
     renderSuppliers();
+    renderMatchingTab();
     showToast('Fornecedor removido.');
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
@@ -691,6 +803,14 @@ function uploadQuotation(supplierId) {
   const input = document.getElementById('quotFileInput');
   input.value = '';
   input.click();
+}
+
+function openManualQuotEntry(supplierId) {
+  if (!UUID_RE.test(supplierId)) return;
+  currentQuotSuppId = supplierId;
+  pendingQuotItems = [];
+  pendingQuotFile = null;
+  openQuotationValModal('Entrada Manual');
 }
 
 async function handleQuotationUpload(input) {
@@ -1431,9 +1551,10 @@ function suppStatusClass(s) {
 function showToast(msg, isError = false) {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.style.color = isError ? 'var(--danger)' : 'var(--accent)';
+  el.style.color = isError ? 'var(--danger)' : 'var(--text)';
+  el.style.borderLeftColor = isError ? 'var(--danger)' : 'var(--accent)';
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3000);
+  setTimeout(() => el.classList.remove('show'), 3200);
 }
 </script>
 </body>
