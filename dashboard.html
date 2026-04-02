@@ -56,6 +56,14 @@
     </div>
 
     <!-- Process list -->
+    <div class="process-table-header">
+      <span>Projeto / Cliente</span>
+      <span>Prioridade</span>
+      <span>Estado</span>
+      <span>Prazo</span>
+      <span>Responsável</span>
+      <span></span>
+    </div>
     <div id="processList"></div>
 
   </div>
@@ -160,10 +168,10 @@ function renderList() {
         <div class="process-name">${esc(p.project_name)}</div>
         <div class="process-client">${esc(p.client_name)}</div>
       </div>
-      <span class="priority-${(p.priority||'medium').toLowerCase()}" style="font-family:'IBM Plex Mono',monospace;font-size:12px">${p.priority||'Medium'}</span>
+      <span class="priority-${(p.priority||'medium').toLowerCase()}" style="font-family:'DM Mono',monospace;font-size:12px">${p.priority||'Medium'}</span>
       <span class="badge ${statusBadgeClass(p.status)}">${p.status||'Active'}</span>
       <span class="deadline-chip ${deadlineClass(p.deadline)}">${p.deadline ? fmtDate(p.deadline) : '—'}</span>
-      ${p.assignee ? `<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px">${esc(p.assignee.name)}</span>` : '<span style="font-size:11px;color:var(--muted)">—</span>'}
+      ${p.assignee ? `<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px">${esc(p.assignee.name)}</span>` : '<span style="font-size:11px;color:var(--muted)">—</span>'}
       <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
         <button class="btn btn-ghost btn-sm" onclick="openCreateModal('${p.id}')">Editar</button>
         <button class="btn btn-danger btn-sm" onclick="confirmDelete('${p.id}')">×</button>
