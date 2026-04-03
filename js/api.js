@@ -207,6 +207,60 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  // ── Audit Log ──
+  async getAuditLog({ limit = 100, offset = 0, processSearch = '', userId = '', eventType = '', dateFrom = '', dateTo = '' } = {}) {
+    const eventTypeMap = {
+      process_changes:  ['processes'],
+      supplier_changes: ['suppliers'],
+      bom_changes:      ['bom_versions', 'bom_items'],
+      offer_selections: ['selected_offers', 'item_matches'],
+      profile_changes:  ['profiles'],
+    };
+
+    let q = supabase
+      .from('audit_log')
+      .select('id, user_id, action, table_name, record_id, old_data, new_data, created_at')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (eventType && eventTypeMap[eventType]) q = q.in('table_name', eventTypeMap[eventType]);
+    if (userId) q = q.eq('user_id', userId);
+    if (dateFrom) q = q.gte('created_at', dateFrom);
+    if (dateTo)   q = q.lte('created_at', dateTo);
+    if (processSearch.trim()) {
+      const t = processSearch.trim();
+      q = q.or(`new_data->>project_name.ilike.%${t}%,new_data->>client_name.ilike.%${t}%,old_data->>project_name.ilike.%${t}%,old_data->>client_name.ilike.%${t}%`);
+    }
+
+    const { data, error } = await q;
+    if (error) throw _sanitizeError(error);
+
+    const userIds = [...new Set((data || []).map(r => r.user_id).filter(Boolean))];
+    let profileMap = {};
+    if (userIds.length) {
+      const { data: profiles } = await supabase.from('profiles').select('id, name, role').in('id', userIds);
+      (profiles || []).forEach(p => { profileMap[p.id] = p; });
+    }
+    return (data || []).map(row => ({ ...row, actor: profileMap[row.user_id] || null }));
+  },
+
+  async getAuditUsers() {
+    const { data, error } = await supabase.from('profiles').select('id, name, role').order('name');
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async getTopSuppliers(limit = 5) {
+    const { data, error } = await supabase.from('suppliers').select('name, process_id');
+    if (error) throw _sanitizeError(error);
+    const counts = {};
+    (data || []).forEach(s => { counts[s.name] = (counts[s.name] || 0) + 1; });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([name, count]) => ({ name, count }));
+  },
+
   async copySelectedOffer(oldBomItemId, newBomItemId, processId) {
     const { data: offer } = await supabase.from('selected_offers')
       .select('*').eq('bom_item_id', oldBomItemId).eq('process_id', processId).maybeSingle();

@@ -229,6 +229,19 @@ create policy "installation_costs_delete"
   using (get_my_role() in ('procurement', 'admin'));
 
 -- ============================================================
+-- audit_log — admin only (SELECT)
+-- INSERT is done by DB triggers (postgres role) — bypasses RLS automatically
+-- No UPDATE/DELETE allowed from client
+-- ============================================================
+alter table audit_log enable row level security;
+
+drop policy if exists "audit_log_select" on audit_log;
+
+create policy "audit_log_select"
+  on audit_log for select
+  using (get_my_role() = 'admin');
+
+-- ============================================================
 -- Storage bucket RLS — procurement-files bucket
 -- Run this after creating the bucket
 -- ============================================================

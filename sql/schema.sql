@@ -183,6 +183,31 @@ create policy "auth_all" on selected_offers for all using (auth.role() = 'authen
 create policy "auth_all" on installation_costs for all using (auth.role() = 'authenticated');
 
 -- ============================================================
+-- Audit triggers for BOM, quotation and match tables
+-- (audit_log table + audit_trigger_fn() already created above)
+-- ============================================================
+DROP TRIGGER IF EXISTS audit_bom_versions    ON bom_versions;
+DROP TRIGGER IF EXISTS audit_bom_items       ON bom_items;
+DROP TRIGGER IF EXISTS audit_quotation_items ON quotation_items;
+DROP TRIGGER IF EXISTS audit_item_matches    ON item_matches;
+
+CREATE TRIGGER audit_bom_versions
+  AFTER INSERT OR UPDATE OR DELETE ON bom_versions
+  FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
+
+CREATE TRIGGER audit_bom_items
+  AFTER INSERT OR UPDATE OR DELETE ON bom_items
+  FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
+
+CREATE TRIGGER audit_quotation_items
+  AFTER INSERT OR UPDATE OR DELETE ON quotation_items
+  FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
+
+CREATE TRIGGER audit_item_matches
+  AFTER INSERT OR UPDATE OR DELETE ON item_matches
+  FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
+
+-- ============================================================
 -- Storage bucket for BOM and quotation files
 -- ============================================================
 -- Run this separately in Supabase Storage UI or via:

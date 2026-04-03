@@ -7,6 +7,36 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:;">
 <title>Procurement System — Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.chart-card-wide { grid-column: span 2; }
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.chart-title {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .6px; margin-bottom: 16px;
+  font-family: 'DM Mono', monospace;
+}
+.chart-wrap { position: relative; height: 200px; }
+@media (max-width: 900px) {
+  .charts-grid { grid-template-columns: 1fr 1fr; }
+  .chart-card-wide { grid-column: span 2; }
+}
+@media (max-width: 600px) {
+  .charts-grid { grid-template-columns: 1fr; }
+  .chart-card-wide { grid-column: span 1; }
+}
+</style>
 <link rel="stylesheet" href="css/style.css">
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
@@ -26,6 +56,26 @@
 
     <!-- Stats -->
     <div class="stats-grid" id="statsGrid"></div>
+
+    <!-- Charts -->
+    <div class="charts-grid" id="chartsSection" style="display:none">
+      <div class="chart-card">
+        <div class="chart-title">Por Estado</div>
+        <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Por Prioridade</div>
+        <div class="chart-wrap"><canvas id="chartPriority"></canvas></div>
+      </div>
+      <div class="chart-card chart-card-wide">
+        <div class="chart-title">Processos criados (últimos 6 meses)</div>
+        <div class="chart-wrap"><canvas id="chartTrend"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Top Fornecedores</div>
+        <div class="chart-wrap"><canvas id="chartSuppliers"></canvas></div>
+      </div>
+    </div>
 
     <!-- Filter + actions bar -->
     <div class="filter-bar">
@@ -83,13 +133,19 @@ let procUsers = [];
 window.addEventListener('load', async () => {
   const auth = await requireAuth('index.html');
   if (!auth) return;
-  document.getElementById('topbarRight').innerHTML = renderUserChip();
+  const adminLink = hasRole('admin')
+    ? `<a href="admin.html" class="btn btn-ghost btn-sm" style="margin-right:4px;border-color:rgba(16,185,129,.3);color:#34d399">Admin</a>`
+    : '';
+  document.getElementById('topbarRight').innerHTML = adminLink + renderUserChip();
+  let topSuppliers = [];
   [procUsers, allProcesses] = await Promise.all([
     API.getProcurementUsers(),
     API.getProcesses(),
   ]);
   renderStats();
   renderList();
+  try { topSuppliers = await API.getTopSuppliers(); } catch(_) {}
+  renderCharts(allProcesses, topSuppliers);
 });
 
 async function loadProcesses() {
@@ -97,6 +153,96 @@ async function loadProcesses() {
     allProcesses = await API.getProcesses();
     renderStats(); renderList();
   } catch(e) { showToast('Erro ao carregar processos: ' + e.message, true); }
+}
+
+// ── Charts ──
+let _charts = {};
+function renderCharts(processes, topSuppliers) {
+  if (typeof Chart === 'undefined') return;
+  if (!processes.length && !topSuppliers.length) return;
+  document.getElementById('chartsSection').style.display = '';
+
+  Chart.defaults.color = '#64748b';
+  Chart.defaults.borderColor = '#1a2235';
+  Chart.defaults.font.family = "'Figtree', sans-serif";
+
+  const statuses = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'];
+  const statusColors = ['#3b82f6','#f59e0b','#22d3ee','#10b981','#7c3aed','#64748b','#f87171'];
+  const statusCounts = statuses.map(s => processes.filter(p => p.status === s).length);
+
+  const priorities = ['Low','Medium','High','Urgent'];
+  const priorityColors = ['#475569','#3b82f6','#f59e0b','#f87171'];
+  const priorityCounts = priorities.map(pr => processes.filter(p => p.priority === pr).length);
+
+  // Monthly trend — last 6 months
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+    return { label: d.toLocaleString('pt-PT', { month: 'short', year: '2-digit' }), year: d.getFullYear(), month: d.getMonth() };
+  });
+  const trendCounts = months.map(m =>
+    processes.filter(p => { const d = new Date(p.created_at); return d.getFullYear() === m.year && d.getMonth() === m.month; }).length
+  );
+
+  function destroyChart(id) { if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; } }
+
+  // Chart 1 — Donut: por estado
+  destroyChart('status');
+  _charts.status = new Chart(document.getElementById('chartStatus'), {
+    type: 'doughnut',
+    data: { labels: statuses, datasets: [{ data: statusCounts, backgroundColor: statusColors, borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 }, padding: 10 } } },
+    },
+  });
+
+  // Chart 2 — Bar: por prioridade
+  destroyChart('priority');
+  _charts.priority = new Chart(document.getElementById('chartPriority'), {
+    type: 'bar',
+    data: { labels: priorities, datasets: [{ data: priorityCounts, backgroundColor: priorityColors, borderRadius: 6, borderSkipped: false }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { ticks: { stepSize: 1 }, grid: { color: '#1a2235' } } },
+    },
+  });
+
+  // Chart 3 — Line: tendência mensal
+  destroyChart('trend');
+  _charts.trend = new Chart(document.getElementById('chartTrend'), {
+    type: 'line',
+    data: {
+      labels: months.map(m => m.label),
+      datasets: [{
+        data: trendCounts,
+        borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.08)',
+        fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#3b82f6',
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false } }, y: { ticks: { stepSize: 1 }, grid: { color: '#1a2235' }, beginAtZero: true } },
+    },
+  });
+
+  // Chart 4 — Bar horizontal: top fornecedores
+  destroyChart('suppliers');
+  _charts.suppliers = new Chart(document.getElementById('chartSuppliers'), {
+    type: 'bar',
+    data: {
+      labels: topSuppliers.map(s => s.name.length > 18 ? s.name.slice(0, 17) + '…' : s.name),
+      datasets: [{ data: topSuppliers.map(s => s.count), backgroundColor: '#7c3aed', borderRadius: 6, borderSkipped: false }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { stepSize: 1 }, grid: { color: '#1a2235' }, beginAtZero: true }, y: { grid: { display: false } } },
+    },
+  });
 }
 
 // ── Stats ──

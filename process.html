@@ -193,7 +193,10 @@ let installData = null;
 window.addEventListener('load', async () => {
   if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
   await requireAuth('index.html');
-  document.getElementById('topbarRight').innerHTML = renderUserChip();
+  const adminLink = hasRole('admin')
+    ? `<a href="admin.html" class="btn btn-ghost btn-sm" style="margin-right:4px;border-color:rgba(16,185,129,.3);color:#34d399">Admin</a>`
+    : '';
+  document.getElementById('topbarRight').innerHTML = adminLink + renderUserChip();
   renderTabs();
 
   const params = new URLSearchParams(location.search);
