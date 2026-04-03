@@ -260,3 +260,44 @@ create policy "storage_insert"
 create policy "storage_delete"
   on storage.objects for delete
   using (bucket_id = 'procurement-files' AND get_my_role() in ('procurement', 'admin'));
+
+-- ============================================================
+-- User management RPC functions (admin only)
+-- SECURITY DEFINER bypasses prevent_role_change_trigger
+-- ============================================================
+
+-- List all users (profiles + email from auth.users) — admin only
+create or replace function get_all_users()
+returns table(id uuid, name text, role text, email text, created_at timestamptz, last_sign_in_at timestamptz)
+language sql security definer set search_path = public as $$
+  select p.id, p.name, p.role, u.email, p.created_at, u.last_sign_in_at
+  from public.profiles p
+  join auth.users u on u.id = p.id
+  where get_my_role() = 'admin'
+  order by p.created_at desc;
+$$;
+
+-- Change another user's role (admin only, cannot change own role)
+create or replace function admin_set_user_role(target_id uuid, new_role text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if get_my_role() != 'admin' then raise exception 'Acesso negado'; end if;
+  if auth.uid() = target_id then raise exception 'Não podes mudar o teu próprio role'; end if;
+  if new_role not in ('commercial','procurement','admin') then raise exception 'Role inválido'; end if;
+  update public.profiles set role = new_role where id = target_id;
+end;
+$$;
+
+-- Change another user's name (admin only)
+create or replace function admin_set_user_name(target_id uuid, new_name text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if get_my_role() != 'admin' then raise exception 'Acesso negado'; end if;
+  if length(trim(new_name)) = 0 then raise exception 'Nome não pode estar vazio'; end if;
+  update public.profiles set name = trim(new_name) where id = target_id;
+end;
+$$;
+
+grant execute on function get_all_users() to authenticated;
+grant execute on function admin_set_user_role(uuid, text) to authenticated;
+grant execute on function admin_set_user_name(uuid, text) to authenticated;

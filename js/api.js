@@ -250,6 +250,23 @@ const API = {
     return data || [];
   },
 
+  // ── User Management (admin only) ──
+  async getUsers() {
+    const { data, error } = await supabase.rpc('get_all_users');
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async adminUpdateUserRole(targetId, role) {
+    const { error } = await supabase.rpc('admin_set_user_role', { target_id: targetId, new_role: role });
+    if (error) throw _sanitizeError(error);
+  },
+
+  async adminUpdateUserName(targetId, name) {
+    const { error } = await supabase.rpc('admin_set_user_name', { target_id: targetId, new_name: name });
+    if (error) throw _sanitizeError(error);
+  },
+
   async getTopSuppliers(limit = 5) {
     const { data, error } = await supabase.from('suppliers').select('name, process_id');
     if (error) throw _sanitizeError(error);
