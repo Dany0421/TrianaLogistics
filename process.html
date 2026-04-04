@@ -955,8 +955,9 @@ function removeSupplierTag(type, idx) {
 function openSupplierModal(idx = null, prefill = {}) {
   editingSupplierIdx = idx;
   const s = idx !== null ? suppliers[idx] : null;
-  pendingSupplierCategories = s ? [...(s.categories || [])] : (prefill.categories || []);
-  pendingSupplierBrands = s ? [...(s.brands || [])] : [];
+  const gs = s ? globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase()) : null;
+  pendingSupplierCategories = gs ? [...(gs.categories || [])] : (prefill.categories || []);
+  pendingSupplierBrands = gs ? [...(gs.brands || [])] : [];
   showModal(`
     <div class="modal-tag">${s ? 'Editar Fornecedor' : 'Novo Fornecedor'}</div>
     <div class="modal-title">${s ? esc(s.name) : 'Adicionar Fornecedor'}</div>
@@ -1122,6 +1123,43 @@ function openManualQuotEntry(supplierId) {
   openQuotationValModal(existing.length ? 'Editar Cotação' : 'Entrada Manual');
 }
 
+function _askReplaceOrAppend(existingItems, newItems, onReplace, onAppend) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);border-radius:12px;padding:28px 32px;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.4)';
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:600;margin-bottom:8px';
+  title.textContent = 'Cotação já existente';
+  const body = document.createElement('div');
+  body.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.5';
+  body.textContent = `Este fornecedor já tem ${existingItems.length} item(ns) guardado(s). O que pretendes fazer com os ${newItems.length} item(ns) novos?`;
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:10px;justify-content:flex-end';
+  const btnCancel = document.createElement('button');
+  btnCancel.className = 'btn btn-ghost btn-sm';
+  btnCancel.textContent = 'Cancelar';
+  const btnAppend = document.createElement('button');
+  btnAppend.className = 'btn btn-secondary btn-sm';
+  btnAppend.textContent = 'Adicionar aos existentes';
+  const btnReplace = document.createElement('button');
+  btnReplace.className = 'btn btn-primary btn-sm';
+  btnReplace.textContent = 'Substituir tudo';
+  btnRow.appendChild(btnCancel);
+  btnRow.appendChild(btnAppend);
+  btnRow.appendChild(btnReplace);
+  box.appendChild(title);
+  box.appendChild(body);
+  box.appendChild(btnRow);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  const close = () => document.body.removeChild(overlay);
+  btnCancel.addEventListener('click', close);
+  btnReplace.addEventListener('click', () => { close(); onReplace(); });
+  btnAppend.addEventListener('click', () => { close(); onAppend(); });
+}
+
 async function handleQuotationUpload(input) {
   if (!input.files.length || !currentQuotSuppId) return;
   const file = input.files[0];
@@ -1135,9 +1173,24 @@ async function handleQuotationUpload(input) {
   } else {
     const buf = await file.arrayBuffer();
     const { items, detected } = parseQuotationExcel(buf);
-    pendingQuotItems = detected ? items.map(i => ({...i})) : [];
+    const newItems = detected ? items.map(i => ({...i})) : [];
     if (!detected) showToast('Formato não detetado — adiciona itens manualmente.', true);
-    openQuotationValModal(file.name);
+    const existing = (quotationMap[currentQuotSuppId] || []).map(qi => ({
+      raw_part_number: qi.raw_part_number || null,
+      raw_description: qi.raw_description,
+      quantity: qi.quantity,
+      price: qi.price,
+      currency: qi.currency,
+    }));
+    if (existing.length && newItems.length) {
+      _askReplaceOrAppend(existing, newItems,
+        () => { pendingQuotItems = newItems; openQuotationValModal(file.name); },
+        () => { pendingQuotItems = [...existing, ...newItems]; openQuotationValModal(file.name); }
+      );
+    } else {
+      pendingQuotItems = newItems;
+      openQuotationValModal(file.name);
+    }
   }
 }
 
@@ -1736,14 +1789,29 @@ async function handlePdfQuotation(file) {
     const rawText = await extractPdfText(buf);
     const parsed = parsePdf(rawText);
     // PDF price = total; convert to unit price
-    pendingQuotItems = parsed.map(item => {
+    const newPdfItems = parsed.map(item => {
       const qty = parseFloat(item.qty) || 1;
       const total = parseFloat(item.price) || 0;
       const unitPrice = total > 0 ? Math.round((total / qty) * 100) / 100 : 0;
       return { raw_part_number: item.part || null, raw_description: item.model, quantity: qty, price: unitPrice, currency: 'MZN' };
     });
-    if (!pendingQuotItems.length) showToast('Nenhum item detetado no PDF — adiciona manualmente.', true);
-    openQuotationValModal(file.name, rawText);
+    if (!newPdfItems.length) showToast('Nenhum item detetado no PDF — adiciona manualmente.', true);
+    const existingPdf = (quotationMap[currentQuotSuppId] || []).map(qi => ({
+      raw_part_number: qi.raw_part_number || null,
+      raw_description: qi.raw_description,
+      quantity: qi.quantity,
+      price: qi.price,
+      currency: qi.currency,
+    }));
+    if (existingPdf.length && newPdfItems.length) {
+      _askReplaceOrAppend(existingPdf, newPdfItems,
+        () => { pendingQuotItems = newPdfItems; openQuotationValModal(file.name, rawText); },
+        () => { pendingQuotItems = [...existingPdf, ...newPdfItems]; openQuotationValModal(file.name, rawText); }
+      );
+    } else {
+      pendingQuotItems = newPdfItems;
+      openQuotationValModal(file.name, rawText);
+    }
   } catch(e) { showToast('Erro ao ler PDF: ' + e.message, true); }
 }
 
@@ -1878,9 +1946,9 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, inst) {
   if(hasTechs){
     const trL=col2l(trCol);
     const techs=[
-      {label:`Tecnico Senior (${inst.sc})`,count:inst.sc,rate:inst.sr,hours:inst.sh},
-      {label:`Tec. Intermediario (${inst.ic})`,count:inst.ic,rate:inst.ir,hours:inst.ih},
-      {label:`Tecnico Junior (${inst.jc})`,count:inst.jc,rate:inst.jr,hours:inst.jh},
+      {label:`Técnico Sénior (${inst.sc})`,count:inst.sc,rate:inst.sr,hours:inst.sh},
+      {label:`Técnico Intermédio (${inst.ic})`,count:inst.ic,rate:inst.ir,hours:inst.ih},
+      {label:`Técnico Júnior (${inst.jc})`,count:inst.jc,rate:inst.jr,hours:inst.jh},
     ].filter(t=>t.count>0);
     for(const t of techs){
       for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
