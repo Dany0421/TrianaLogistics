@@ -136,7 +136,10 @@ window.addEventListener('load', async () => {
   const adminLink = hasRole('admin')
     ? `<a href="admin.html" class="btn btn-ghost btn-sm" style="margin-right:4px;border-color:rgba(16,185,129,.3);color:#34d399">Admin</a>`
     : '';
-  document.getElementById('topbarRight').innerHTML = adminLink + renderUserChip();
+  const pricesLink = !hasRole('commercial')
+    ? `<a href="prices.html" class="btn btn-ghost btn-sm" style="margin-right:4px">Preços</a>`
+    : '';
+  document.getElementById('topbarRight').innerHTML = pricesLink + adminLink + renderUserChip();
   let topSuppliers = [];
   [procUsers, allProcesses] = await Promise.all([
     API.getProcurementUsers(),
