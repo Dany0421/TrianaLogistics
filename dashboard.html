@@ -256,7 +256,8 @@ window.addEventListener('load', async () => {
     ? `<a href="admin.html" class="btn btn-ghost btn-sm" style="margin-right:4px;border-color:rgba(16,185,129,.3);color:#34d399">Admin</a>`
     : '';
   const pricesLink = !hasRole('commercial')
-    ? `<a href="prices.html" class="btn btn-ghost btn-sm" style="margin-right:4px">Preços</a>`
+    ? `<a href="prices.html" class="btn btn-ghost btn-sm" style="margin-right:4px">Preços</a>` +
+      `<a href="suppliers.html" class="btn btn-ghost btn-sm" style="margin-right:4px">Fornecedores</a>`
     : '';
   document.getElementById('topbarRight').innerHTML =
     `<div style="position:relative;display:inline-flex;margin-right:4px" id="notifWrap">

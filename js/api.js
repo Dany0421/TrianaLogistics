@@ -485,16 +485,48 @@ const API = {
   // ── Known Suppliers (for auto-fill) ──
   async getKnownSuppliers() {
     const { data, error } = await supabase
-      .from('suppliers')
+      .from('global_suppliers')
       .select('name, email, email_cc')
-      .not('email', 'is', null)
-      .order('created_at', { ascending: false });
+      .order('name');
     if (error) throw _sanitizeError(error);
-    const map = {};
-    for (const s of (data || [])) {
-      if (!map[s.name]) map[s.name] = s;
-    }
-    return Object.values(map);
+    return data || [];
+  },
+
+  // ── Global Suppliers Directory ──
+  async getGlobalSuppliers() {
+    const { data, error } = await supabase
+      .from('global_suppliers')
+      .select('*')
+      .order('name');
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async createGlobalSupplier(fields) {
+    const { data, error } = await supabase.from('global_suppliers').insert(fields).select().single();
+    if (error) throw _sanitizeError(error);
+    return data;
+  },
+
+  async updateGlobalSupplier(id, fields) {
+    const { error } = await supabase.from('global_suppliers').update(fields).eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
+  async deleteGlobalSupplier(id) {
+    const { error } = await supabase.from('global_suppliers').delete().eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
+  async upsertGlobalSupplier(name, email, emailCc, categories, brands) {
+    const { error } = await supabase.rpc('upsert_global_supplier', {
+      p_name: name,
+      p_email: email || '',
+      p_email_cc: emailCc || '',
+      p_categories: categories || [],
+      p_brands: brands || [],
+    });
+    if (error) throw _sanitizeError(error);
   },
 
   // ── Price History ──

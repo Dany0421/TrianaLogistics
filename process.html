@@ -43,6 +43,11 @@
   .supplier-status-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
   .foreign-box { display:none; background:rgba(251,191,36,.05); border:1px solid rgba(251,191,36,.2); border-radius:8px; padding:12px; margin-bottom:12px; }
   .foreign-box.show { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  .tag-input-box { display:flex; flex-wrap:wrap; gap:5px; align-items:center; border:1px solid var(--border); border-radius:6px; padding:5px 8px; min-height:36px; background:var(--surface2); cursor:text; }
+  .tag-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.3); border-radius:4px; padding:2px 6px; font-size:12px; color:var(--accent); }
+  .tag-chip button { background:none; border:none; color:var(--muted); cursor:pointer; padding:0; font-size:12px; line-height:1; }
+  .tag-chip button:hover { color:var(--danger); }
+  .tag-input-field { border:none; background:none; outline:none; font-size:13px; color:var(--text); flex:1; min-width:80px; }
   /* Matching table */
   .match-table { width:100%; border-collapse:collapse; font-size:13px; }
   .match-table th { text-align:left; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.8px; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
@@ -764,9 +769,54 @@ function autoFillSupplierEmail(name) {
 }
 
 let editingSupplierIdx = null;
+let pendingSupplierCategories = [];
+let pendingSupplierBrands = [];
+
+function renderTagBox(boxId, arr, type) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  while (box.firstChild) box.removeChild(box.firstChild);
+  arr.forEach((c, i) => {
+    const span = document.createElement('span');
+    span.className = 'tag-chip';
+    span.textContent = c;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '\u00d7';
+    btn.onclick = () => removeSupplierTag(type, i);
+    span.appendChild(btn);
+    box.appendChild(span);
+  });
+  const inp = document.createElement('input');
+  inp.id = 'tagInput_' + type;
+  inp.className = 'tag-input-field';
+  inp.placeholder = 'Adicionar, Enter para confirmar...';
+  inp.onkeydown = function(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const val = this.value.trim().replace(/,/g, '');
+      if (!val) return;
+      if (type === 'cat') { if (!pendingSupplierCategories.includes(val)) pendingSupplierCategories.push(val); }
+      else { if (!pendingSupplierBrands.includes(val)) pendingSupplierBrands.push(val); }
+      renderTagBox(boxId, type === 'cat' ? pendingSupplierCategories : pendingSupplierBrands, type);
+      document.getElementById('tagInput_' + type)?.focus();
+    }
+  };
+  box.appendChild(inp);
+}
+
+function removeSupplierTag(type, idx) {
+  if (type === 'cat') pendingSupplierCategories.splice(idx, 1);
+  else pendingSupplierBrands.splice(idx, 1);
+  renderTagBox(type === 'cat' ? 'sfCatBox' : 'sfBrandBox',
+    type === 'cat' ? pendingSupplierCategories : pendingSupplierBrands, type);
+}
+
 function openSupplierModal(idx = null) {
   editingSupplierIdx = idx;
   const s = idx !== null ? suppliers[idx] : null;
+  pendingSupplierCategories = [];
+  pendingSupplierBrands = [];
   showModal(`
     <div class="modal-tag">${s ? 'Editar Fornecedor' : 'Novo Fornecedor'}</div>
     <div class="modal-title">${s ? esc(s.name) : 'Adicionar Fornecedor'}</div>
@@ -802,11 +852,23 @@ function openSupplierModal(idx = null) {
       <div><label>Próximo Follow-up</label><input type="date" id="sf_followup" value="${s?.next_followup_at||''}"></div>
     </div>
     <div class="form-row"><label>Notas</label><textarea id="sf_notes">${esc(s?.notes||'')}</textarea></div>
+    <div class="form-grid-2">
+      <div>
+        <label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipos de equipamento — opcional)</span></label>
+        <div class="tag-input-box" id="sfCatBox"></div>
+      </div>
+      <div>
+        <label>Marcas <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label>
+        <div class="tag-input-box" id="sfBrandBox"></div>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveSupplier()">Guardar</button>
     </div>
   `);
+  renderTagBox('sfCatBox', pendingSupplierCategories, 'cat');
+  renderTagBox('sfBrandBox', pendingSupplierBrands, 'brand');
 }
 
 function toggleForeignBox(val) {
@@ -839,6 +901,8 @@ async function saveSupplier() {
     } else {
       await API.createSupplier(fields);
     }
+    // Silently merge categories/brands into global supplier profile
+    try { await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.email_cc || '', pendingSupplierCategories, pendingSupplierBrands); } catch(_) {}
     closeModal();
     suppliers = await API.getSuppliers(processId);
     renderSuppliers();
