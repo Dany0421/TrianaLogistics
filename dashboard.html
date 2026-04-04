@@ -68,6 +68,20 @@
 .followup-supplier { font-size: 13px; font-weight: 600; color: #fff; }
 .followup-proc { font-size: 12px; color: var(--muted); }
 .followup-overdue { font-family: 'DM Mono', monospace; font-size: 10px; color: #f87171; margin-left: auto; white-space: nowrap; }
+.notif-bell { position:relative; cursor:pointer; padding:6px 8px; border-radius:6px; color:var(--muted); transition:.15s; display:inline-flex; align-items:center; }
+.notif-bell:hover { color:var(--text); background:var(--surface2); }
+.notif-badge { position:absolute; top:0; right:0; background:var(--danger); color:#fff; border-radius:8px; font-size:9px; font-family:'DM Mono',monospace; font-weight:700; padding:1px 5px; min-width:16px; text-align:center; line-height:1.4; }
+.notif-panel { position:absolute; top:calc(100% + 8px); right:0; width:320px; background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:200; overflow:hidden; max-height:420px; overflow-y:auto; }
+.notif-panel-header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--surface); }
+.notif-panel-title { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); letter-spacing:.6px; text-transform:uppercase; }
+.notif-item { padding:12px 16px; border-bottom:1px solid var(--border); cursor:pointer; transition:.12s; }
+.notif-item:last-child { border-bottom:none; }
+.notif-item:hover { background:var(--surface2); }
+.notif-item.unread { background:rgba(59,130,246,.05); border-left:2px solid var(--accent); }
+.notif-item-title { font-size:13px; color:#fff; margin-bottom:2px; }
+.notif-item-body { font-size:12px; color:var(--muted); }
+.notif-item-time { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); margin-top:4px; }
+.notif-empty { padding:24px 16px; text-align:center; color:var(--muted); font-size:13px; }
 </style>
 <link rel="stylesheet" href="css/style.css">
 <script src="js/config.js"></script>
@@ -163,6 +177,76 @@
 <script>
 let allProcesses = [];
 let procUsers = [];
+let _notifications = [];
+let _notifOpen = false;
+let _overdueCount = 0;
+
+// ── Notifications ──
+async function loadNotifications() {
+  _notifications = await API.getMyNotifications();
+  const unread = _notifications.filter(n => !n.read).length;
+  const badge = document.getElementById('notifBadge');
+  if (badge) { badge.textContent = unread; badge.style.display = unread ? '' : 'none'; }
+}
+
+function toggleNotifPanel() {
+  _notifOpen = !_notifOpen;
+  const wrap = document.getElementById('notifWrap');
+  document.getElementById('notifPanel')?.remove();
+  if (!_notifOpen) return;
+  const unread = _notifications.filter(n => !n.read);
+  const items = _notifications.length
+    ? _notifications.map(n => `<div class="notif-item${n.read?'':' unread'}" onclick="goNotif('${n.process_id||''}')">
+        <div class="notif-item-title">${esc(n.title)}</div>
+        ${n.body ? `<div class="notif-item-body">${esc(n.body)}</div>` : ''}
+        <div class="notif-item-time">${timeAgoNotif(n.created_at)}</div>
+      </div>`).join('')
+    : `<div class="notif-empty">Sem notificações.</div>`;
+  wrap.insertAdjacentHTML('beforeend', `<div class="notif-panel" id="notifPanel">
+    <div class="notif-panel-header">
+      <span class="notif-panel-title">Notificações</span>
+      ${unread.length ? `<button class="btn btn-ghost btn-sm" onclick="markAllRead()">Marcar lidas</button>` : ''}
+    </div>${items}</div>`);
+  if (unread.length) markAllRead();
+  setTimeout(() => document.addEventListener('click', closeNotifOutside, { once: true }), 0);
+}
+
+function closeNotifOutside(e) {
+  if (!document.getElementById('notifPanel')?.contains(e.target) &&
+      !document.getElementById('notifWrap')?.contains(e.target)) {
+    document.getElementById('notifPanel')?.remove();
+    _notifOpen = false;
+  }
+}
+
+async function markAllRead() {
+  try {
+    await API.markNotificationsRead();
+    _notifications = _notifications.map(n => ({ ...n, read: true }));
+    const badge = document.getElementById('notifBadge');
+    if (badge) badge.style.display = 'none';
+    // refresh panel items to remove unread style
+    const panel = document.getElementById('notifPanel');
+    if (panel) panel.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
+    const hdr = panel?.querySelector('.notif-panel-header button');
+    if (hdr) hdr.remove();
+  } catch(_) {}
+}
+
+function goNotif(processId) {
+  document.getElementById('notifPanel')?.remove();
+  _notifOpen = false;
+  if (processId && UUID_RE.test(processId)) window.location.href = `process.html?id=${processId}`;
+}
+
+function timeAgoNotif(d) {
+  if (!d) return '';
+  const diff = Math.floor((Date.now() - new Date(d)) / 60000);
+  if (diff < 1) return 'agora';
+  if (diff < 60) return `${diff}m atrás`;
+  if (diff < 1440) return `${Math.floor(diff/60)}h atrás`;
+  return `${Math.floor(diff/1440)}d atrás`;
+}
 
 // ── Init ──
 window.addEventListener('load', async () => {
@@ -174,7 +258,10 @@ window.addEventListener('load', async () => {
   const pricesLink = !hasRole('commercial')
     ? `<a href="prices.html" class="btn btn-ghost btn-sm" style="margin-right:4px">Preços</a>`
     : '';
-  document.getElementById('topbarRight').innerHTML = pricesLink + adminLink + renderUserChip();
+  document.getElementById('topbarRight').innerHTML =
+    `<div style="position:relative;display:inline-flex;margin-right:4px" id="notifWrap">
+      <div class="notif-bell" onclick="toggleNotifPanel()" title="Notificações">🔔<span class="notif-badge" id="notifBadge" style="display:none"></span></div>
+    </div>` + pricesLink + adminLink + renderUserChip();
   let topSuppliers = [];
   [procUsers, allProcesses] = await Promise.all([
     API.getProcurementUsers(),
@@ -187,6 +274,7 @@ window.addEventListener('load', async () => {
   if (!hasRole('commercial')) {
     try { renderFollowupAlerts(await API.getOverdueFollowups()); } catch(_) {}
   }
+  try { await loadNotifications(); } catch(_) {}
 });
 
 async function loadProcesses() {
@@ -289,6 +377,8 @@ function renderCharts(processes, topSuppliers) {
 // ── Follow-up Alerts ──
 let followupCollapsed = false;
 function renderFollowupAlerts(data) {
+  _overdueCount = data.length;
+  renderStats();
   const banner = document.getElementById('followupBanner');
   if (!data.length) { banner.style.display = 'none'; return; }
   const today = new Date(); today.setHours(0,0,0,0);
@@ -341,6 +431,10 @@ function renderStats() {
     <div class="stat-card" onclick="setFilterPriority('Urgent')">
       <div class="stat-number" style="color:var(--danger)">${urgent}</div>
       <div class="stat-label">Urgentes</div>
+    </div>
+    <div class="stat-card" onclick="document.getElementById('followupBanner').scrollIntoView({behavior:'smooth'})" style="cursor:${_overdueCount>0?'pointer':'default'}">
+      <div class="stat-number" style="color:${_overdueCount>0?'#fbbf24':'var(--muted)'}">${_overdueCount}</div>
+      <div class="stat-label">Follow-ups</div>
     </div>
   `;
 }
@@ -427,12 +521,31 @@ function openCreateModal(id = null) {
       <select id="f_status">
         ${['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'].map(v=>`<option ${p.status===v?'selected':''}>${v}</option>`).join('')}
       </select></div>` : ''}
-    <div class="form-row"><label>Responsável</label>
-      <select id="f_assigned">
-        <option value="">Não atribuído</option>
-        ${procUsers.map(u => `<option value="${u.id}" ${p?.assigned_to===u.id?'selected':''}>${esc(u.name||'')}</option>`).join('')}
-      </select>
-    </div>
+    ${(() => {
+      if (hasRole('admin')) {
+        return `<div class="form-row"><label>Responsável</label>
+          <select id="f_assigned">
+            <option value="">Não atribuído</option>
+            ${procUsers.map(u => `<option value="${u.id}" ${p?.assigned_to===u.id?'selected':''}>${esc(u.name||'')}</option>`).join('')}
+          </select></div>`;
+      }
+      if (p) {
+        const waited12h = !p.assigned_to && (Date.now() - new Date(p.created_at)) > 12 * 60 * 60 * 1000;
+        if (waited12h) {
+          return `<div class="form-row"><label>Responsável</label>
+            <select id="f_assigned">
+              <option value="">Não atribuído</option>
+              <option value="${currentUser.id}">Eu (${esc(currentProfile?.name || '')})</option>
+            </select></div>`;
+        }
+        if (p.assigned_to) {
+          const assignee = procUsers.find(u => u.id === p.assigned_to);
+          return `<input type="hidden" id="f_assigned" value="${esc(p.assigned_to)}">`;
+        }
+        return `<input type="hidden" id="f_assigned" value=""><div class="form-row" style="font-size:12px;color:var(--muted)">Responsável: <em>Não atribuído — auto-atribuição disponível após 12h</em></div>`;
+      }
+      return `<input type="hidden" id="f_assigned" value="">`;
+    })()}
     <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observações...">${esc(p?.notes||'')}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -467,11 +580,16 @@ async function saveProcess() {
   if (fields.client_name.length > 200 || fields.project_name.length > 200) { showToast('Nome demasiado longo (máx 200 caracteres).', true); return; }
   if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (máx 5000 caracteres).', true); return; }
   if (fields.assigned_to && !UUID_RE.test(fields.assigned_to)) { showToast('Erro interno: ID de utilizador inválido.', true); return; }
+  if (!hasRole('admin') && fields.assigned_to && fields.assigned_to !== currentUser.id) { showToast('Não tens permissão para atribuir a outro utilizador.', true); return; }
 
   try {
     if (editingProcessId) {
+      const prevProc = allProcesses.find(x => x.id === editingProcessId);
       await API.updateProcess(editingProcessId, fields);
       showToast('Processo atualizado.');
+      if (fields.assigned_to && fields.assigned_to !== (prevProc?.assigned_to || null) && fields.assigned_to !== currentUser.id) {
+        try { await API.createNotification(fields.assigned_to, 'Processo atribuído', `Foste atribuído a "${fields.project_name}"`, editingProcessId); } catch(_) {}
+      }
     } else {
       const proc = await API.createProcess(fields);
       showToast('Processo criado.');
@@ -532,6 +650,13 @@ function openCloneModal(id) {
         <input type="checkbox" id="cl_quot" checked> Copiar cotações e preços
       </label>
     </div>
+    <div class="form-row" style="margin-top:4px">
+      <label>Responsável (opcional)</label>
+      <select id="cl_assigned">
+        <option value="">Não atribuído</option>
+        ${procUsers.map(u => `<option value="${u.id}" ${p?.assigned_to===u.id?'selected':''}>${esc(u.name||'')}</option>`).join('')}
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="doClone('${id}')">Clonar</button>
@@ -567,6 +692,7 @@ async function doClone(sourceId) {
     status:   'Active',
     notes:    src.notes || null,
     deadline: null,
+    assigned_to: document.getElementById('cl_assigned').value || null,
   };
 
   try {
