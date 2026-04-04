@@ -1064,7 +1064,7 @@ async function saveSupplier() {
       try { await API.recordSupplierResponse(fields.name, responseHours); } catch(_) {}
     }
     // Silently merge categories/brands into global supplier profile
-    try { await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.email_cc || '', pendingSupplierCategories, pendingSupplierBrands); } catch(_) {}
+    try { await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.email_cc || '', pendingSupplierCategories, pendingSupplierBrands); globalSuppliersList = await API.getGlobalSuppliers(); } catch(_) {}
     closeModal();
     suppliers = await API.getSuppliers(processId);
     renderSuppliers();

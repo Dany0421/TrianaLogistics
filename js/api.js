@@ -598,13 +598,24 @@ const API = {
     let q = supabase
       .from('quotation_items')
       .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, processes(id, project_name, client_name))')
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (query && query.trim()) q = q.or(`raw_description.ilike.%${query.trim()}%,raw_part_number.ilike.%${query.trim()}%`);
+      .order('created_at', { ascending: false });
     if (dateFrom) q = q.gte('created_at', dateFrom);
+    // Server-side filter on first word to cut down rows before transfer
+    if (query && query.trim()) {
+      const first = query.trim().split(/\s+/)[0].replace(/[%_]/g, '');
+      if (first) q = q.ilike('raw_description', `%${first}%`);
+    }
+    q = q.limit(1000);
     const { data, error } = await q;
     if (error) throw _sanitizeError(error);
-    return data;
+    const rows = data || [];
+    if (!query || !query.trim()) return rows;
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(1);
+    if (!words.length) return rows;
+    return rows.filter(item => {
+      const hay = ((item.raw_description || '') + ' ' + (item.raw_part_number || '')).toLowerCase();
+      return words.every(w => hay.includes(w));
+    });
   },
 
   // ── Notifications ──
