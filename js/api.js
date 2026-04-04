@@ -537,6 +537,44 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  // ── Supplier Detail ──
+  async getSupplierProcessHistory(name) {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('id, status, created_at, contacted_at, replied_at, is_foreign, cambio, transport, direitos, process_id, processes!inner(id, project_name, client_name, status, created_at)')
+      .ilike('name', name.trim())
+      .order('created_at', { ascending: false });
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async getSupplierQuotationHistory(supplierIds) {
+    if (!supplierIds.length) return [];
+    const { data, error } = await supabase
+      .from('quotation_items')
+      .select('id, raw_description, raw_part_number, price, currency, created_at, supplier_id, item_matches(bom_items(category)), suppliers!inner(name, process_id, processes!inner(id, project_name, client_name))')
+      .in('supplier_id', supplierIds)
+      .order('created_at', { ascending: false });
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async getBomCategoriesByProcessIds(processIds) {
+    if (!processIds.length) return {};
+    const { data, error } = await supabase
+      .from('bom_items')
+      .select('process_id, category')
+      .in('process_id', processIds)
+      .not('category', 'is', null);
+    if (error) throw _sanitizeError(error);
+    const map = {};
+    (data || []).forEach(r => {
+      if (!map[r.process_id]) map[r.process_id] = new Set();
+      map[r.process_id].add(r.category);
+    });
+    return map;
+  },
+
   // ── Price History ──
   async searchPriceHistory(query, dateFrom) {
     let q = supabase
