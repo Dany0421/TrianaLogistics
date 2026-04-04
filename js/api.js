@@ -504,9 +504,23 @@ const API = {
       .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, processes(id, project_name, client_name))')
       .order('created_at', { ascending: false })
       .limit(200);
-    if (query && query.trim()) q = q.ilike('raw_description', `%${query.trim()}%`);
+    if (query && query.trim()) q = q.or(`raw_description.ilike.%${query.trim()}%,raw_part_number.ilike.%${query.trim()}%`);
     if (dateFrom) q = q.gte('created_at', dateFrom);
     const { data, error } = await q;
+    if (error) throw _sanitizeError(error);
+    return data;
+  },
+
+  // ── Follow-up Alerts ──
+  async getOverdueFollowups() {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('id, name, next_followup_at, status, processes(id, project_name, client_name)')
+      .lte('next_followup_at', today)
+      .not('next_followup_at', 'is', null)
+      .not('status', 'in', '("Replied complete","No stock","Not available","Ignored / no response")')
+      .order('next_followup_at', { ascending: true });
     if (error) throw _sanitizeError(error);
     return data;
   },
