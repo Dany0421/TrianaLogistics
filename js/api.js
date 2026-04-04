@@ -481,4 +481,18 @@ const API = {
 
     return newProc;
   },
+
+  // ── Price History ──
+  async searchPriceHistory(query, dateFrom) {
+    let q = supabase
+      .from('quotation_items')
+      .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, processes(id, project_name, client_name))')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (query && query.trim()) q = q.ilike('raw_description', `%${query.trim()}%`);
+    if (dateFrom) q = q.gte('created_at', dateFrom);
+    const { data, error } = await q;
+    if (error) throw _sanitizeError(error);
+    return data;
+  },
 };
