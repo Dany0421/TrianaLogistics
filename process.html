@@ -63,6 +63,20 @@
   /* Quotation badge on supplier card */
   .quot-badge { font-family:'JetBrains Mono',monospace; font-size:10px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:2px 8px; color:var(--muted); }
   .quot-badge.has-items { color:var(--accent2); border-color:rgba(129,140,248,.3); background:rgba(129,140,248,.08); }
+  /* Comparison table */
+  .comp-wrap { overflow-x:auto; }
+  .comp-table { border-collapse:collapse; font-size:13px; min-width:100%; }
+  .comp-table th { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; min-width:130px; text-align:center; }
+  .comp-table th:first-child { text-align:left; min-width:240px; position:sticky; left:0; background:var(--bg); z-index:1; }
+  .comp-table td { padding:6px 10px; border-bottom:1px solid var(--border); vertical-align:middle; text-align:center; }
+  .comp-table td:first-child { text-align:left; position:sticky; left:0; background:var(--bg); z-index:1; }
+  .comp-table tr.comp-cat-row td { background:var(--surface2); color:var(--accent); font-family:'JetBrains Mono',monospace; font-size:10px; padding:5px 10px; letter-spacing:.8px; text-transform:uppercase; }
+  .comp-table tfoot td { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; color:#fff; border-top:1px solid var(--border); padding:7px 10px; }
+  .comp-cell { border-radius:5px; padding:5px 8px; font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; display:inline-block; }
+  .comp-cell-low  { background:rgba(16,185,129,.15); color:#34d399; }
+  .comp-cell-sel  { background:rgba(59,130,246,.15);  color:#60a5fa; }
+  .comp-cell-both { background:rgba(16,185,129,.2);   color:#34d399; outline:1px solid rgba(59,130,246,.5); }
+  .comp-cell-none { color:#334; font-size:16px; }
 </style>
 </head>
 <body>
@@ -110,6 +124,11 @@
     <!-- Matching Tab -->
     <div id="tab-matching" class="tab-panel">
       <div id="matchingContent"><div class="empty-state">Carrega o BOM e adiciona fornecedores primeiro.</div></div>
+    </div>
+
+    <!-- Comparação Tab -->
+    <div id="tab-comparacao" class="tab-panel">
+      <div id="comparacaoContent"></div>
     </div>
 
     <!-- Instalação Tab -->
@@ -291,7 +310,7 @@ function renderTabs() {
   const isCommercial = hasRole('commercial');
   const tabs = isCommercial
     ? [['bom', 'BOM']]
-    : [['bom', 'BOM'], ['suppliers', 'Fornecedores'], ['matching', 'Matching'], ['install', 'Instalação']];
+    : [['bom', 'BOM'], ['suppliers', 'Fornecedores'], ['matching', 'Matching'], ['comparacao', 'Comparação'], ['install', 'Instalação']];
   document.getElementById('tabBar').innerHTML = tabs.map(([ id, label], i) =>
     `<div class="tab${i===0?' active':''}" onclick="switchTab('${id}')">${label}</div>`
   ).join('');
@@ -303,6 +322,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'matching') renderMatchingTab();
+  if (name === 'comparacao') renderComparacaoTab();
 }
 
 // ── BOM Diff ──
@@ -1230,6 +1250,106 @@ async function runAutoMatch() {
     renderMatchingTab();
     showToast(`${newMatches.length} match(es) automático(s) criado(s).`);
   } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+// ── Comparação de Preços ──
+function renderComparacaoTab() {
+  const el = document.getElementById('comparacaoContent');
+  if (!el) return;
+  if (!bomItems.length) { el.innerHTML = '<div class="empty-state">Carrega o BOM primeiro.</div>'; return; }
+  if (!suppliers.length) { el.innerHTML = '<div class="empty-state">Adiciona fornecedores primeiro.</div>'; return; }
+
+  const matchLookup = {};
+  for (const m of matches) {
+    if (!matchLookup[m.bom_item_id]) matchLookup[m.bom_item_id] = {};
+    matchLookup[m.bom_item_id][m.supplier_id] = m;
+  }
+  const selLookup = {};
+  for (const o of selectedOffers) selLookup[o.bom_item_id] = o.supplier_id;
+
+  const covered = bomItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length;
+  const pct = bomItems.length ? Math.round(covered / bomItems.length * 100) : 0;
+  const pctColor = pct === 100 ? 'var(--accent)' : pct > 50 ? '#4fc3f7' : 'var(--danger)';
+
+  const suppCoverage = {};
+  for (const s of suppliers) suppCoverage[s.id] = bomItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
+  const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
+
+  const totalSelected = selectedOffers.reduce((sum, o) => sum + (matchLookup[o.bom_item_id]?.[o.supplier_id]?.quotation_items?.price || 0), 0);
+
+  const colTotals = {};
+  for (const s of suppliers) {
+    colTotals[s.id] = bomItems.reduce((sum, bi) => {
+      const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
+      return sum + (p != null ? p : 0);
+    }, 0);
+  }
+
+  let html = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
+        <div style="font-size:24px;font-weight:700;color:${pctColor}">${pct}%</div>
+        <div style="color:var(--muted);font-size:12px">${covered}/${bomItems.length} itens</div>
+      </div>
+      ${topSupp ? `<div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">MAIS COBERTURA</div>
+        <div style="font-size:15px;font-weight:600;color:#fff">${esc(topSupp.name)}</div>
+        <div style="color:var(--muted);font-size:12px">${suppCoverage[topSupp.id]} itens</div>
+      </div>` : ''}
+      ${totalSelected > 0 ? `<div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">TOTAL SELECIONADO</div>
+        <div style="font-size:15px;font-weight:600;color:var(--accent)">${fmtPrice(totalSelected)}</div>
+      </div>` : ''}
+    </div>
+    <div class="comp-wrap">
+    <table class="comp-table">
+      <thead><tr>
+        <th>Item BOM</th>
+        ${suppliers.map(s => `<th>${esc(s.name)}</th>`).join('')}
+      </tr></thead>
+      <tbody>`;
+
+  let lastCat = null;
+  for (const bi of bomItems) {
+    if (bi.category && bi.category !== lastCat) {
+      html += `<tr class="comp-cat-row"><td colspan="${1 + suppliers.length}">${esc(bi.category)}</td></tr>`;
+      lastCat = bi.category;
+    }
+    let lowestPrice = Infinity;
+    for (const s of suppliers) {
+      const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
+      if (p != null && p < lowestPrice) lowestPrice = p;
+    }
+    const selectedSuppId = selLookup[bi.id];
+    html += `<tr>
+      <td>
+        <div style="font-size:13px">${esc(bi.description)}</div>
+        ${bi.part_number ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
+      </td>
+      ${suppliers.map(s => {
+        const m = matchLookup[bi.id]?.[s.id];
+        const price = m?.quotation_items?.price;
+        const currency = m?.quotation_items?.currency || '';
+        const isSel = selectedSuppId === s.id;
+        const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
+        if (price != null) {
+          const cls = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
+          return `<td><span class="${cls}">${fmtPrice(price)}<span style="font-size:9px;opacity:.7;margin-left:3px">${esc(currency)}</span></span></td>`;
+        }
+        return `<td><span class="comp-cell comp-cell-none">—</span></td>`;
+      }).join('')}
+    </tr>`;
+  }
+
+  html += `</tbody>
+    <tfoot><tr>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total</td>
+      ${suppliers.map(s => `<td>${colTotals[s.id] > 0 ? fmtPrice(colTotals[s.id]) : '<span style="color:#334">—</span>'}</td>`).join('')}
+    </tr></tfoot>
+    </table></div>`;
+
+  el.innerHTML = html;
 }
 
 // ── PDF Quotation (ported from planilha-generator) ──
