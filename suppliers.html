@@ -47,6 +47,7 @@
   .empty-state .icon { font-size:36px; margin-bottom:12px; opacity:.4; }
   .empty-state .msg { font-size:14px; }
 
+  .resp-time-badge { font-family:'JetBrains Mono',monospace; font-size:10px; background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.25); color:#34d399; border-radius:4px; padding:1px 7px; white-space:nowrap; }
   .tag-input-box { display:flex; flex-wrap:wrap; gap:5px; align-items:center; border:1px solid var(--border); border-radius:6px; padding:5px 8px; min-height:36px; background:var(--surface2); cursor:text; }
   .tag-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.3); border-radius:4px; padding:2px 6px; font-size:12px; color:var(--accent); }
   .tag-chip-brand { background:rgba(124,58,237,.1); border-color:rgba(124,58,237,.3); color:#a78bfa; }
@@ -103,6 +104,7 @@ let pendingBrands = [];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function formatResponseTime(h) { if (!h || h <= 0) return '—'; return h < 24 ? Math.round(h) + 'h' : (h / 24).toFixed(1) + ' dias'; }
 function showToast(msg, isErr) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -205,9 +207,10 @@ function renderTable(list, q) {
       (s.email_cc ? '<div class="supp-email" style="color:var(--muted)">cc: ' + esc(s.email_cc) + '</div>' : '') +
       '</td><td>' + (cats || '<span style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
       '<td>' + (brands || '<span style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
+      '<td>' + (s.avg_response_hours > 0 ? '<span class="resp-time-badge">~' + formatResponseTime(s.avg_response_hours) + '</span> <span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--muted)">(n=' + s.response_count + ')</span>' : '<span style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
       '<td>' + actions + '</td></tr>';
   }).join('');
-  area.innerHTML = '<table class="supp-table"><thead><tr><th>Fornecedor</th><th>Categorias</th><th>Marcas</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+  area.innerHTML = '<table class="supp-table"><thead><tr><th>Fornecedor</th><th>Categorias</th><th>Marcas</th><th>Tempo Médio</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 // ── Tag input helpers ──

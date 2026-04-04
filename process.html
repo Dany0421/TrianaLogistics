@@ -43,6 +43,7 @@
   .supplier-status-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
   .foreign-box { display:none; background:rgba(251,191,36,.05); border:1px solid rgba(251,191,36,.2); border-radius:8px; padding:12px; margin-bottom:12px; }
   .foreign-box.show { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  .resp-time-badge { font-family:'JetBrains Mono',monospace; font-size:10px; background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.25); color:#34d399; border-radius:4px; padding:1px 7px; white-space:nowrap; }
   .tag-input-box { display:flex; flex-wrap:wrap; gap:5px; align-items:center; border:1px solid var(--border); border-radius:6px; padding:5px 8px; min-height:36px; background:var(--surface2); cursor:text; }
   .tag-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.3); border-radius:4px; padding:2px 6px; font-size:12px; color:var(--accent); }
   .tag-chip button { background:none; border:none; color:var(--muted); cursor:pointer; padding:0; font-size:12px; line-height:1; }
@@ -603,6 +604,8 @@ function renderSuppliers() {
   el.innerHTML = suppliers.map((s, i) => {
     const qItems = quotationMap[s.id] || [];
     const qCount = qItems.length;
+    const gs = supplierHistory[s.name?.trim().toLowerCase()];
+    const avgBadge = gs?.avg_response_hours > 0 ? `<span class="resp-time-badge">~${formatResponseTime(gs.avg_response_hours)}</span>` : '';
     return `
     <div class="supplier-card">
       <div class="supplier-card-header" onclick="toggleSupplier(${i})">
@@ -611,6 +614,7 @@ function renderSuppliers() {
           <span class="badge ${suppStatusClass(s.status)}">${s.status}</span>
           ${s.is_foreign ? '<span class="badge" style="background:#3a2a00;color:#ffaa00;border:1px solid #5a4a00">ESTRANGEIRO</span>' : ''}
           <span class="quot-badge ${qCount?'has-items':''}">${qCount ? `${qCount} itens cotação` : 'sem cotação'}</span>
+          ${avgBadge}
         </div>
         <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
           ${s.email ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openRFQModal(${i})">✉ RFQ</button>` : ''}
@@ -895,11 +899,32 @@ async function saveSupplier() {
   if (fields.email && (fields.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email))) { showToast('Email inválido.', true); return; }
   if (fields.email_cc && (fields.email_cc.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email_cc))) { showToast('Email CC inválido.', true); return; }
   if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (máx 5000 caracteres).', true); return; }
+
+  // Response time tracking
+  const prev = editingSupplierIdx !== null ? suppliers[editingSupplierIdx] : null;
+  const now = new Date().toISOString();
+  const repliedStatuses = ['Replied partial', 'Replied complete'];
+  if (fields.status === 'Request sent' && prev?.status !== 'Request sent') {
+    fields.contacted_at = now;
+  }
+  let shouldRecordResponse = false;
+  let responseHours = 0;
+  if (!repliedStatuses.includes(prev?.status) && repliedStatuses.includes(fields.status)) {
+    fields.replied_at = now;
+    if (prev?.contacted_at) {
+      responseHours = (new Date(now) - new Date(prev.contacted_at)) / 3600000;
+      if (responseHours > 0 && responseHours < 8760) shouldRecordResponse = true;
+    }
+  }
+
   try {
     if (editingSupplierIdx !== null) {
       await API.updateSupplier(suppliers[editingSupplierIdx].id, fields);
     } else {
       await API.createSupplier(fields);
+    }
+    if (shouldRecordResponse) {
+      try { await API.recordSupplierResponse(fields.name, responseHours); } catch(_) {}
     }
     // Silently merge categories/brands into global supplier profile
     try { await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.email_cc || '', pendingSupplierCategories, pendingSupplierBrands); } catch(_) {}
@@ -1782,6 +1807,7 @@ function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
 // ── Helpers ──
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('pt-PT'); }
+function formatResponseTime(hours) { if (!hours || hours <= 0) return '—'; return hours < 24 ? Math.round(hours) + 'h' : (hours / 24).toFixed(1) + ' dias'; }
 function fmtPrice(p) { if (p==null) return '—'; return new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2}).format(p); }
 function deadlineClass(d) { if (!d) return ''; const diff = (new Date(d)-new Date())/86400000; return diff < 0 ? 'overdue' : diff < 5 ? 'soon' : ''; }
 function statusBadgeClass(s) {
