@@ -511,6 +511,32 @@ const API = {
     return data;
   },
 
+  // ── Notifications ──
+  async getMyNotifications() {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error) throw _sanitizeError(error);
+    return data;
+  },
+
+  async markNotificationsRead() {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('read', false);
+    if (error) throw _sanitizeError(error);
+  },
+
+  async createNotification(userId, title, body, processId) {
+    const { error } = await supabase
+      .from('notifications')
+      .insert({ user_id: userId, title, body, process_id: processId });
+    if (error) throw _sanitizeError(error);
+  },
+
   // ── Follow-up Alerts ──
   async getOverdueFollowups() {
     const today = new Date().toISOString().split('T')[0];

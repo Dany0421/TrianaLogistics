@@ -140,6 +140,18 @@ create table if not exists selected_offers (
 
 -- ============================================================
 
+create table if not exists notifications (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  title text not null,
+  body text,
+  process_id uuid references processes(id) on delete cascade,
+  read boolean default false not null,
+  created_at timestamptz default now()
+);
+
+-- ============================================================
+
 create table if not exists installation_costs (
   id uuid default gen_random_uuid() primary key,
   process_id uuid references processes(id) on delete cascade unique,
