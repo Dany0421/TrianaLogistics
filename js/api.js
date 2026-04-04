@@ -537,6 +537,24 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  // ── Price Anomaly Detection ──
+  async getPriceHistoryBatch(partNumbers, descriptions) {
+    const filters = [];
+    partNumbers.filter(Boolean).forEach(p => filters.push('raw_part_number.ilike.' + p.trim().toLowerCase()));
+    descriptions.forEach(d => {
+      const key = d.trim().slice(0, 40).replace(/[%_]/g, '');
+      if (key) filters.push('raw_description.ilike.%' + key + '%');
+    });
+    if (!filters.length) return [];
+    const { data, error } = await supabase
+      .from('quotation_items')
+      .select('raw_part_number, raw_description, price, currency')
+      .or(filters.join(','))
+      .limit(500);
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
   // ── Supplier Detail ──
   async getSupplierProcessHistory(name) {
     const { data, error } = await supabase

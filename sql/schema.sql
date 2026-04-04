@@ -294,6 +294,7 @@ ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contacted_at timestamptz;
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS replied_at timestamptz;
 ALTER TABLE global_suppliers ADD COLUMN IF NOT EXISTS response_count int DEFAULT 0;
 ALTER TABLE global_suppliers ADD COLUMN IF NOT EXISTS avg_response_hours numeric DEFAULT 0;
+ALTER TABLE installation_costs ADD COLUMN IF NOT EXISTS diversos numeric DEFAULT 0;
 
 CREATE OR REPLACE FUNCTION record_supplier_response(
   p_name text,
