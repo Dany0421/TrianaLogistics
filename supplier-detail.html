@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net; img-src 'self' data:;">
+<title>Detalhe Fornecedor — Procurement</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<style>
+  .back-link { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:20px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; transition:.15s; }
+  .back-link:hover { color:var(--accent); }
+  .supplier-header { margin-bottom:24px; }
+  .supplier-name { font-size:26px; font-weight:700; color:#fff; letter-spacing:-.4px; margin-bottom:6px; }
+  .supplier-email { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:12px; }
+  .supplier-tags { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:6px; }
+  .chip { display:inline-flex; align-items:center; background:rgba(59,130,246,.1); border:1px solid rgba(59,130,246,.25); border-radius:4px; padding:2px 8px; font-size:11px; color:var(--accent); font-family:'JetBrains Mono',monospace; }
+  .chip-brand { background:rgba(124,58,237,.1); border-color:rgba(124,58,237,.3); color:#a78bfa; }
+  .chip-foreign { background:rgba(255,170,0,.1); border-color:rgba(255,170,0,.3); color:#ffaa00; }
+  .notes-row { font-size:13px; color:var(--muted); margin-top:4px; font-style:italic; }
+  .stats-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:28px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
+  .stat-label { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.7px; text-transform:uppercase; margin-bottom:6px; }
+  .stat-value { font-size:22px; font-weight:700; color:#fff; }
+  .stat-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+  .section-title { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+  .resp-time-badge { font-family:'JetBrains Mono',monospace; font-size:10px; background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.25); color:#34d399; border-radius:4px; padding:1px 7px; white-space:nowrap; }
+  .data-table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:24px; }
+  .data-table th { text-align:left; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.7px; text-transform:uppercase; padding:7px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .data-table td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:top; }
+  .data-table tr:hover td { background:rgba(59,130,246,.03); }
+  .price-group { margin-bottom:28px; }
+  .price-group-title { font-size:13px; font-weight:600; color:#e2e8f0; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .count-chip { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); background:rgba(255,255,255,.05); padding:1px 7px; border-radius:4px; }
+  .price-val { font-family:'JetBrains Mono',monospace; font-weight:600; color:#fff; white-space:nowrap; }
+  .trend-bar { font-size:12px; color:var(--muted); padding:8px 10px; background:rgba(255,255,255,.02); border-radius:5px; display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-top:2px; }
+  .trend-up { color:#f87171; }
+  .trend-down { color:#34d399; }
+  .trend-neutral { color:var(--muted); }
+  .proc-link { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .proc-link:hover { text-decoration:underline; }
+  .empty-msg { color:var(--muted); font-size:13px; padding:16px 0; }
+  .section-wrap { margin-bottom:32px; }
+  .mono-sm { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <div class="topbar-brand">Triana &middot; <span>Procurement</span></div>
+    <div class="topbar-right" id="topbarRight"></div>
+  </div>
+  <div class="page-content">
+    <div class="back-link" onclick="window.location.href='suppliers.html'">&#8592; Fornecedores</div>
+    <div id="mainContent"><div class="empty-msg">A carregar...</div></div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function showToast(msg,isErr){const t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(isErr?' toast-error':' toast-success')+' show';setTimeout(()=>t.className='toast',3000);}
+function formatResponseTime(h){if(!h||h<=0)return '—';return h<24?Math.round(h)+'h':(h/24).toFixed(1)+' dias';}
+function fmtDate(d){if(!d)return '—';return new Date(d).toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'});}
+function fmtPrice(p,cur){if(!p&&p!==0)return '—';return Number(p).toLocaleString('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+(cur||'MZN');}
+
+function computeTrend(items){
+  const now=new Date();
+  const thisStart=new Date(now.getFullYear(),now.getMonth(),1);
+  const prevStart=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const priced=items.filter(i=>i.price>0);
+  const thisM=priced.filter(i=>new Date(i.created_at)>=thisStart);
+  const prevM=priced.filter(i=>{const d=new Date(i.created_at);return d>=prevStart&&d<thisStart;});
+  if(!thisM.length||!prevM.length)return null;
+  const avg=arr=>arr.reduce((s,i)=>s+Number(i.price),0)/arr.length;
+  const tA=avg(thisM),pA=avg(prevM);
+  return{thisAvg:tA,prevAvg:pA,change:((tA-pA)/pA)*100,cur:thisM[0].currency||'MZN'};
+}
+
+function mkTh(text){const th=document.createElement('th');th.textContent=text;return th;}
+function mkTd(content,cls){const td=document.createElement('td');if(cls)td.className=cls;if(typeof content==='string')td.textContent=content;else if(content)td.appendChild(content);return td;}
+function mkTable(headers){
+  const tbl=document.createElement('table');tbl.className='data-table';
+  const thead=document.createElement('thead');const tr=document.createElement('tr');
+  headers.forEach(h=>tr.appendChild(mkTh(h)));thead.appendChild(tr);tbl.appendChild(thead);
+  const tbody=document.createElement('tbody');tbl.appendChild(tbody);
+  return{tbl,tbody};
+}
+
+window.addEventListener('load',async()=>{
+  if(hasRole('commercial')){window.location.href='dashboard.html';return;}
+  await requireAuth('index.html');
+  document.getElementById('topbarRight').appendChild(document.createRange().createContextualFragment(renderUserChip()));
+  const params=new URLSearchParams(location.search);
+  const name=params.get('name');
+  if(!name){window.location.href='suppliers.html';return;}
+  try{await loadDetail(name);}
+  catch(e){
+    const main=document.getElementById('mainContent');
+    while(main.firstChild)main.removeChild(main.firstChild);
+    const msg=document.createElement('div');msg.className='empty-msg';msg.style.color='var(--danger)';
+    msg.textContent='Erro: '+e.message;main.appendChild(msg);
+  }
+});
+
+async function loadDetail(name){
+  const[globalList,processHistory]=await Promise.all([API.getGlobalSuppliers(),API.getSupplierProcessHistory(name)]);
+  const gs=globalList.find(g=>g.name.trim().toLowerCase()===name.trim().toLowerCase());
+  const supplierIds=processHistory.map(s=>s.id);
+  const processIds=processHistory.map(s=>s.process_id);
+  const[quotItems,bomCatMap]=await Promise.all([
+    API.getSupplierQuotationHistory(supplierIds),
+    API.getBomCategoriesByProcessIds(processIds),
+  ]);
+  const qCountById={};
+  quotItems.forEach(qi=>{qCountById[qi.supplier_id]=(qCountById[qi.supplier_id]||0)+1;});
+  const isForeign=processHistory.some(s=>s.is_foreign);
+  renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isForeign);
+}
+
+function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isForeign){
+  const main=document.getElementById('mainContent');
+  while(main.firstChild)main.removeChild(main.firstChild);
+
+  // ── Header ──
+  const header=document.createElement('div');header.className='supplier-header';
+  const nameEl=document.createElement('div');nameEl.className='supplier-name';nameEl.textContent=gs?.name||name;
+  header.appendChild(nameEl);
+  if(gs?.email||gs?.email_cc){
+    const emailEl=document.createElement('div');emailEl.className='supplier-email';
+    emailEl.textContent=(gs.email||'')+(gs.email_cc?'  ·  cc: '+gs.email_cc:'');
+    header.appendChild(emailEl);
+  }
+  const tagsRow=document.createElement('div');tagsRow.className='supplier-tags';
+  if(isForeign){const c=document.createElement('span');c.className='chip chip-foreign';c.textContent='ESTRANGEIRO';tagsRow.appendChild(c);}
+  (gs?.categories||[]).forEach(c=>{const s=document.createElement('span');s.className='chip';s.textContent=c;tagsRow.appendChild(s);});
+  (gs?.brands||[]).forEach(b=>{const s=document.createElement('span');s.className='chip chip-brand';s.textContent=b;tagsRow.appendChild(s);});
+  if(tagsRow.children.length)header.appendChild(tagsRow);
+  if(gs?.notes){const n=document.createElement('div');n.className='notes-row';n.textContent=gs.notes;header.appendChild(n);}
+  main.appendChild(header);
+
+  // ── Stats ──
+  const statsEl=document.createElement('div');statsEl.className='stats-strip';
+  const statsData=[
+    {label:'Processos',value:processHistory.length,sub:'aparições'},
+    {label:'Itens cotados',value:quotItems.length,sub:'total'},
+    {label:'Tempo médio',value:gs?.avg_response_hours>0?formatResponseTime(gs.avg_response_hours):'—',sub:gs?.response_count?'n='+gs.response_count+' amostras':'sem dados'},
+    {label:'Categorias',value:(gs?.categories||[]).length,sub:'cobertas'},
+    {label:'Marcas',value:(gs?.brands||[]).length,sub:'registadas'},
+  ];
+  statsData.forEach(sd=>{
+    const card=document.createElement('div');card.className='stat-card';
+    const lbl=document.createElement('div');lbl.className='stat-label';lbl.textContent=sd.label;
+    const val=document.createElement('div');val.className='stat-value';val.textContent=sd.value;
+    const sub=document.createElement('div');sub.className='stat-sub';sub.textContent=sd.sub;
+    card.appendChild(lbl);card.appendChild(val);card.appendChild(sub);statsEl.appendChild(card);
+  });
+  main.appendChild(statsEl);
+
+  // ── Response time per category ──
+  const respSec=document.createElement('div');respSec.className='section-wrap';
+  const respTitle=document.createElement('div');respTitle.className='section-title';respTitle.textContent='Tempo de Resposta por Categoria';
+  respSec.appendChild(respTitle);
+  const catRespSamples={};
+  processHistory.forEach(s=>{
+    if(!s.contacted_at||!s.replied_at)return;
+    const hours=(new Date(s.replied_at)-new Date(s.contacted_at))/3600000;
+    if(hours<=0||hours>=8760)return;
+    const cats=bomCatMap[s.process_id];
+    if(cats&&cats.size){cats.forEach(cat=>{if(!catRespSamples[cat])catRespSamples[cat]=[];catRespSamples[cat].push(hours);});}
+    else{if(!catRespSamples['Sem categoria'])catRespSamples['Sem categoria']=[];catRespSamples['Sem categoria'].push(hours);}
+  });
+  const catRespEntries=Object.entries(catRespSamples).sort((a,b)=>{
+    const avgA=a[1].reduce((s,h)=>s+h,0)/a[1].length;
+    const avgB=b[1].reduce((s,h)=>s+h,0)/b[1].length;
+    return avgA-avgB;
+  });
+  if(!catRespEntries.length){
+    const em=document.createElement('div');em.className='empty-msg';em.textContent='Sem dados de resposta registados ainda.';respSec.appendChild(em);
+  } else {
+    const{tbl,tbody}=mkTable(['Categoria','Tempo Médio','Amostras']);
+    catRespEntries.forEach(([cat,samples])=>{
+      const avg=samples.reduce((s,h)=>s+h,0)/samples.length;
+      const tr=document.createElement('tr');
+      const badge=document.createElement('span');badge.className='resp-time-badge';badge.textContent='~'+formatResponseTime(avg);
+      const nEl=document.createElement('span');nEl.className='mono-sm';nEl.textContent=samples.length<2?samples.length+' (poucos dados)':String(samples.length);
+      tr.appendChild(mkTd(cat));tr.appendChild(mkTd(badge));tr.appendChild(mkTd(nEl));
+      tbody.appendChild(tr);
+    });
+    respSec.appendChild(tbl);
+  }
+  main.appendChild(respSec);
+
+  // ── Prices per category ──
+  const priceSec=document.createElement('div');priceSec.className='section-wrap';
+  const priceTitle=document.createElement('div');priceTitle.className='section-title';priceTitle.textContent='Análise de Preços por Categoria';
+  priceSec.appendChild(priceTitle);
+  if(!quotItems.length){
+    const em=document.createElement('div');em.className='empty-msg';em.textContent='Sem cotações registadas para este fornecedor.';priceSec.appendChild(em);
+  } else {
+    const noteEl=document.createElement('div');noteEl.style.cssText='font-size:11px;color:var(--muted);margin-bottom:16px';
+    noteEl.textContent='Categorias derivadas de item_matches com BOM. Itens não associados aparecem em "Sem categoria".';
+    priceSec.appendChild(noteEl);
+    const itemsByCat={};
+    quotItems.forEach(qi=>{
+      const matches=qi.item_matches||[];
+      const cats=matches.map(m=>m.bom_items?.category).filter(Boolean);
+      const catKey=cats.length?cats[0]:'Sem categoria';
+      if(!itemsByCat[catKey])itemsByCat[catKey]=[];
+      itemsByCat[catKey].push(qi);
+    });
+    const sortedCats=Object.keys(itemsByCat).sort((a,b)=>a==='Sem categoria'?1:b==='Sem categoria'?-1:a.localeCompare(b));
+    sortedCats.forEach(cat=>{
+      const items=itemsByCat[cat];
+      const group=document.createElement('div');group.className='price-group';
+      const groupTitle=document.createElement('div');groupTitle.className='price-group-title';
+      const titleText=document.createElement('span');titleText.textContent=cat;
+      const countChip=document.createElement('span');countChip.className='count-chip';countChip.textContent=items.length+' itens';
+      groupTitle.appendChild(titleText);groupTitle.appendChild(countChip);group.appendChild(groupTitle);
+      const{tbl,tbody}=mkTable(['Descrição','Part #','Preço','Data','Processo']);
+      tbl.className='data-table';
+      items.forEach(qi=>{
+        const proc=qi.suppliers?.processes;
+        const tr=document.createElement('tr');
+        const descTd=mkTd(qi.raw_description||'—');
+        const partTd=document.createElement('td');partTd.className='mono-sm';partTd.textContent=qi.raw_part_number||'—';
+        const priceSpan=document.createElement('span');priceSpan.className='price-val';priceSpan.textContent=fmtPrice(qi.price,qi.currency);
+        const dateTd=document.createElement('td');dateTd.className='mono-sm';dateTd.textContent=fmtDate(qi.created_at);
+        const procTd=document.createElement('td');
+        if(proc){const a=document.createElement('a');a.className='proc-link';a.href='process.html?id='+proc.id;a.textContent=proc.project_name+(proc.client_name?' / '+proc.client_name:'');procTd.appendChild(a);}
+        else procTd.textContent='—';
+        tr.appendChild(descTd);tr.appendChild(partTd);tr.appendChild(mkTd(priceSpan));tr.appendChild(dateTd);tr.appendChild(procTd);
+        tbody.appendChild(tr);
+      });
+      group.appendChild(tbl);
+      const trend=computeTrend(items);
+      const trendBar=document.createElement('div');trendBar.className='trend-bar';
+      if(trend){
+        const arrow=trend.change>1?'↑':trend.change<-1?'↓':'→';
+        const cls=trend.change>1?'trend-up':trend.change<-1?'trend-down':'trend-neutral';
+        const s1=document.createElement('span');s1.textContent='Este mês: ';
+        const v1=document.createElement('strong');v1.style.color='#fff';v1.textContent=fmtPrice(trend.thisAvg,trend.cur);s1.appendChild(v1);
+        const s2=document.createElement('span');s2.textContent='Mês anterior: ';
+        const v2=document.createElement('strong');v2.style.color='#fff';v2.textContent=fmtPrice(trend.prevAvg,trend.cur);s2.appendChild(v2);
+        const s3=document.createElement('span');s3.className=cls;s3.textContent=arrow+' '+Math.abs(trend.change).toFixed(1)+'%';
+        trendBar.appendChild(s1);trendBar.appendChild(s2);trendBar.appendChild(s3);
+      } else {
+        trendBar.textContent='Dados insuficientes para tendência mensal.';
+      }
+      group.appendChild(trendBar);
+      priceSec.appendChild(group);
+    });
+  }
+  main.appendChild(priceSec);
+
+  // ── Process history ──
+  const procSec=document.createElement('div');procSec.className='section-wrap';
+  const procTitle=document.createElement('div');procTitle.className='section-title';procTitle.textContent='Histórico de Processos';
+  procSec.appendChild(procTitle);
+  if(!processHistory.length){
+    const em=document.createElement('div');em.className='empty-msg';em.textContent='Nenhum processo encontrado.';procSec.appendChild(em);
+  } else {
+    const{tbl,tbody}=mkTable(['Projeto / Cliente','Estado Processo','Estado Fornecedor','Data','Itens','Extra']);
+    processHistory.forEach(s=>{
+      const proc=s.processes;
+      const tr=document.createElement('tr');
+      const projTd=document.createElement('td');
+      const a=document.createElement('a');a.className='proc-link';a.href='process.html?id='+proc.id;
+      a.textContent=proc.project_name+(proc.client_name?' / '+proc.client_name:'');projTd.appendChild(a);
+      const procStatusTd=document.createElement('td');procStatusTd.className='mono-sm';procStatusTd.textContent=proc.status||'—';
+      const suppStatusTd=document.createElement('td');suppStatusTd.style.fontSize='12px';suppStatusTd.textContent=s.status||'—';
+      const dateTd=document.createElement('td');dateTd.className='mono-sm';dateTd.textContent=fmtDate(s.created_at);
+      const itemsTd=document.createElement('td');itemsTd.className='mono-sm';itemsTd.textContent=String(qCountById[s.id]||0);
+      const extraTd=document.createElement('td');extraTd.className='mono-sm';
+      const extras=[];
+      if(s.is_foreign)extras.push('Estrangeiro');
+      if(s.cambio)extras.push('Câmbio: '+s.cambio);
+      if(s.transport)extras.push('Transport: '+s.transport);
+      if(s.direitos)extras.push('Direitos: '+s.direitos+'%');
+      extraTd.textContent=extras.join(' · ')||'—';
+      tr.appendChild(projTd);tr.appendChild(procStatusTd);tr.appendChild(suppStatusTd);tr.appendChild(dateTd);tr.appendChild(itemsTd);tr.appendChild(extraTd);
+      tbody.appendChild(tr);
+    });
+    procSec.appendChild(tbl);
+  }
+  main.appendChild(procSec);
+}
+</script>
+</body>
+</html>

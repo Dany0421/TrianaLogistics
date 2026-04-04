@@ -199,9 +199,10 @@ function renderTable(list, q) {
   let rows = list.map(s => {
     const cats = (s.categories||[]).map(c => '<span class="chip">' + esc(c) + '</span>').join('');
     const brands = (s.brands||[]).map(b => '<span class="chip chip-brand">' + esc(b) + '</span>').join('');
+    const viewBtn = '<button class="btn btn-ghost btn-sm" onclick="window.location.href=\'supplier-detail.html?name=\'+encodeURIComponent(\'' + esc(s.name) + '\')">Ver</button>';
     const actions = canEdit
-      ? '<div class="supp-actions"><button class="btn btn-ghost btn-sm" onclick="openSupplierModal(\'' + s.id + '\')">Editar</button><button class="btn btn-danger btn-sm" onclick="confirmDelete(\'' + s.id + '\', \'' + esc(s.name) + '\')">&#215;</button></div>'
-      : '';
+      ? '<div class="supp-actions">' + viewBtn + '<button class="btn btn-ghost btn-sm" onclick="openSupplierModal(\'' + s.id + '\')">Editar</button><button class="btn btn-danger btn-sm" onclick="confirmDelete(\'' + s.id + '\', \'' + esc(s.name) + '\')">&#215;</button></div>'
+      : '<div class="supp-actions">' + viewBtn + '</div>';
     return '<tr><td><div class="supp-name">' + highlight(s.name, q) + '</div>' +
       (s.email ? '<div class="supp-email">' + esc(s.email) + '</div>' : '') +
       (s.email_cc ? '<div class="supp-email" style="color:var(--muted)">cc: ' + esc(s.email_cc) + '</div>' : '') +

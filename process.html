@@ -44,6 +44,13 @@
   .foreign-box { display:none; background:rgba(251,191,36,.05); border:1px solid rgba(251,191,36,.2); border-radius:8px; padding:12px; margin-bottom:12px; }
   .foreign-box.show { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
   .resp-time-badge { font-family:'JetBrains Mono',monospace; font-size:10px; background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.25); color:#34d399; border-radius:4px; padding:1px 7px; white-space:nowrap; }
+  .sugg-banner { background:rgba(99,102,241,.07); border:1px solid rgba(99,102,241,.2); border-radius:8px; padding:14px 16px; margin-bottom:16px; }
+  .sugg-banner-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:11px; color:#a5b4fc; font-weight:600; text-transform:uppercase; letter-spacing:.07em; }
+  .sugg-cards { display:flex; flex-wrap:wrap; gap:10px; }
+  .sugg-card { background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); border-radius:6px; padding:10px 14px; min-width:180px; max-width:260px; display:flex; flex-direction:column; gap:6px; }
+  .sugg-card-name { font-size:13px; font-weight:600; color:#e2e8f0; }
+  .sugg-card-cats { display:flex; flex-wrap:wrap; gap:3px; }
+  .sugg-cat-chip { font-family:'JetBrains Mono',monospace; font-size:10px; background:rgba(99,102,241,.15); border:1px solid rgba(99,102,241,.3); color:#a5b4fc; border-radius:3px; padding:1px 6px; }
   .tag-input-box { display:flex; flex-wrap:wrap; gap:5px; align-items:center; border:1px solid var(--border); border-radius:6px; padding:5px 8px; min-height:36px; background:var(--surface2); cursor:text; }
   .tag-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.3); border-radius:4px; padding:2px 6px; font-size:12px; color:var(--accent); }
   .tag-chip button { background:none; border:none; color:var(--muted); cursor:pointer; padding:0; font-size:12px; line-height:1; }
@@ -124,6 +131,7 @@
         <span class="section-tag" id="suppCount">0 fornecedores</span>
         <button class="btn btn-ghost btn-sm" onclick="openSupplierModal()">+ Adicionar Fornecedor</button>
       </div>
+      <div id="suggBanner"></div>
       <div id="suppliersContent"><div class="empty-state">Sem fornecedores.<br>Adiciona o primeiro fornecedor.</div></div>
     </div>
 
@@ -214,6 +222,7 @@ let pendingQuotItems = [];
 let currentQuotSuppId = null;
 let installData = null;
 let supplierHistory = {}; // normalised name → { email, email_cc }
+let globalSuppliersList = [];
 
 // ── Init ──
 window.addEventListener('load', async () => {
@@ -294,6 +303,11 @@ async function loadAll() {
       supplierHistory = {};
       for (const s of known) supplierHistory[s.name.trim().toLowerCase()] = s;
     } catch(_) {}
+    // Load global suppliers for suggestions (best-effort)
+    try {
+      globalSuppliersList = await API.getGlobalSuppliers();
+    } catch(_) {}
+    renderSupplierSuggestions();
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
 
@@ -594,6 +608,82 @@ function renderBomTable(items) {
 }
 
 // ── Suppliers ──
+function renderSupplierSuggestions() {
+  const banner = document.getElementById('suggBanner');
+  if (!banner) return;
+  while (banner.firstChild) banner.removeChild(banner.firstChild);
+
+  const bomCats = [...new Set(bomItems.map(b => b.category).filter(Boolean))];
+  if (!bomCats.length || !globalSuppliersList.length) return;
+
+  const addedNames = new Set(suppliers.map(s => s.name.trim().toLowerCase()));
+  const bomCatsLower = new Set(bomCats.map(c => c.toLowerCase()));
+
+  const suggestions = globalSuppliersList.filter(gs => {
+    if (addedNames.has(gs.name.trim().toLowerCase())) return false;
+    return (gs.categories || []).some(c => bomCatsLower.has(c.toLowerCase()));
+  });
+
+  if (!suggestions.length) return;
+
+  const header = document.createElement('div');
+  header.className = 'sugg-banner-header';
+  const title = document.createElement('span');
+  title.textContent = 'Fornecedores sugeridos — categorias do BOM';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn btn-ghost btn-sm';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = () => { while (banner.firstChild) banner.removeChild(banner.firstChild); };
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+
+  const cards = document.createElement('div');
+  cards.className = 'sugg-cards';
+
+  suggestions.forEach(gs => {
+    const matchedCats = (gs.categories || []).filter(c => bomCatsLower.has(c.toLowerCase()));
+    const card = document.createElement('div');
+    card.className = 'sugg-card';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'sugg-card-name';
+    nameEl.textContent = gs.name;
+    card.appendChild(nameEl);
+
+    if (matchedCats.length) {
+      const catsEl = document.createElement('div');
+      catsEl.className = 'sugg-card-cats';
+      matchedCats.forEach(c => {
+        const chip = document.createElement('span');
+        chip.className = 'sugg-cat-chip';
+        chip.textContent = c;
+        catsEl.appendChild(chip);
+      });
+      card.appendChild(catsEl);
+    }
+
+    if (gs.avg_response_hours > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'resp-time-badge';
+      badge.textContent = '~' + formatResponseTime(gs.avg_response_hours);
+      card.appendChild(badge);
+    }
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-ghost btn-sm';
+    addBtn.textContent = '+ Adicionar';
+    addBtn.style.marginTop = '2px';
+    addBtn.onclick = () => openSupplierModal(null, { name: gs.name, email: gs.email || '', email_cc: gs.email_cc || '', categories: [...(gs.categories || [])] });
+    card.appendChild(addBtn);
+
+    cards.appendChild(card);
+  });
+
+  banner.className = 'sugg-banner';
+  banner.appendChild(header);
+  banner.appendChild(cards);
+}
+
 function renderSuppliers() {
   document.getElementById('suppCount').textContent = `${suppliers.length} fornecedor${suppliers.length !== 1 ? 'es' : ''}`;
   const el = document.getElementById('suppliersContent');
@@ -816,21 +906,21 @@ function removeSupplierTag(type, idx) {
     type === 'cat' ? pendingSupplierCategories : pendingSupplierBrands, type);
 }
 
-function openSupplierModal(idx = null) {
+function openSupplierModal(idx = null, prefill = {}) {
   editingSupplierIdx = idx;
   const s = idx !== null ? suppliers[idx] : null;
-  pendingSupplierCategories = [];
-  pendingSupplierBrands = [];
+  pendingSupplierCategories = s ? [...(s.categories || [])] : (prefill.categories || []);
+  pendingSupplierBrands = s ? [...(s.brands || [])] : [];
   showModal(`
     <div class="modal-tag">${s ? 'Editar Fornecedor' : 'Novo Fornecedor'}</div>
     <div class="modal-title">${s ? esc(s.name) : 'Adicionar Fornecedor'}</div>
     <datalist id="supplierNameList">${Object.values(supplierHistory).map(sh=>`<option value="${esc(sh.name)}">`).join('')}</datalist>
     <div class="form-grid-2">
-      <div><label>Nome</label><input id="sf_name" value="${esc(s?.name||'')}" placeholder="Ex: Tech Solutions" list="supplierNameList" oninput="autoFillSupplierEmail(this.value)"></div>
-      <div><label>Email Principal</label><input id="sf_email" value="${esc(s?.email||'')}" placeholder="email@fornecedor.com"></div>
+      <div><label>Nome</label><input id="sf_name" value="${esc(s?.name||prefill.name||'')}" placeholder="Ex: Tech Solutions" list="supplierNameList" oninput="autoFillSupplierEmail(this.value)"></div>
+      <div><label>Email Principal</label><input id="sf_email" value="${esc(s?.email||prefill.email||'')}" placeholder="email@fornecedor.com"></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" value="${esc(s?.email_cc||'')}" placeholder="cc@fornecedor.com"></div>
+      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" value="${esc(s?.email_cc||prefill.email_cc||'')}" placeholder="cc@fornecedor.com"></div>
       <div></div>
     </div>
     <div class="form-grid-2">
@@ -931,6 +1021,7 @@ async function saveSupplier() {
     closeModal();
     suppliers = await API.getSuppliers(processId);
     renderSuppliers();
+    renderSupplierSuggestions();
     showToast('Fornecedor guardado.');
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
