@@ -482,6 +482,21 @@ const API = {
     return newProc;
   },
 
+  // ── Known Suppliers (for auto-fill) ──
+  async getKnownSuppliers() {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('name, email, email_cc')
+      .not('email', 'is', null)
+      .order('created_at', { ascending: false });
+    if (error) throw _sanitizeError(error);
+    const map = {};
+    for (const s of (data || [])) {
+      if (!map[s.name]) map[s.name] = s;
+    }
+    return Object.values(map);
+  },
+
   // ── Price History ──
   async searchPriceHistory(query, dateFrom) {
     let q = supabase
