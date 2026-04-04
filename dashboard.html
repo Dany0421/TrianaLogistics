@@ -36,6 +36,38 @@
   .charts-grid { grid-template-columns: 1fr; }
   .chart-card-wide { grid-column: span 1; }
 }
+.followup-banner {
+  background: rgba(251,191,36,.06);
+  border: 1px solid rgba(251,191,36,.2);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.followup-banner-header {
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; user-select: none;
+}
+.followup-banner-title {
+  font-family: 'DM Mono', monospace; font-size: 11px;
+  color: #fbbf24; letter-spacing: .6px; text-transform: uppercase;
+  display: flex; align-items: center; gap: 8px;
+}
+.followup-count {
+  background: rgba(251,191,36,.2); color: #fbbf24;
+  border-radius: 10px; padding: 1px 8px;
+  font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 700;
+}
+.followup-rows { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.followup-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 10px; background: rgba(251,191,36,.04);
+  border: 1px solid rgba(251,191,36,.12); border-radius: 6px;
+  cursor: pointer; transition: border-color .15s;
+}
+.followup-row:hover { border-color: rgba(251,191,36,.35); }
+.followup-supplier { font-size: 13px; font-weight: 600; color: #fff; }
+.followup-proc { font-size: 12px; color: var(--muted); }
+.followup-overdue { font-family: 'DM Mono', monospace; font-size: 10px; color: #f87171; margin-left: auto; white-space: nowrap; }
 </style>
 <link rel="stylesheet" href="css/style.css">
 <script src="js/config.js"></script>
@@ -56,6 +88,9 @@
 
     <!-- Stats -->
     <div class="stats-grid" id="statsGrid"></div>
+
+    <!-- Follow-up alerts -->
+    <div id="followupBanner" style="display:none"></div>
 
     <!-- Charts -->
     <div class="charts-grid" id="chartsSection" style="display:none">
@@ -149,6 +184,9 @@ window.addEventListener('load', async () => {
   renderList();
   try { topSuppliers = await API.getTopSuppliers(); } catch(_) {}
   renderCharts(allProcesses, topSuppliers);
+  if (!hasRole('commercial')) {
+    try { renderFollowupAlerts(await API.getOverdueFollowups()); } catch(_) {}
+  }
 });
 
 async function loadProcesses() {
@@ -246,6 +284,33 @@ function renderCharts(processes, topSuppliers) {
       scales: { x: { ticks: { stepSize: 1 }, grid: { color: '#1a2235' }, beginAtZero: true }, y: { grid: { display: false } } },
     },
   });
+}
+
+// ── Follow-up Alerts ──
+let followupCollapsed = false;
+function renderFollowupAlerts(data) {
+  const banner = document.getElementById('followupBanner');
+  if (!data.length) { banner.style.display = 'none'; return; }
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rows = data.map(s => {
+    const proc = s.processes;
+    const due = new Date(s.next_followup_at);
+    const days = Math.round((today - due) / 86400000);
+    const label = days === 0 ? 'hoje' : `${days}d em atraso`;
+    return `<div class="followup-row" onclick="window.location.href='process.html?id=${esc(proc?.id||'')}'">
+      <span class="followup-supplier">${esc(s.name)}</span>
+      <span class="followup-proc">${esc(proc?.project_name||'')}${proc?.client_name ? ' · ' + esc(proc.client_name) : ''}</span>
+      <span class="followup-overdue">${label}</span>
+    </div>`;
+  }).join('');
+  banner.style.display = '';
+  banner.innerHTML = `<div class="followup-banner">
+    <div class="followup-banner-header" onclick="followupCollapsed=!followupCollapsed;document.getElementById('followupRows').style.display=followupCollapsed?'none':''">
+      <div class="followup-banner-title">⚠ Follow-ups em atraso <span class="followup-count">${data.length}</span></div>
+      <span style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">▾</span>
+    </div>
+    <div class="followup-rows" id="followupRows">${rows}</div>
+  </div>`;
 }
 
 // ── Stats ──
