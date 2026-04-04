@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net; img-src 'self' data:;">
+<title>Fornecedores — Procurement</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/style.css">
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<style>
+  .back-link { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:20px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; transition:.15s; }
+  .back-link:hover { color:var(--accent); }
+  .page-title { font-size:22px; font-weight:700; color:#fff; letter-spacing:-.3px; margin-bottom:4px; }
+  .page-sub { font-size:13px; color:var(--muted); margin-bottom:24px; }
+
+  .search-bar { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+  .search-input-wrap { position:relative; flex:1; min-width:220px; }
+  .search-input-wrap input { width:100%; padding-right:36px; }
+  .search-clear { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:0; line-height:1; }
+  .search-clear:hover { color:var(--text); }
+
+  .cat-filter-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
+  .cat-chip-filter { font-family:'JetBrains Mono',monospace; font-size:11px; padding:5px 12px; border:1px solid var(--border); border-radius:20px; cursor:pointer; color:var(--muted); background:var(--surface); transition:.12s; letter-spacing:.3px; }
+  .cat-chip-filter:hover { border-color:var(--accent); color:var(--accent); }
+  .cat-chip-filter.active { border-color:var(--accent); color:var(--accent); background:rgba(59,130,246,.1); }
+
+  .results-info { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:12px; letter-spacing:.3px; }
+
+  .supp-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .supp-table th { text-align:left; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.7px; text-transform:uppercase; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .supp-table td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  .supp-table tr:hover td { background:rgba(59,130,246,.03); }
+
+  .supp-name { font-size:13px; color:#fff; font-weight:500; }
+  .supp-email { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-top:2px; }
+
+  .chip { display:inline-flex; align-items:center; background:rgba(59,130,246,.1); border:1px solid rgba(59,130,246,.25); border-radius:4px; padding:2px 7px; font-size:11px; color:var(--accent); margin:2px 2px 2px 0; font-family:'JetBrains Mono',monospace; }
+  .chip-brand { background:rgba(124,58,237,.1); border-color:rgba(124,58,237,.3); color:#a78bfa; }
+
+  .supp-actions { display:flex; gap:6px; white-space:nowrap; }
+
+  .empty-state { text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-state .icon { font-size:36px; margin-bottom:12px; opacity:.4; }
+  .empty-state .msg { font-size:14px; }
+
+  .tag-input-box { display:flex; flex-wrap:wrap; gap:5px; align-items:center; border:1px solid var(--border); border-radius:6px; padding:5px 8px; min-height:36px; background:var(--surface2); cursor:text; }
+  .tag-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.3); border-radius:4px; padding:2px 6px; font-size:12px; color:var(--accent); }
+  .tag-chip-brand { background:rgba(124,58,237,.1); border-color:rgba(124,58,237,.3); color:#a78bfa; }
+  .tag-chip button { background:none; border:none; color:var(--muted); cursor:pointer; padding:0; font-size:12px; line-height:1; }
+  .tag-chip button:hover { color:var(--danger); }
+  .tag-input-field { border:none; background:none; outline:none; font-size:13px; color:var(--text); flex:1; min-width:80px; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <div class="topbar">
+    <div class="topbar-brand">Triana &middot; <span>Procurement</span></div>
+    <div class="topbar-right" id="topbarRight"></div>
+  </div>
+  <div class="page-content">
+
+    <div class="back-link" onclick="window.location.href='dashboard.html'">&#8592; Dashboard</div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div class="page-title">Base de Fornecedores</div>
+      <button class="btn btn-primary" id="addBtn" onclick="openSupplierModal()">+ Adicionar</button>
+    </div>
+    <div class="page-sub">Diret&oacute;rio global de fornecedores com categorias de equipamentos e marcas.</div>
+
+    <div class="search-bar">
+      <div class="search-input-wrap">
+        <input type="text" id="searchInput" placeholder="Pesquisar por nome, categoria ou marca..." autocomplete="off"
+          oninput="filterSuppliers()">
+        <button class="search-clear" id="clearBtn" onclick="clearSearch()" style="display:none">&#215;</button>
+      </div>
+    </div>
+
+    <div class="cat-filter-chips" id="catChips"></div>
+
+    <div class="results-info" id="resultsInfo"></div>
+    <div id="suppArea">
+      <div class="empty-state"><div class="icon">&#128101;</div><div class="msg">A carregar...</div></div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="modalRoot"></div>
+
+<script>
+let allSuppliers = [];
+let activeCat = '';
+let editingId = null;
+let pendingCats = [];
+let pendingBrands = [];
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function showToast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isErr ? ' toast-error' : ' toast-success') + ' show';
+  setTimeout(() => t.className = 'toast', 3000);
+}
+function showModal(html) {
+  closeModal();
+  const root = document.getElementById('modalRoot');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
+  const box = document.createElement('div');
+  box.className = 'modal-box';
+  const frag = document.createRange().createContextualFragment(html);
+  box.appendChild(frag);
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+}
+function closeModal() {
+  const root = document.getElementById('modalRoot');
+  while (root.firstChild) root.removeChild(root.firstChild);
+}
+
+window.addEventListener('load', async () => {
+  if (hasRole('commercial')) { window.location.href = 'dashboard.html'; return; }
+  await requireAuth('index.html');
+  document.getElementById('topbarRight').innerHTML = renderUserChip();
+  document.getElementById('addBtn').style.display = hasRole('admin') || hasRole('procurement') ? '' : 'none';
+  await loadSuppliers();
+});
+
+async function loadSuppliers() {
+  try {
+    allSuppliers = await API.getGlobalSuppliers();
+    renderCatChips();
+    filterSuppliers();
+  } catch(e) {
+    document.getElementById('suppArea').innerHTML = '<div class="empty-state"><div class="msg" style="color:var(--danger)">' + esc(e.message) + '</div></div>';
+  }
+}
+
+function renderCatChips() {
+  const all = new Set();
+  allSuppliers.forEach(s => (s.categories||[]).forEach(c => all.add(c)));
+  const chips = document.getElementById('catChips');
+  let html = '<span class="cat-chip-filter' + (!activeCat ? ' active' : '') + '" onclick="setCatFilter(\'\')">Todos</span>';
+  [...all].sort().forEach(c => {
+    html += '<span class="cat-chip-filter' + (activeCat === c ? ' active' : '') + '" onclick="setCatFilter(\'' + esc(c) + '\')">' + esc(c) + '</span>';
+  });
+  chips.innerHTML = html;
+}
+
+function setCatFilter(cat) {
+  activeCat = cat;
+  renderCatChips();
+  filterSuppliers();
+}
+
+function filterSuppliers() {
+  const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+  document.getElementById('clearBtn').style.display = q ? '' : 'none';
+  let list = allSuppliers;
+  if (q) list = list.filter(s =>
+    s.name?.toLowerCase().includes(q) ||
+    (s.categories||[]).some(c => c.toLowerCase().includes(q)) ||
+    (s.brands||[]).some(b => b.toLowerCase().includes(q))
+  );
+  if (activeCat) list = list.filter(s => (s.categories||[]).includes(activeCat));
+  document.getElementById('resultsInfo').textContent = list.length + ' fornecedor' + (list.length !== 1 ? 'es' : '');
+  renderTable(list, q);
+}
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  filterSuppliers();
+}
+
+function highlight(text, q) {
+  if (!q) return esc(text);
+  const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+  return esc(text).replace(re, '<mark style="background:rgba(251,191,36,.2);color:#fcd34d;border-radius:2px;padding:0 1px">$1</mark>');
+}
+
+function renderTable(list, q) {
+  const area = document.getElementById('suppArea');
+  if (!list.length) {
+    area.innerHTML = '<div class="empty-state"><div class="icon">&#128101;</div><div class="msg">Nenhum fornecedor encontrado.</div></div>';
+    return;
+  }
+  const canEdit = hasRole('admin') || hasRole('procurement');
+  let rows = list.map(s => {
+    const cats = (s.categories||[]).map(c => '<span class="chip">' + esc(c) + '</span>').join('');
+    const brands = (s.brands||[]).map(b => '<span class="chip chip-brand">' + esc(b) + '</span>').join('');
+    const actions = canEdit
+      ? '<div class="supp-actions"><button class="btn btn-ghost btn-sm" onclick="openSupplierModal(\'' + s.id + '\')">Editar</button><button class="btn btn-danger btn-sm" onclick="confirmDelete(\'' + s.id + '\', \'' + esc(s.name) + '\')">&#215;</button></div>'
+      : '';
+    return '<tr><td><div class="supp-name">' + highlight(s.name, q) + '</div>' +
+      (s.email ? '<div class="supp-email">' + esc(s.email) + '</div>' : '') +
+      (s.email_cc ? '<div class="supp-email" style="color:var(--muted)">cc: ' + esc(s.email_cc) + '</div>' : '') +
+      '</td><td>' + (cats || '<span style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
+      '<td>' + (brands || '<span style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
+      '<td>' + actions + '</td></tr>';
+  }).join('');
+  area.innerHTML = '<table class="supp-table"><thead><tr><th>Fornecedor</th><th>Categorias</th><th>Marcas</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+// ── Tag input helpers ──
+function renderTagBox(boxId, arr, type, chipClass) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  while (box.firstChild) box.removeChild(box.firstChild);
+  arr.forEach((c, i) => {
+    const span = document.createElement('span');
+    span.className = 'tag-chip' + (chipClass ? ' ' + chipClass : '');
+    span.textContent = c;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '\u00d7';
+    btn.onclick = () => removeTag(type, i);
+    span.appendChild(btn);
+    box.appendChild(span);
+  });
+  const inp = document.createElement('input');
+  inp.id = 'tagInput_' + type;
+  inp.className = 'tag-input-field';
+  inp.placeholder = 'Adicionar, Enter para confirmar...';
+  inp.onkeydown = function(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const val = this.value.trim().replace(/,/g, '');
+      if (!val) return;
+      if (type === 'cat') { if (!pendingCats.includes(val)) pendingCats.push(val); renderTagBox(boxId, pendingCats, 'cat', ''); }
+      else { if (!pendingBrands.includes(val)) pendingBrands.push(val); renderTagBox(boxId, pendingBrands, 'brand', 'tag-chip-brand'); }
+      document.getElementById('tagInput_' + type)?.focus();
+    }
+  };
+  box.appendChild(inp);
+}
+
+function removeTag(type, idx) {
+  if (type === 'cat') { pendingCats.splice(idx, 1); renderTagBox('gsCatBox', pendingCats, 'cat', ''); }
+  else { pendingBrands.splice(idx, 1); renderTagBox('gsBrandBox', pendingBrands, 'brand', 'tag-chip-brand'); }
+}
+
+// ── Modal ──
+function openSupplierModal(id = null) {
+  editingId = id;
+  const s = id ? allSuppliers.find(x => x.id === id) : null;
+  pendingCats = s ? [...(s.categories || [])] : [];
+  pendingBrands = s ? [...(s.brands || [])] : [];
+
+  showModal(
+    '<div class="modal-tag">' + (s ? 'Editar Fornecedor' : 'Novo Fornecedor') + '</div>' +
+    '<div class="modal-title">' + (s ? esc(s.name) : 'Adicionar Fornecedor') + '</div>' +
+    '<div class="form-grid-2">' +
+      '<div><label>Nome</label><input id="gs_name" value="' + esc(s?.name||'') + '" placeholder="Ex: Tech Solutions"></div>' +
+      '<div><label>Email Principal</label><input id="gs_email" value="' + esc(s?.email||'') + '" placeholder="email@fornecedor.com"></div>' +
+    '</div>' +
+    '<div class="form-row"><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label>' +
+      '<input id="gs_email_cc" value="' + esc(s?.email_cc||'') + '" placeholder="cc@fornecedor.com"></div>' +
+    '<div class="form-grid-2">' +
+      '<div><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipos de equipamento)</span></label>' +
+        '<div class="tag-input-box" id="gsCatBox"></div></div>' +
+      '<div><label>Marcas</label>' +
+        '<div class="tag-input-box" id="gsBrandBox"></div></div>' +
+    '</div>' +
+    '<div class="form-row"><label>Notas</label><textarea id="gs_notes">' + esc(s?.notes||'') + '</textarea></div>' +
+    '<div class="modal-actions">' +
+      '<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn btn-primary" onclick="saveSupplier()">Guardar</button>' +
+    '</div>'
+  );
+  renderTagBox('gsCatBox', pendingCats, 'cat', '');
+  renderTagBox('gsBrandBox', pendingBrands, 'brand', 'tag-chip-brand');
+}
+
+async function saveSupplier() {
+  const name = document.getElementById('gs_name').value.trim();
+  const email = document.getElementById('gs_email').value.trim() || null;
+  const email_cc = document.getElementById('gs_email_cc').value.trim() || null;
+  const notes = document.getElementById('gs_notes').value.trim() || null;
+
+  if (!name) { showToast('Nome obrigat\u00f3rio.', true); return; }
+  if (name.length > 200) { showToast('Nome demasiado longo.', true); return; }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Email inv\u00e1lido.', true); return; }
+  if (email_cc && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email_cc)) { showToast('Email CC inv\u00e1lido.', true); return; }
+
+  const fields = { name, email, email_cc, categories: pendingCats, brands: pendingBrands, notes };
+  try {
+    if (editingId) {
+      await API.updateGlobalSupplier(editingId, fields);
+    } else {
+      await API.createGlobalSupplier(fields);
+    }
+    closeModal();
+    showToast('Fornecedor guardado.');
+    await loadSuppliers();
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+function confirmDelete(id, name) {
+  if (!UUID_RE.test(id)) return;
+  showModal(
+    '<div class="modal-tag">Confirmar</div>' +
+    '<div class="modal-title">Apagar Fornecedor</div>' +
+    '<div style="color:var(--muted);font-size:14px;margin-bottom:24px">Apagar <strong style="color:#fff">' + esc(name) + '</strong>? Esta a&ccedil;&atilde;o n&atilde;o pode ser desfeita.</div>' +
+    '<div class="modal-actions">' +
+      '<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>' +
+      '<button class="btn btn-danger" onclick="doDelete(\'' + id + '\')">Apagar</button>' +
+    '</div>'
+  );
+}
+
+async function doDelete(id) {
+  if (!UUID_RE.test(id)) return;
+  try {
+    await API.deleteGlobalSupplier(id);
+    closeModal();
+    showToast('Fornecedor apagado.');
+    await loadSuppliers();
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+</script>
+</body>
+</html>

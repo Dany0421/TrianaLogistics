@@ -225,3 +225,66 @@ CREATE TRIGGER audit_item_matches
 -- ============================================================
 -- Run this separately in Supabase Storage UI or via:
 -- insert into storage.buckets (id, name, public) values ('procurement-files', 'procurement-files', false);
+
+-- ============================================================
+-- Global Suppliers Directory
+-- ============================================================
+CREATE TABLE IF NOT EXISTS global_suppliers (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  name text NOT NULL,
+  email text,
+  email_cc text,
+  categories text[] DEFAULT '{}',
+  brands text[] DEFAULT '{}',
+  notes text,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE global_suppliers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "gs_read" ON global_suppliers
+  FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "gs_write" ON global_suppliers
+  FOR ALL TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin','procurement')
+  ));
+
+GRANT ALL ON TABLE global_suppliers TO authenticated;
+
+-- Migrate existing suppliers
+INSERT INTO global_suppliers (name, email, email_cc)
+SELECT DISTINCT ON (lower(trim(name))) name, email, email_cc
+FROM suppliers
+WHERE name IS NOT NULL AND trim(name) != ''
+ORDER BY lower(trim(name)), created_at DESC
+ON CONFLICT DO NOTHING;
+
+-- RPC: merge categories + brands (always append, never replace)
+CREATE OR REPLACE FUNCTION upsert_global_supplier(
+  p_name text, p_email text, p_email_cc text,
+  p_categories text[], p_brands text[]
+) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO global_suppliers (name, email, email_cc, categories, brands)
+  VALUES (
+    p_name,
+    NULLIF(p_email, ''),
+    NULLIF(p_email_cc, ''),
+    ARRAY(SELECT DISTINCT unnest(p_categories) WHERE unnest IS NOT NULL AND unnest != ''),
+    ARRAY(SELECT DISTINCT unnest(p_brands) WHERE unnest IS NOT NULL AND unnest != '')
+  )
+  ON CONFLICT DO NOTHING;
+
+  UPDATE global_suppliers
+  SET
+    email     = CASE WHEN p_email    != '' THEN COALESCE(NULLIF(p_email,''),    email)    ELSE email    END,
+    email_cc  = CASE WHEN p_email_cc != '' THEN COALESCE(NULLIF(p_email_cc,''), email_cc) ELSE email_cc END,
+    categories = ARRAY(SELECT DISTINCT unnest(categories || p_categories) WHERE unnest IS NOT NULL AND unnest != ''),
+    brands     = ARRAY(SELECT DISTINCT unnest(brands || p_brands) WHERE unnest IS NOT NULL AND unnest != '')
+  WHERE lower(trim(name)) = lower(trim(p_name));
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION upsert_global_supplier TO authenticated;
