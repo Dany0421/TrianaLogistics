@@ -207,6 +207,7 @@ let selectedOffers = [];
 let pendingQuotItems = [];
 let currentQuotSuppId = null;
 let installData = null;
+let supplierHistory = {}; // normalised name → { email, email_cc }
 
 // ── Init ──
 window.addEventListener('load', async () => {
@@ -250,6 +251,7 @@ async function loadAll() {
         bomBtn.innerHTML = `
           <input type="file" id="bomFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleBomUpload(this)">
           ${v.file_path ? `<button class="btn btn-ghost btn-sm" onclick="viewBomFile('${v.file_path}')">📄 Ver ficheiro</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="openManualBomEntry()">✏ Editar BOM</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bomFileInput').click()" style="border-color:#ff8800;color:#ff8800">📂 Nova Revisão (v${v.version_number+1})</button>
         `;
       }
@@ -280,6 +282,12 @@ async function loadAll() {
       renderInstallTab();
       // Matching tab is rendered lazily on first switch
     }
+    // Load supplier history for auto-fill (best-effort)
+    try {
+      const known = await API.getKnownSuppliers();
+      supplierHistory = {};
+      for (const s of known) supplierHistory[s.name.trim().toLowerCase()] = s;
+    } catch(_) {}
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
 
@@ -462,10 +470,11 @@ function addBomRow() {
 }
 
 function openManualBomEntry() {
-  pendingBomItems = [];
+  // Pre-populate with existing items if available (strip DB-only fields)
+  pendingBomItems = bomItems.map(({ id, process_id, bom_version_id, created_at, sort_order, ...item }) => ({ ...item }));
   pendingDiff = null;
   pendingBomFile = null;
-  openBomValidationModal('Entrada Manual', { senior: 0, intermediate: 0, junior: 0, hours: 0 });
+  openBomValidationModal(bomItems.length ? 'Editar BOM' : 'Entrada Manual', { senior: 0, intermediate: 0, junior: 0, hours: 0 });
 }
 
 function renderBomValTable() {
@@ -608,7 +617,7 @@ function renderSuppliers() {
       </div>
       <div class="supplier-card-body" id="suppBody-${i}">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;margin-bottom:${qCount?'12px':'0'}">
-          <div><span style="color:var(--muted);font-size:11px">EMAIL</span><br>${esc(s.email||'—')}</div>
+          <div><span style="color:var(--muted);font-size:11px">EMAIL</span><br>${esc(s.email||'—')}${s.email_cc?`<br><span style="font-size:11px;color:var(--muted)">CC: ${esc(s.email_cc)}</span>`:''}</div>
           <div><span style="color:var(--muted);font-size:11px">ÚLTIMO CONTACTO</span><br>${s.last_contact_at ? fmtDate(s.last_contact_at) : '—'}</div>
           <div><span style="color:var(--muted);font-size:11px">FOLLOW-UP</span><br>${s.next_followup_at ? fmtDate(s.next_followup_at) : '—'}</div>
           <div><span style="color:var(--muted);font-size:11px">NOTAS</span><br>${esc(s.notes||'—')}</div>
@@ -739,9 +748,19 @@ function sendRFQ(supplierIdx) {
     '',
   ].join('\n');
 
-  const mailto = `mailto:${encodeURIComponent(s.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
+  const mailto = `mailto:${encodeURIComponent(s.email)}?cc=${ccEmails}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   window.open(mailto, '_blank');
   closeModal();
+}
+
+function autoFillSupplierEmail(name) {
+  const known = supplierHistory[name.trim().toLowerCase()];
+  if (!known) return;
+  const eEl = document.getElementById('sf_email');
+  const ccEl = document.getElementById('sf_email_cc');
+  if (eEl && !eEl.value) eEl.value = known.email || '';
+  if (ccEl && !ccEl.value) ccEl.value = known.email_cc || '';
 }
 
 let editingSupplierIdx = null;
@@ -751,9 +770,14 @@ function openSupplierModal(idx = null) {
   showModal(`
     <div class="modal-tag">${s ? 'Editar Fornecedor' : 'Novo Fornecedor'}</div>
     <div class="modal-title">${s ? esc(s.name) : 'Adicionar Fornecedor'}</div>
+    <datalist id="supplierNameList">${Object.values(supplierHistory).map(sh=>`<option value="${esc(sh.name)}">`).join('')}</datalist>
     <div class="form-grid-2">
-      <div><label>Nome</label><input id="sf_name" value="${esc(s?.name||'')}" placeholder="Ex: Tech Solutions"></div>
-      <div><label>Email</label><input id="sf_email" value="${esc(s?.email||'')}" placeholder="email@fornecedor.com"></div>
+      <div><label>Nome</label><input id="sf_name" value="${esc(s?.name||'')}" placeholder="Ex: Tech Solutions" list="supplierNameList" oninput="autoFillSupplierEmail(this.value)"></div>
+      <div><label>Email Principal</label><input id="sf_email" value="${esc(s?.email||'')}" placeholder="email@fornecedor.com"></div>
+    </div>
+    <div class="form-grid-2">
+      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" value="${esc(s?.email_cc||'')}" placeholder="cc@fornecedor.com"></div>
+      <div></div>
     </div>
     <div class="form-grid-2">
       <div><label>Estado</label>
@@ -802,10 +826,12 @@ async function saveSupplier() {
     last_contact_at:  document.getElementById('sf_last').value || null,
     next_followup_at: document.getElementById('sf_followup').value || null,
     notes:            document.getElementById('sf_notes').value.trim() || null,
+    email_cc:         document.getElementById('sf_email_cc').value.trim() || null,
   };
   if (!fields.name) { showToast('Nome do fornecedor é obrigatório.', true); return; }
   if (fields.name.length > 200) { showToast('Nome demasiado longo (máx 200 caracteres).', true); return; }
   if (fields.email && (fields.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email))) { showToast('Email inválido.', true); return; }
+  if (fields.email_cc && (fields.email_cc.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email_cc))) { showToast('Email CC inválido.', true); return; }
   if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (máx 5000 caracteres).', true); return; }
   try {
     if (editingSupplierIdx !== null) {
@@ -858,9 +884,16 @@ function uploadQuotation(supplierId) {
 function openManualQuotEntry(supplierId) {
   if (!UUID_RE.test(supplierId)) return;
   currentQuotSuppId = supplierId;
-  pendingQuotItems = [];
+  const existing = quotationMap[supplierId] || [];
+  pendingQuotItems = existing.map(qi => ({
+    raw_part_number: qi.raw_part_number,
+    raw_description: qi.raw_description,
+    quantity: qi.quantity,
+    price: qi.price,
+    currency: qi.currency,
+  }));
   pendingQuotFile = null;
-  openQuotationValModal('Entrada Manual');
+  openQuotationValModal(existing.length ? 'Editar Cotação' : 'Entrada Manual');
 }
 
 async function handleQuotationUpload(input) {

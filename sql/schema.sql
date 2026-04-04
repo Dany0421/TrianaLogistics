@@ -76,6 +76,7 @@ create table if not exists suppliers (
   process_id uuid references processes(id) on delete cascade,
   name text not null,
   email text,
+  email_cc text,
   status text default 'Not contacted',
   notes text,
   last_contact_at date,
