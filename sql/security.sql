@@ -301,3 +301,47 @@ $$;
 grant execute on function get_all_users() to authenticated;
 grant execute on function admin_set_user_role(uuid, text) to authenticated;
 grant execute on function admin_set_user_name(uuid, text) to authenticated;
+
+-- ============================================================
+-- global_suppliers — added after initial security migration
+-- ============================================================
+DROP POLICY IF EXISTS "auth_all" ON global_suppliers;
+DROP POLICY IF EXISTS "gs_read" ON global_suppliers;
+DROP POLICY IF EXISTS "gs_write" ON global_suppliers;
+
+CREATE POLICY "global_suppliers_select"
+  ON global_suppliers FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "global_suppliers_insert"
+  ON global_suppliers FOR INSERT
+  WITH CHECK (get_my_role() IN ('procurement', 'admin'));
+
+CREATE POLICY "global_suppliers_update"
+  ON global_suppliers FOR UPDATE
+  USING (get_my_role() IN ('procurement', 'admin'));
+
+CREATE POLICY "global_suppliers_delete"
+  ON global_suppliers FOR DELETE
+  USING (get_my_role() IN ('procurement', 'admin'));
+
+-- ============================================================
+-- notifications — users read/update own; procurement/admin insert
+-- ============================================================
+DROP POLICY IF EXISTS "auth_all" ON notifications;
+
+CREATE POLICY "notifications_select"
+  ON notifications FOR SELECT
+  USING (user_id = auth.uid());
+
+CREATE POLICY "notifications_insert"
+  ON notifications FOR INSERT
+  WITH CHECK (get_my_role() IN ('procurement', 'admin'));
+
+CREATE POLICY "notifications_update"
+  ON notifications FOR UPDATE
+  USING (user_id = auth.uid());
+
+CREATE POLICY "notifications_delete"
+  ON notifications FOR DELETE
+  USING (user_id = auth.uid());

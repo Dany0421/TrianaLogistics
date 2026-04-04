@@ -407,3 +407,38 @@ BEGIN
   DELETE FROM auth.users WHERE id = uid;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- ============================================================
+-- 18. audit_log INSERT policy (needed for triggers in some Supabase configs)
+-- ============================================================
+DROP POLICY IF EXISTS "audit_log_insert" ON audit_log;
+CREATE POLICY "audit_log_insert"
+  ON audit_log FOR INSERT
+  WITH CHECK (true);
+
+-- ============================================================
+-- 19. CHECK constraints for new columns
+-- ============================================================
+DO $$ BEGIN
+  -- global_suppliers
+  ALTER TABLE global_suppliers DROP CONSTRAINT IF EXISTS chk_gs_name_length;
+  ALTER TABLE global_suppliers ADD CONSTRAINT chk_gs_name_length CHECK (char_length(name) <= 200);
+
+  -- installation_costs.diversos
+  ALTER TABLE installation_costs DROP CONSTRAINT IF EXISTS chk_install_diversos;
+  ALTER TABLE installation_costs ADD CONSTRAINT chk_install_diversos CHECK (diversos >= 0 AND diversos < 100000000);
+
+  -- notifications
+  ALTER TABLE notifications DROP CONSTRAINT IF EXISTS chk_notif_title_length;
+  ALTER TABLE notifications ADD CONSTRAINT chk_notif_title_length CHECK (char_length(title) <= 200);
+  ALTER TABLE notifications DROP CONSTRAINT IF EXISTS chk_notif_body_length;
+  ALTER TABLE notifications ADD CONSTRAINT chk_notif_body_length CHECK (body IS NULL OR char_length(body) <= 1000);
+END $$;
+
+-- ============================================================
+-- 20. Audit trigger for global_suppliers (idempotent)
+-- ============================================================
+DROP TRIGGER IF EXISTS audit_global_suppliers ON global_suppliers;
+CREATE TRIGGER audit_global_suppliers
+  AFTER INSERT OR UPDATE OR DELETE ON global_suppliers
+  FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
