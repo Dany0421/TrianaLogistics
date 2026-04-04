@@ -322,3 +322,76 @@ CREATE TRIGGER audit_processes
 CREATE TRIGGER audit_global_suppliers
   AFTER INSERT OR UPDATE OR DELETE ON global_suppliers
   FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
+
+-- ============================================================
+-- Updates applied 2026-04-04 / 2026-04-05
+-- ============================================================
+
+-- Fix RLS on global_suppliers (replace gs_read/gs_write with auth_all pattern)
+DROP POLICY IF EXISTS "gs_read" ON global_suppliers;
+DROP POLICY IF EXISTS "gs_write" ON global_suppliers;
+DROP POLICY IF EXISTS "auth_all" ON global_suppliers;
+CREATE POLICY "auth_all" ON global_suppliers FOR ALL USING (auth.role() = 'authenticated');
+
+-- Fix RLS on quotation_items (ensure consistent pattern)
+DROP POLICY IF EXISTS "auth_all" ON quotation_items;
+CREATE POLICY "auth_all" ON quotation_items FOR ALL USING (auth.role() = 'authenticated');
+
+-- Notifications RLS (was missing)
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "auth_all" ON notifications;
+CREATE POLICY "auth_all" ON notifications FOR ALL USING (auth.role() = 'authenticated');
+
+-- Unique index on global_suppliers name (prevents duplicate rows)
+CREATE UNIQUE INDEX IF NOT EXISTS gs_name_unique ON global_suppliers (lower(trim(name)));
+
+-- Updated upsert_global_supplier: uses unique index for proper ON CONFLICT UPDATE
+CREATE OR REPLACE FUNCTION upsert_global_supplier(
+  p_name text, p_email text, p_email_cc text,
+  p_categories text[], p_brands text[]
+) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO global_suppliers (name, email, email_cc, categories, brands)
+  VALUES (
+    p_name,
+    NULLIF(p_email, ''),
+    NULLIF(p_email_cc, ''),
+    ARRAY(SELECT DISTINCT u FROM unnest(p_categories) u WHERE u IS NOT NULL AND u != ''),
+    ARRAY(SELECT DISTINCT u FROM unnest(p_brands) u WHERE u IS NOT NULL AND u != '')
+  )
+  ON CONFLICT (lower(trim(name))) DO UPDATE SET
+    email      = CASE WHEN p_email    != '' THEN COALESCE(NULLIF(p_email,''),    global_suppliers.email)    ELSE global_suppliers.email    END,
+    email_cc   = CASE WHEN p_email_cc != '' THEN COALESCE(NULLIF(p_email_cc,''), global_suppliers.email_cc) ELSE global_suppliers.email_cc END,
+    categories = ARRAY(SELECT DISTINCT u FROM unnest(global_suppliers.categories || p_categories) u WHERE u IS NOT NULL AND u != ''),
+    brands     = ARRAY(SELECT DISTINCT u FROM unnest(global_suppliers.brands || p_brands) u WHERE u IS NOT NULL AND u != '');
+END;
+$$;
+GRANT EXECUTE ON FUNCTION upsert_global_supplier TO authenticated;
+
+-- Process duration tracking
+ALTER TABLE processes ADD COLUMN IF NOT EXISTS categories text[] DEFAULT '{}';
+ALTER TABLE processes ADD COLUMN IF NOT EXISTS closed_at timestamptz;
+
+-- RPC: estimate process duration based on historical closed processes
+CREATE OR REPLACE FUNCTION get_duration_estimates(p_categories text[])
+RETURNS TABLE(avg_days numeric, min_days numeric, max_days numeric, sample_count int)
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    ROUND(AVG(d)::numeric, 0),
+    ROUND(MIN(d)::numeric, 0),
+    ROUND(MAX(d)::numeric, 0),
+    COUNT(*)::int
+  FROM (
+    SELECT EXTRACT(EPOCH FROM (closed_at - created_at)) / 86400 AS d
+    FROM processes
+    WHERE closed_at IS NOT NULL
+      AND status = 'Closed'
+      AND categories && p_categories
+      AND EXTRACT(EPOCH FROM (closed_at - created_at)) / 86400 BETWEEN 1 AND 730
+  ) sub
+  HAVING COUNT(*) >= 2;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION get_duration_estimates TO authenticated;

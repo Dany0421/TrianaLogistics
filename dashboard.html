@@ -82,6 +82,10 @@
 .notif-item-body { font-size:12px; color:var(--muted); }
 .notif-item-time { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); margin-top:4px; }
 .notif-empty { padding:24px 16px; text-align:center; color:var(--muted); font-size:13px; }
+.tag-input-box { display:flex; flex-wrap:wrap; gap:5px; align-items:center; border:1px solid var(--border); border-radius:6px; padding:5px 8px; min-height:36px; background:var(--surface2); cursor:text; }
+.tag-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(99,102,241,.15); border:1px solid rgba(99,102,241,.3); color:#a5b4fc; border-radius:4px; padding:2px 7px; font-size:12px; }
+.tag-chip button { background:none; border:none; color:#a5b4fc; cursor:pointer; padding:0; font-size:13px; line-height:1; }
+.tag-input-field { border:none; background:transparent; color:var(--text); font-size:13px; outline:none; min-width:120px; flex:1; }
 </style>
 <link rel="stylesheet" href="css/style.css">
 <script src="js/config.js"></script>
@@ -496,13 +500,52 @@ function goToProcess(id) {
   window.location.href = `process.html?id=${id}`;
 }
 
+// ── Process tag input (categories) ──
+let _pendingProcCats = null; // alias — same as pendingProcessCategories
+function renderProcTagBox(boxId, arr) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  while (box.firstChild) box.removeChild(box.firstChild);
+  arr.forEach((c, i) => {
+    const span = document.createElement('span');
+    span.className = 'tag-chip';
+    span.textContent = c;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '\u00d7';
+    btn.onclick = () => removeProcTag(boxId, i);
+    span.appendChild(btn);
+    box.appendChild(span);
+  });
+  const inp = document.createElement('input');
+  inp.className = 'tag-input-field';
+  inp.placeholder = 'Adicionar, Enter para confirmar...';
+  inp.onkeydown = function(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const val = this.value.trim().replace(/,/g, '');
+      if (!val || pendingProcessCategories.includes(val)) return;
+      pendingProcessCategories.push(val);
+      renderProcTagBox(boxId, pendingProcessCategories);
+      document.querySelector('#' + boxId + ' .tag-input-field')?.focus();
+    }
+  };
+  box.appendChild(inp);
+}
+function removeProcTag(boxId, idx) {
+  pendingProcessCategories.splice(idx, 1);
+  renderProcTagBox(boxId, pendingProcessCategories);
+}
+
 // ── Create / Edit modal ──
 let editingProcessId = null;
+let pendingProcessCategories = [];
 
 function openCreateModal(id = null) {
   if (id && !UUID_RE.test(id)) return;
   editingProcessId = id;
   const p = id ? allProcesses.find(x => x.id === id) : null;
+  pendingProcessCategories = p ? [...(p.categories || [])] : [];
   showModal(`
     <div class="modal-tag">${p ? 'Editar Processo' : 'Novo Processo'}</div>
     <div class="modal-title">${p ? esc(p.project_name) : 'Criar Processo'}</div>
@@ -547,12 +590,14 @@ function openCreateModal(id = null) {
       }
       return `<input type="hidden" id="f_assigned" value="">`;
     })()}
+    <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto — opcional)</span></label><div class="tag-input-box" id="f_catBox"></div></div>
     <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observações...">${esc(p?.notes||'')}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveProcess()">Guardar</button>
     </div>
   `);
+  renderProcTagBox('f_catBox', pendingProcessCategories);
 }
 
 async function saveProcess() {
@@ -562,10 +607,15 @@ async function saveProcess() {
     deadline:     document.getElementById('f_deadline').value || null,
     priority:     document.getElementById('f_priority').value,
     notes:        document.getElementById('f_notes').value.trim(),
+    categories:   pendingProcessCategories,
   };
   const statusEl = document.getElementById('f_status');
   if (statusEl) fields.status = statusEl.value;
   fields.assigned_to = document.getElementById('f_assigned').value || null;
+  if (fields.status === 'Closed') {
+    const prev = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
+    if (!prev || prev.status !== 'Closed') fields.closed_at = new Date().toISOString();
+  }
 
   // Auto-status: no assignee → waiting; newly assigned → active
   if (!editingProcessId) {

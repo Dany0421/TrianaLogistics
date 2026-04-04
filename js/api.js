@@ -526,6 +526,13 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async getDurationEstimates(categories) {
+    if (!categories || !categories.length) return null;
+    const { data, error } = await supabase.rpc('get_duration_estimates', { p_categories: categories });
+    if (error) throw _sanitizeError(error);
+    return data?.[0] || null;
+  },
+
   async upsertGlobalSupplier(name, email, emailCc, categories, brands) {
     const { error } = await supabase.rpc('upsert_global_supplier', {
       p_name: name,
