@@ -486,7 +486,7 @@ const API = {
   async getKnownSuppliers() {
     const { data, error } = await supabase
       .from('global_suppliers')
-      .select('name, email, email_cc')
+      .select('name, email, email_cc, avg_response_hours, response_count')
       .order('name');
     if (error) throw _sanitizeError(error);
     return data || [];
@@ -515,6 +515,14 @@ const API = {
 
   async deleteGlobalSupplier(id) {
     const { error } = await supabase.from('global_suppliers').delete().eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
+  async recordSupplierResponse(name, hours) {
+    const { error } = await supabase.rpc('record_supplier_response', {
+      p_name: name,
+      p_hours: hours,
+    });
     if (error) throw _sanitizeError(error);
   },
 

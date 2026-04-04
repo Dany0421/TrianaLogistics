@@ -288,3 +288,36 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION upsert_global_supplier TO authenticated;
+
+-- Response time tracking
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contacted_at timestamptz;
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS replied_at timestamptz;
+ALTER TABLE global_suppliers ADD COLUMN IF NOT EXISTS response_count int DEFAULT 0;
+ALTER TABLE global_suppliers ADD COLUMN IF NOT EXISTS avg_response_hours numeric DEFAULT 0;
+
+CREATE OR REPLACE FUNCTION record_supplier_response(
+  p_name text,
+  p_hours numeric
+) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE global_suppliers
+  SET
+    avg_response_hours = (avg_response_hours * response_count + p_hours) / (response_count + 1),
+    response_count = response_count + 1
+  WHERE lower(trim(name)) = lower(trim(p_name));
+END;
+$$;
+GRANT EXECUTE ON FUNCTION record_supplier_response TO authenticated;
+
+-- Audit triggers for suppliers and processes (missing from initial schema)
+CREATE TRIGGER audit_suppliers
+  AFTER INSERT OR UPDATE OR DELETE ON suppliers
+  FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
+
+CREATE TRIGGER audit_processes
+  AFTER INSERT OR UPDATE OR DELETE ON processes
+  FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();
+
+CREATE TRIGGER audit_global_suppliers
+  AFTER INSERT OR UPDATE OR DELETE ON global_suppliers
+  FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn();

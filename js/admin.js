@@ -20,7 +20,7 @@ function fullDate(iso) {
 // ── Badge ──
 function badgeClass(table) {
   if (table === 'processes')                               return 'log-badge-process';
-  if (table === 'suppliers' || table === 'quotation_items') return 'log-badge-supplier';
+  if (table === 'suppliers' || table === 'quotation_items' || table === 'global_suppliers') return 'log-badge-supplier';
   if (table === 'bom_versions' || table === 'bom_items')   return 'log-badge-bom';
   if (table === 'item_matches' || table === 'selected_offers') return 'log-badge-offer';
   if (table === 'profiles')                                return 'log-badge-profile';
@@ -31,6 +31,7 @@ function badgeLabel(table) {
   const map = {
     processes:       'Processo',
     suppliers:       'Fornecedor',
+    global_suppliers:'Fornecedor Global',
     quotation_items: 'Cotação',
     bom_versions:    'BOM',
     bom_items:       'BOM Item',
@@ -139,6 +140,16 @@ function describeEvent(log) {
     if (action === 'INSERT') return `Selecionou oferta de fornecedor para item BOM`;
     if (action === 'DELETE') return `Removeu oferta selecionada de item BOM`;
     return `Atualizou oferta selecionada`;
+  }
+
+  if (t === 'global_suppliers') {
+    if (action === 'INSERT') return `Adicionou fornecedor <strong>${esc(d?.name)}</strong>${d?.email ? ` (${esc(d.email)})` : ''}`;
+    if (action === 'DELETE') return `Removeu fornecedor <strong>${esc(d?.name)}</strong>`;
+    if (action === 'UPDATE') {
+      const diffs = diffFields(old_, new_, [['name','Nome'],['email','Email'],['categories','Categorias'],['brands','Marcas']]);
+      if (diffs.length) return `Atualizou fornecedor <strong>${esc(new_?.name || old_?.name)}</strong>: ${diffs.join('; ')}`;
+      return `Atualizou fornecedor <strong>${esc(new_?.name || old_?.name)}</strong>`;
+    }
   }
 
   if (t === 'profiles') {
