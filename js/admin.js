@@ -166,33 +166,64 @@ function describeEvent(log) {
 }
 
 // ── Render ──
-function renderEntry(log) {
-  const actor = log.actor;
-  const actorName = actor ? esc(actor.name) : '<span style="color:var(--muted)">Sistema</span>';
-  const actorRole = actor ? `<div class="log-actor-role">${esc(actor.role)}</div>` : '';
-
-  return `
-    <div class="log-entry">
-      <div class="log-time" title="${fullDate(log.created_at)}">${timeAgo(log.created_at)}</div>
-      <div>
-        <div class="log-actor">${actorName}</div>
-        ${actorRole}
-      </div>
-      <div><span class="log-badge ${badgeClass(log.table_name)}">${badgeLabel(log.table_name)}</span></div>
-      <div class="log-desc">${describeEvent(log)}</div>
-    </div>`;
+function createLogEntryEl(log) {
+  const wrap = document.createElement('div');
+  wrap.className = 'log-entry';
+  const timeEl = document.createElement('div');
+  timeEl.className = 'log-time';
+  timeEl.title = fullDate(log.created_at);
+  timeEl.textContent = timeAgo(log.created_at);
+  const col2 = document.createElement('div');
+  if (log.actor) {
+    const n = document.createElement('div');
+    n.className = 'log-actor';
+    n.textContent = log.actor.name;
+    const r = document.createElement('div');
+    r.className = 'log-actor-role';
+    r.textContent = log.actor.role;
+    col2.appendChild(n);
+    col2.appendChild(r);
+  } else {
+    const n = document.createElement('div');
+    n.className = 'log-actor';
+    const sp = document.createElement('span');
+    sp.style.color = 'var(--muted)';
+    sp.textContent = 'Sistema';
+    n.appendChild(sp);
+    col2.appendChild(n);
+  }
+  const bd = document.createElement('div');
+  const badge = document.createElement('span');
+  badge.className = 'log-badge ' + badgeClass(log.table_name);
+  badge.textContent = badgeLabel(log.table_name);
+  bd.appendChild(badge);
+  const desc = document.createElement('div');
+  desc.className = 'log-desc';
+  desc.appendChild(document.createRange().createContextualFragment(describeEvent(log)));
+  wrap.appendChild(timeEl);
+  wrap.appendChild(col2);
+  wrap.appendChild(bd);
+  wrap.appendChild(desc);
+  return wrap;
 }
 
 function renderEntries(entries, append = false) {
   const list = document.getElementById('logList');
-  if (!append) list.innerHTML = '';
+  if (!append) list.replaceChildren();
 
   if (!entries.length && !append) {
-    list.innerHTML = '<div class="empty-state"><span>Nenhuma atividade encontrada.</span></div>';
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    const sp = document.createElement('span');
+    sp.textContent = 'Nenhuma atividade encontrada.';
+    empty.appendChild(sp);
+    list.appendChild(empty);
     return;
   }
 
-  list.insertAdjacentHTML('beforeend', entries.map(renderEntry).join(''));
+  const frag = document.createDocumentFragment();
+  for (const log of entries) frag.appendChild(createLogEntryEl(log));
+  list.appendChild(frag);
 }
 
 // ── Load ──
@@ -200,7 +231,14 @@ async function loadLog(append = false) {
   if (!append) {
     logOffset = 0;
     allEntries = [];
-    document.getElementById('logList').innerHTML = '<div class="empty-state"><span>A carregar...</span></div>';
+    const loadList = document.getElementById('logList');
+    loadList.replaceChildren();
+    const loading = document.createElement('div');
+    loading.className = 'empty-state';
+    const spLoad = document.createElement('span');
+    spLoad.textContent = 'A carregar...';
+    loading.appendChild(spLoad);
+    loadList.appendChild(loading);
     document.getElementById('loadMoreWrap').style.display = 'none';
   }
 
@@ -217,7 +255,15 @@ async function loadLog(append = false) {
     document.getElementById('loadMoreWrap').style.display = entries.length === LOG_LIMIT ? '' : 'none';
     logOffset += entries.length;
   } catch (e) {
-    document.getElementById('logList').innerHTML = `<div class="empty-state"><span style="color:var(--danger)">${e.message}</span></div>`;
+    const errList = document.getElementById('logList');
+    errList.replaceChildren();
+    const errBox = document.createElement('div');
+    errBox.className = 'empty-state';
+    const errSp = document.createElement('span');
+    errSp.style.color = 'var(--danger)';
+    errSp.textContent = e.message;
+    errBox.appendChild(errSp);
+    errList.appendChild(errBox);
   }
 }
 
@@ -371,11 +417,18 @@ function openPrintWindow(entries, { dateFrom, dateTo }) {
 // ── Init ──
 // ── Modal / Toast ──
 function showModal(html) {
-  document.getElementById('modalRoot').innerHTML =
-    '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">'
-    + '<div class="modal-box">' + html + '</div></div>';
+  const root = document.getElementById('modalRoot');
+  root.replaceChildren();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  const box = document.createElement('div');
+  box.className = 'modal-box';
+  box.appendChild(document.createRange().createContextualFragment(html));
+  overlay.appendChild(box);
+  root.appendChild(overlay);
 }
-function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+function closeModal() { document.getElementById('modalRoot').replaceChildren(); }
 function showToast(msg, isError = false) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -408,31 +461,76 @@ function roleBadge(role) {
 }
 
 async function loadUsers() {
-  document.getElementById('userList').innerHTML = '<div class="empty-state"><span>A carregar...</span></div>';
+  const userList = document.getElementById('userList');
+  userList.replaceChildren();
+  const loading = document.createElement('div');
+  loading.className = 'empty-state';
+  const spL = document.createElement('span');
+  spL.textContent = 'A carregar...';
+  loading.appendChild(spL);
+  userList.appendChild(loading);
   try {
     const users = await API.getUsers();
     document.getElementById('userCount').textContent = '(' + users.length + ')';
+    userList.replaceChildren();
     if (!users.length) {
-      document.getElementById('userList').innerHTML = '<div class="empty-state"><span>Nenhum utilizador encontrado.</span></div>';
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      const spE = document.createElement('span');
+      spE.textContent = 'Nenhum utilizador encontrado.';
+      empty.appendChild(spE);
+      userList.appendChild(empty);
       return;
     }
-    document.getElementById('userList').innerHTML = users.map(u => renderUserRow(u)).join('');
+    const frag = document.createDocumentFragment();
+    users.forEach(u => frag.appendChild(createUserRowEl(u)));
+    userList.appendChild(frag);
   } catch (e) {
-    document.getElementById('userList').innerHTML = '<div class="empty-state"><span style="color:var(--danger)">' + e.message + '</span></div>';
+    userList.replaceChildren();
+    const errBox = document.createElement('div');
+    errBox.className = 'empty-state';
+    const spErr = document.createElement('span');
+    spErr.style.color = 'var(--danger)';
+    spErr.textContent = e.message;
+    errBox.appendChild(spErr);
+    userList.appendChild(errBox);
   }
 }
 
-function renderUserRow(u) {
-  const isSelf = currentProfile && u.id === currentProfile.id;
-  const lastSeen = u.last_sign_in_at ? timeAgo(u.last_sign_in_at) : 'Nunca';
-  const selfBadge = isSelf ? '<span class="user-name-you">tu</span>' : '';
-  return '<div class="user-row">'
-    + '<div class="user-name">' + esc(u.name || '—') + selfBadge + '</div>'
-    + '<div class="user-email">' + esc(u.email) + '</div>'
-    + '<div>' + roleBadge(u.role) + '</div>'
-    + '<div class="user-last-seen">' + lastSeen + '</div>'
-    + '<div class="user-actions"><button class="btn btn-ghost btn-sm" onclick=\'openEditUserModal(' + JSON.stringify(u) + ')\'>Editar</button></div>'
-    + '</div>';
+function createUserRowEl(u) {
+  const row = document.createElement('div');
+  row.className = 'user-row';
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'user-name';
+  nameDiv.appendChild(document.createTextNode(u.name || '—'));
+  if (currentProfile && u.id === currentProfile.id) {
+    const you = document.createElement('span');
+    you.className = 'user-name-you';
+    you.textContent = 'tu';
+    nameDiv.appendChild(you);
+  }
+  const emailDiv = document.createElement('div');
+  emailDiv.className = 'user-email';
+  emailDiv.textContent = u.email || '';
+  const roleCell = document.createElement('div');
+  roleCell.appendChild(document.createRange().createContextualFragment(roleBadge(u.role)));
+  const seen = document.createElement('div');
+  seen.className = 'user-last-seen';
+  seen.textContent = u.last_sign_in_at ? timeAgo(u.last_sign_in_at) : 'Nunca';
+  const actions = document.createElement('div');
+  actions.className = 'user-actions';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-ghost btn-sm';
+  btn.textContent = 'Editar';
+  btn.addEventListener('click', () => openEditUserModal(u));
+  actions.appendChild(btn);
+  row.appendChild(nameDiv);
+  row.appendChild(emailDiv);
+  row.appendChild(roleCell);
+  row.appendChild(seen);
+  row.appendChild(actions);
+  return row;
 }
 
 function openEditUserModal(u) {
@@ -444,7 +542,7 @@ function openEditUserModal(u) {
   showModal(
     '<div class="modal-tag">Utilizador</div>'
     + '<div class="modal-title">Editar ' + esc(u.name || u.email) + '</div>'
-    + '<div class="form-row"><label>Nome</label><input id="eu_name" value="' + esc(u.name || '') + '" maxlength="100"></div>'
+    + '<div class="form-row"><label>Nome</label><input id="eu_name" value="" maxlength="100"></div>'
     + '<div class="form-row"><label>Cargo</label>'
     + (isSelf
       ? '<div style="margin-top:6px">' + roleBadge(u.role) + ' <span style="font-size:12px;color:var(--muted);margin-left:8px">Não podes mudar o teu próprio cargo</span></div>'
@@ -455,6 +553,8 @@ function openEditUserModal(u) {
     + '<button class="btn btn-primary" onclick="saveUserEdit(\'' + u.id + '\',' + isSelf + ')">Guardar</button>'
     + '</div>'
   );
+  const euName = document.getElementById('eu_name');
+  if (euName) euName.value = u.name || '';
 }
 
 async function saveUserEdit(userId, isSelf) {
@@ -496,8 +596,15 @@ window.addEventListener('load', async () => {
   await requireAuth('index.html');
   if (!hasRole('admin')) { window.location.href = 'dashboard.html'; return; }
 
-  document.getElementById('topbarRight').innerHTML =
-    `<a href="dashboard.html" class="btn btn-ghost btn-sm" style="margin-right:4px">Dashboard</a>` + renderUserChip();
+  const tr = document.getElementById('topbarRight');
+  tr.replaceChildren();
+  const dash = document.createElement('a');
+  dash.href = 'dashboard.html';
+  dash.className = 'btn btn-ghost btn-sm';
+  dash.style.marginRight = '4px';
+  dash.textContent = 'Dashboard';
+  tr.appendChild(dash);
+  mountUserChip(tr);
 
   loadUsers();
 });

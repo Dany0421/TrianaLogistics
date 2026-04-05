@@ -107,7 +107,7 @@ let lastQuery = '';
 window.addEventListener('load', async () => {
   if (hasRole('commercial')) { window.location.href = 'dashboard.html'; return; }
   await requireAuth('index.html');
-  document.getElementById('topbarRight').innerHTML = renderUserChip();
+  mountUserChip(document.getElementById('topbarRight'));
   document.getElementById('searchInput').addEventListener('input', () => {
     document.getElementById('clearBtn').style.display = document.getElementById('searchInput').value ? '' : 'none';
   });
@@ -125,12 +125,23 @@ function clearSearch() {
   document.getElementById('clearBtn').style.display = 'none';
   lastQuery = '';
   document.getElementById('resultsInfo').textContent = '';
-  document.getElementById('resultsArea').innerHTML = `
-    <div class="empty-search">
-      <div class="icon">🔍</div>
-      <div class="msg">Pesquisa por material, equipamento ou referência.</div>
-      <div class="hint">Usa palavras-chave — não precisas do nome exato.</div>
-    </div>`;
+  const area = document.getElementById('resultsArea');
+  area.replaceChildren();
+  const wrap = document.createElement('div');
+  wrap.className = 'empty-search';
+  const ic = document.createElement('div');
+  ic.className = 'icon';
+  ic.textContent = '\u{1F50D}';
+  const msg = document.createElement('div');
+  msg.className = 'msg';
+  msg.textContent = 'Pesquisa por material, equipamento ou referência.';
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'Usa palavras-chave — não precisas do nome exato.';
+  wrap.appendChild(ic);
+  wrap.appendChild(msg);
+  wrap.appendChild(hint);
+  area.appendChild(wrap);
 }
 
 async function doSearch() {
@@ -146,15 +157,46 @@ async function doSearch() {
 
   const info = document.getElementById('resultsInfo');
   info.textContent = 'A pesquisar…';
-  document.getElementById('resultsArea').innerHTML = '';
+  document.getElementById('resultsArea').replaceChildren();
 
   try {
     const results = await API.searchPriceHistory(q, dateFrom);
     renderResults(results, q);
   } catch(e) {
     info.textContent = '';
-    document.getElementById('resultsArea').innerHTML = `<div class="empty-search"><div class="msg" style="color:var(--danger)">${esc(e.message)}</div></div>`;
+    const area = document.getElementById('resultsArea');
+    area.replaceChildren();
+    const wrap = document.createElement('div');
+    wrap.className = 'empty-search';
+    const msg = document.createElement('div');
+    msg.className = 'msg';
+    msg.style.color = 'var(--danger)';
+    msg.textContent = e.message;
+    wrap.appendChild(msg);
+    area.appendChild(wrap);
   }
+}
+
+function appendHighlightedDesc(el, text, query) {
+  if (!query || !query.trim()) {
+    el.textContent = text || '';
+    return;
+  }
+  const s = text || '';
+  const safeQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(safeQ.replace(/ /g, '|'), 'gi');
+  let last = 0;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) el.appendChild(document.createTextNode(s.slice(last, m.index)));
+    const span = document.createElement('span');
+    span.className = 'search-highlight';
+    span.textContent = m[0];
+    el.appendChild(span);
+    last = m.index + m[0].length;
+    if (m[0].length === 0) re.lastIndex++;
+  }
+  if (last < s.length) el.appendChild(document.createTextNode(s.slice(last)));
 }
 
 function renderResults(data, query) {
@@ -165,65 +207,120 @@ function renderResults(data, query) {
 
   if (!data.length) {
     info.textContent = '';
-    area.innerHTML = `
-      <div class="empty-search">
-        <div class="icon">📭</div>
-        <div class="msg">Sem resultados${query ? ` para "<strong style="color:#fff">${esc(query)}</strong>"` : ''} neste período.</div>
-        <div class="hint">Tenta alargar o intervalo de datas ou usar outras palavras-chave.</div>
-      </div>`;
+    area.replaceChildren();
+    const wrap = document.createElement('div');
+    wrap.className = 'empty-search';
+    const ic = document.createElement('div');
+    ic.className = 'icon';
+    ic.textContent = '\u{1F4ED}';
+    const msg = document.createElement('div');
+    msg.className = 'msg';
+    if (query) {
+      msg.appendChild(document.createTextNode('Sem resultados para "'));
+      const strong = document.createElement('strong');
+      strong.style.color = '#fff';
+      strong.textContent = query;
+      msg.appendChild(strong);
+      msg.appendChild(document.createTextNode('" neste período.'));
+    } else {
+      msg.textContent = 'Sem resultados neste período.';
+    }
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = 'Tenta alargar o intervalo de datas ou usar outras palavras-chave.';
+    wrap.appendChild(ic);
+    wrap.appendChild(msg);
+    wrap.appendChild(hint);
+    area.appendChild(wrap);
     return;
   }
 
-  info.textContent = `${data.length} resultado${data.length !== 1 ? 's' : ''}${query ? ` para "${query}"` : ''}`;
+  info.textContent = data.length + ' resultado' + (data.length !== 1 ? 's' : '') + (query ? ' para "' + query + '"' : '');
 
-  let html = `<div style="overflow-x:auto"><table class="price-table">
-    <thead><tr>
-      <th>Descrição</th>
-      <th>Fornecedor</th>
-      <th>Processo</th>
-      <th style="text-align:right">Preço</th>
-      <th>Data</th>
-    </tr></thead>
-    <tbody>`;
+  const scroll = document.createElement('div');
+  scroll.style.overflowX = 'auto';
+  const table = document.createElement('table');
+  table.className = 'price-table';
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  ['Descrição', 'Fornecedor', 'Processo', 'Preço', 'Data'].forEach((label, i) => {
+    const th = document.createElement('th');
+    th.textContent = label;
+    if (i === 3) th.style.textAlign = 'right';
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
 
   for (const row of data) {
     const supplier = row.suppliers;
     const proc = supplier?.processes;
     const isRecent = row.created_at && new Date(row.created_at) >= thirtyDaysAgo;
     const procId = proc?.id;
-    const procLink = procId ? `<a class="price-process" href="process.html?id=${esc(procId)}">${esc((proc.project_name||'') + (proc.client_name ? ' · ' + proc.client_name : ''))}</a>` : '<span style="color:#334">—</span>';
-    const desc = query ? highlight(row.raw_description || '', query) : esc(row.raw_description || '');
-
-    html += `<tr>
-      <td>
-        <div class="price-desc">${desc}</div>
-        ${row.raw_part_number ? `<div class="price-part">${esc(row.raw_part_number)}</div>` : ''}
-      </td>
-      <td><span class="price-supplier">${esc(supplier?.name || '—')}</span></td>
-      <td>${procLink}</td>
-      <td style="text-align:right">
-        <span class="price-amount">${fmtPrice(row.price)}</span>
-        <span class="price-currency">${esc(row.currency || '')}</span>
-      </td>
-      <td>
-        <span class="price-date">${fmtDate(row.created_at)}</span>
-        <span class="${isRecent ? 'badge-fresh' : 'badge-old'}">${isRecent ? 'RECENTE' : 'ANTIGO'}</span>
-      </td>
-    </tr>`;
+    const tr = document.createElement('tr');
+    const tdDesc = document.createElement('td');
+    const descDiv = document.createElement('div');
+    descDiv.className = 'price-desc';
+    appendHighlightedDesc(descDiv, row.raw_description || '', query);
+    tdDesc.appendChild(descDiv);
+    if (row.raw_part_number) {
+      const part = document.createElement('div');
+      part.className = 'price-part';
+      part.textContent = row.raw_part_number;
+      tdDesc.appendChild(part);
+    }
+    const tdSupp = document.createElement('td');
+    const supSpan = document.createElement('span');
+    supSpan.className = 'price-supplier';
+    supSpan.textContent = supplier?.name || '—';
+    tdSupp.appendChild(supSpan);
+    const tdProc = document.createElement('td');
+    if (procId) {
+      const a = document.createElement('a');
+      a.className = 'price-process';
+      a.href = 'process.html?id=' + procId;
+      a.textContent = (proc.project_name || '') + (proc.client_name ? ' · ' + proc.client_name : '');
+      tdProc.appendChild(a);
+    } else {
+      const sp = document.createElement('span');
+      sp.style.color = '#334';
+      sp.textContent = '\u2014';
+      tdProc.appendChild(sp);
+    }
+    const tdPrice = document.createElement('td');
+    tdPrice.style.textAlign = 'right';
+    const amt = document.createElement('span');
+    amt.className = 'price-amount';
+    amt.textContent = fmtPrice(row.price);
+    const cur = document.createElement('span');
+    cur.className = 'price-currency';
+    cur.textContent = row.currency || '';
+    tdPrice.appendChild(amt);
+    tdPrice.appendChild(cur);
+    const tdDate = document.createElement('td');
+    const dspan = document.createElement('span');
+    dspan.className = 'price-date';
+    dspan.textContent = fmtDate(row.created_at);
+    const badge = document.createElement('span');
+    badge.className = isRecent ? 'badge-fresh' : 'badge-old';
+    badge.textContent = isRecent ? 'RECENTE' : 'ANTIGO';
+    tdDate.appendChild(dspan);
+    tdDate.appendChild(document.createTextNode(' '));
+    tdDate.appendChild(badge);
+    tr.appendChild(tdDesc);
+    tr.appendChild(tdSupp);
+    tr.appendChild(tdProc);
+    tr.appendChild(tdPrice);
+    tr.appendChild(tdDate);
+    tbody.appendChild(tr);
   }
-
-  html += '</tbody></table></div>';
-  document.getElementById('resultsArea').innerHTML = html;
+  table.appendChild(tbody);
+  scroll.appendChild(table);
+  area.replaceChildren();
+  area.appendChild(scroll);
 }
 
-function highlight(text, query) {
-  if (!query) return esc(text);
-  const safe = esc(text);
-  const safeQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return safe.replace(new RegExp(safeQ.replace(/ /g, '|'), 'gi'), m => `<span class="search-highlight">${m}</span>`);
-}
-
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('pt-PT'); }
 function fmtPrice(p) { if (p == null) return '—'; return new Intl.NumberFormat('pt-PT', { minimumFractionDigits:2, maximumFractionDigits:2 }).format(p); }
 function showToast(msg, isError = false) {

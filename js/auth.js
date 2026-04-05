@@ -56,21 +56,27 @@ async function logout() {
   window.location.href = 'index.html';
 }
 
-function renderUserChip() {
-  const name = _escAttr(currentProfile?.name || currentUser?.email?.split('@')[0] || '—');
+/** Appends user chip + logout. Caller should clear the container first when replacing bar contents. */
+function mountUserChip(container) {
+  const name = currentProfile?.name || currentUser?.email?.split('@')[0] || '—';
   const role = currentProfile?.role || 'procurement';
   const safeRole = ['commercial', 'procurement', 'admin'].includes(role) ? role : 'procurement';
-  return `
-    <span class="user-chip">${name}</span>
-    <span class="role-chip role-${safeRole}">${safeRole}</span>
-    <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
-  `;
+  const spanName = document.createElement('span');
+  spanName.className = 'user-chip';
+  spanName.textContent = name;
+  const spanRole = document.createElement('span');
+  spanRole.className = 'role-chip role-' + safeRole;
+  spanRole.textContent = safeRole;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-ghost btn-sm';
+  btn.textContent = 'Sair';
+  btn.addEventListener('click', () => { logout(); });
+  container.appendChild(spanName);
+  container.appendChild(spanRole);
+  container.appendChild(btn);
 }
 
 function hasRole(...roles) {
   return roles.includes(currentProfile?.role);
-}
-
-function _escAttr(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
 }

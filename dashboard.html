@@ -202,18 +202,53 @@ function toggleNotifPanel() {
   document.getElementById('notifPanel')?.remove();
   if (!_notifOpen) return;
   const unread = _notifications.filter(n => !n.read);
-  const items = _notifications.length
-    ? _notifications.map(n => `<div class="notif-item${n.read?'':' unread'}" onclick="goNotif('${n.process_id||''}')">
-        <div class="notif-item-title">${esc(n.title)}</div>
-        ${n.body ? `<div class="notif-item-body">${esc(n.body)}</div>` : ''}
-        <div class="notif-item-time">${timeAgoNotif(n.created_at)}</div>
-      </div>`).join('')
-    : `<div class="notif-empty">Sem notificações.</div>`;
-  wrap.insertAdjacentHTML('beforeend', `<div class="notif-panel" id="notifPanel">
-    <div class="notif-panel-header">
-      <span class="notif-panel-title">Notificações</span>
-      ${unread.length ? `<button class="btn btn-ghost btn-sm" onclick="markAllRead()">Marcar lidas</button>` : ''}
-    </div>${items}</div>`);
+  const panel = document.createElement('div');
+  panel.className = 'notif-panel';
+  panel.id = 'notifPanel';
+  const header = document.createElement('div');
+  header.className = 'notif-panel-header';
+  const title = document.createElement('span');
+  title.className = 'notif-panel-title';
+  title.textContent = 'Notificações';
+  header.appendChild(title);
+  if (unread.length) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-ghost btn-sm';
+    btn.textContent = 'Marcar lidas';
+    btn.addEventListener('click', (e) => { e.stopPropagation(); markAllRead(); });
+    header.appendChild(btn);
+  }
+  panel.appendChild(header);
+  if (!_notifications.length) {
+    const empty = document.createElement('div');
+    empty.className = 'notif-empty';
+    empty.textContent = 'Sem notificações.';
+    panel.appendChild(empty);
+  } else {
+    for (const n of _notifications) {
+      const item = document.createElement('div');
+      item.className = 'notif-item' + (n.read ? '' : ' unread');
+      const pid = n.process_id || '';
+      item.addEventListener('click', () => goNotif(pid));
+      const tEl = document.createElement('div');
+      tEl.className = 'notif-item-title';
+      tEl.textContent = n.title || '';
+      item.appendChild(tEl);
+      if (n.body) {
+        const bEl = document.createElement('div');
+        bEl.className = 'notif-item-body';
+        bEl.textContent = n.body;
+        item.appendChild(bEl);
+      }
+      const timeEl = document.createElement('div');
+      timeEl.className = 'notif-item-time';
+      timeEl.textContent = timeAgoNotif(n.created_at);
+      item.appendChild(timeEl);
+      panel.appendChild(item);
+    }
+  }
+  wrap.appendChild(panel);
   if (unread.length) markAllRead();
   setTimeout(() => document.addEventListener('click', closeNotifOutside, { once: true }), 0);
 }
@@ -259,17 +294,48 @@ function timeAgoNotif(d) {
 window.addEventListener('load', async () => {
   const auth = await requireAuth('index.html');
   if (!auth) return;
-  const adminLink = hasRole('admin')
-    ? `<a href="admin.html" class="btn btn-ghost btn-sm" style="margin-right:4px;border-color:rgba(16,185,129,.3);color:#34d399">Admin</a>`
-    : '';
-  const pricesLink = !hasRole('commercial')
-    ? `<a href="prices.html" class="btn btn-ghost btn-sm" style="margin-right:4px">Preços</a>` +
-      `<a href="suppliers.html" class="btn btn-ghost btn-sm" style="margin-right:4px">Fornecedores</a>`
-    : '';
-  document.getElementById('topbarRight').innerHTML =
-    `<div style="position:relative;display:inline-flex;margin-right:4px" id="notifWrap">
-      <div class="notif-bell" onclick="toggleNotifPanel()" title="Notificações">🔔<span class="notif-badge" id="notifBadge" style="display:none"></span></div>
-    </div>` + pricesLink + adminLink + renderUserChip();
+  const tr = document.getElementById('topbarRight');
+  tr.replaceChildren();
+  const notifWrap = document.createElement('div');
+  notifWrap.id = 'notifWrap';
+  notifWrap.style.cssText = 'position:relative;display:inline-flex;margin-right:4px';
+  const bell = document.createElement('div');
+  bell.className = 'notif-bell';
+  bell.title = 'Notificações';
+  bell.textContent = '\u{1F514}';
+  bell.addEventListener('click', toggleNotifPanel);
+  const badge = document.createElement('span');
+  badge.className = 'notif-badge';
+  badge.id = 'notifBadge';
+  badge.style.display = 'none';
+  bell.appendChild(badge);
+  notifWrap.appendChild(bell);
+  tr.appendChild(notifWrap);
+  if (!hasRole('commercial')) {
+    const aPrices = document.createElement('a');
+    aPrices.href = 'prices.html';
+    aPrices.className = 'btn btn-ghost btn-sm';
+    aPrices.style.marginRight = '4px';
+    aPrices.textContent = 'Preços';
+    tr.appendChild(aPrices);
+    const aSupp = document.createElement('a');
+    aSupp.href = 'suppliers.html';
+    aSupp.className = 'btn btn-ghost btn-sm';
+    aSupp.style.marginRight = '4px';
+    aSupp.textContent = 'Fornecedores';
+    tr.appendChild(aSupp);
+  }
+  if (hasRole('admin')) {
+    const aAdm = document.createElement('a');
+    aAdm.href = 'admin.html';
+    aAdm.className = 'btn btn-ghost btn-sm';
+    aAdm.style.marginRight = '4px';
+    aAdm.style.borderColor = 'rgba(16,185,129,.3)';
+    aAdm.style.color = '#34d399';
+    aAdm.textContent = 'Admin';
+    tr.appendChild(aAdm);
+  }
+  mountUserChip(tr);
   let topSuppliers = [];
   [procUsers, allProcesses] = await Promise.all([
     API.getProcurementUsers(),
@@ -411,25 +477,61 @@ function renderFollowupAlerts(data) {
   const banner = document.getElementById('followupBanner');
   if (!data.length) { banner.style.display = 'none'; return; }
   const today = new Date(); today.setHours(0,0,0,0);
-  const rows = data.map(s => {
+  banner.style.display = '';
+  banner.replaceChildren();
+  const wrap = document.createElement('div');
+  wrap.className = 'followup-banner';
+  const hdr = document.createElement('div');
+  hdr.className = 'followup-banner-header';
+  hdr.addEventListener('click', () => {
+    followupCollapsed = !followupCollapsed;
+    const fr = document.getElementById('followupRows');
+    if (fr) fr.style.display = followupCollapsed ? 'none' : '';
+  });
+  const title = document.createElement('div');
+  title.className = 'followup-banner-title';
+  title.appendChild(document.createTextNode('\u26A0 Follow-ups em atraso '));
+  const cnt = document.createElement('span');
+  cnt.className = 'followup-count';
+  cnt.textContent = String(data.length);
+  title.appendChild(cnt);
+  const caret = document.createElement('span');
+  caret.style.cssText = "font-size:11px;color:var(--muted);font-family:'DM Mono',monospace";
+  caret.textContent = '\u25BE';
+  hdr.appendChild(title);
+  hdr.appendChild(caret);
+  const rowsEl = document.createElement('div');
+  rowsEl.className = 'followup-rows';
+  rowsEl.id = 'followupRows';
+  for (const s of data) {
     const proc = s.processes;
     const due = new Date(s.next_followup_at);
     const days = Math.round((today - due) / 86400000);
-    const label = days === 0 ? 'hoje' : `${days}d em atraso`;
-    return `<div class="followup-row" onclick="window.location.href='process.html?id=${esc(proc?.id||'')}'">
-      <span class="followup-supplier">${esc(s.name)}</span>
-      <span class="followup-proc">${esc(proc?.project_name||'')}${proc?.client_name ? ' · ' + esc(proc.client_name) : ''}</span>
-      <span class="followup-overdue">${label}</span>
-    </div>`;
-  }).join('');
-  banner.style.display = '';
-  banner.innerHTML = `<div class="followup-banner">
-    <div class="followup-banner-header" onclick="followupCollapsed=!followupCollapsed;document.getElementById('followupRows').style.display=followupCollapsed?'none':''">
-      <div class="followup-banner-title">⚠ Follow-ups em atraso <span class="followup-count">${data.length}</span></div>
-      <span style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">▾</span>
-    </div>
-    <div class="followup-rows" id="followupRows">${rows}</div>
-  </div>`;
+    const label = days === 0 ? 'hoje' : days + 'd em atraso';
+    const row = document.createElement('div');
+    row.className = 'followup-row';
+    const pid = proc?.id || '';
+    row.addEventListener('click', () => {
+      if (pid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid))
+        window.location.href = 'process.html?id=' + pid;
+    });
+    const sp1 = document.createElement('span');
+    sp1.className = 'followup-supplier';
+    sp1.textContent = s.name || '';
+    const sp2 = document.createElement('span');
+    sp2.className = 'followup-proc';
+    sp2.textContent = (proc?.project_name || '') + (proc?.client_name ? ' · ' + proc.client_name : '');
+    const sp3 = document.createElement('span');
+    sp3.className = 'followup-overdue';
+    sp3.textContent = label;
+    row.appendChild(sp1);
+    row.appendChild(sp2);
+    row.appendChild(sp3);
+    rowsEl.appendChild(row);
+  }
+  wrap.appendChild(hdr);
+  wrap.appendChild(rowsEl);
+  banner.appendChild(wrap);
 }
 
 // ── Stats ──
@@ -440,32 +542,36 @@ function renderStats() {
   const ready    = allProcesses.filter(p => p.status === 'Ready for Excel').length;
   const urgent   = allProcesses.filter(p => p.priority === 'Urgent').length;
 
-  document.getElementById('statsGrid').innerHTML = `
-    <div class="stat-card" onclick="setFilter('')">
-      <div class="stat-number">${total}</div>
-      <div class="stat-label">Total</div>
-    </div>
-    <div class="stat-card" onclick="setFilter('Active')">
-      <div class="stat-number" style="color:var(--accent)">${active}</div>
-      <div class="stat-label">Ativos</div>
-    </div>
-    <div class="stat-card" onclick="setFilter('Waiting for internal info')">
-      <div class="stat-number" style="color:#4fc3f7">${waiting}</div>
-      <div class="stat-label">A aguardar</div>
-    </div>
-    <div class="stat-card" onclick="setFilter('Ready for Excel')">
-      <div class="stat-number" style="color:var(--accent)">${ready}</div>
-      <div class="stat-label">Prontos Excel</div>
-    </div>
-    <div class="stat-card" onclick="setFilterPriority('Urgent')">
-      <div class="stat-number" style="color:var(--danger)">${urgent}</div>
-      <div class="stat-label">Urgentes</div>
-    </div>
-    <div class="stat-card" onclick="document.getElementById('followupBanner').scrollIntoView({behavior:'smooth'})" style="cursor:${_overdueCount>0?'pointer':'default'}">
-      <div class="stat-number" style="color:${_overdueCount>0?'#fbbf24':'var(--muted)'}">${_overdueCount}</div>
-      <div class="stat-label">Follow-ups</div>
-    </div>
-  `;
+  const statsGrid = document.getElementById('statsGrid');
+  statsGrid.replaceChildren();
+  function addStatCard(onClick, num, label, numStyle, cardStyle) {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    if (cardStyle) card.style.cssText = cardStyle;
+    card.addEventListener('click', onClick);
+    const numEl = document.createElement('div');
+    numEl.className = 'stat-number';
+    if (numStyle) numEl.style.cssText = numStyle;
+    numEl.textContent = String(num);
+    const lbl = document.createElement('div');
+    lbl.className = 'stat-label';
+    lbl.textContent = label;
+    card.appendChild(numEl);
+    card.appendChild(lbl);
+    statsGrid.appendChild(card);
+  }
+  addStatCard(() => setFilter(''), total, 'Total', '', '');
+  addStatCard(() => setFilter('Active'), active, 'Ativos', 'color:var(--accent)', '');
+  addStatCard(() => setFilter('Waiting for internal info'), waiting, 'A aguardar', 'color:#4fc3f7', '');
+  addStatCard(() => setFilter('Ready for Excel'), ready, 'Prontos Excel', 'color:var(--accent)', '');
+  addStatCard(() => setFilterPriority('Urgent'), urgent, 'Urgentes', 'color:var(--danger)', '');
+  addStatCard(
+    () => document.getElementById('followupBanner').scrollIntoView({ behavior: 'smooth' }),
+    _overdueCount,
+    'Follow-ups',
+    'color:' + (_overdueCount > 0 ? '#fbbf24' : 'var(--muted)'),
+    'cursor:' + (_overdueCount > 0 ? 'pointer' : 'default')
+  );
   renderUserStats();
 }
 
@@ -568,27 +674,81 @@ function renderList() {
   list.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || new Date(a.deadline||'9999') - new Date(b.deadline||'9999'));
 
   const el = document.getElementById('processList');
+  el.replaceChildren();
   if (!list.length) {
-    el.innerHTML = `<div class="empty-state">Sem processos encontrados.<br>Clica em "+ Novo Processo" para começar.</div>`;
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.appendChild(document.createTextNode('Sem processos encontrados.'));
+    empty.appendChild(document.createElement('br'));
+    empty.appendChild(document.createTextNode('Clica em "+ Novo Processo" para começar.'));
+    el.appendChild(empty);
     return;
   }
-
-  el.innerHTML = `<div class="process-list">${list.map(p => `
-    <div class="process-row" onclick="goToProcess('${p.id}')">
-      <div>
-        <div class="process-name">${esc(p.project_name)}</div>
-        <div class="process-client">${esc(p.client_name)}</div>
-      </div>
-      <span class="priority-${(p.priority||'medium').toLowerCase()}" style="font-family:'DM Mono',monospace;font-size:12px">${p.priority||'Medium'}</span>
-      <span class="badge ${statusBadgeClass(p.status)}">${p.status||'Active'}</span>
-      <span class="deadline-chip ${deadlineClass(p.deadline)}">${p.deadline ? fmtDate(p.deadline) : '—'}</span>
-      ${p.assignee ? `<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px">${esc(p.assignee.name)}</span>` : '<span style="font-size:11px;color:var(--muted)">—</span>'}
-      <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
-        <button class="btn btn-ghost btn-sm" onclick="openCreateModal('${p.id}')">Editar</button>
-        <button class="btn btn-ghost btn-sm" onclick="openCloneModal('${p.id}')">Clone</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmDelete('${p.id}')">×</button>
-      </div>
-    </div>`).join('')}</div>`;
+  const listWrap = document.createElement('div');
+  listWrap.className = 'process-list';
+  for (const p of list) {
+    const row = document.createElement('div');
+    row.className = 'process-row';
+    row.addEventListener('click', () => goToProcess(p.id));
+    const col = document.createElement('div');
+    const pn = document.createElement('div');
+    pn.className = 'process-name';
+    pn.textContent = p.project_name || '';
+    const pc = document.createElement('div');
+    pc.className = 'process-client';
+    pc.textContent = p.client_name || '';
+    col.appendChild(pn);
+    col.appendChild(pc);
+    const pri = document.createElement('span');
+    pri.className = 'priority-' + (p.priority || 'medium').toLowerCase();
+    pri.style.cssText = "font-family:'DM Mono',monospace;font-size:12px";
+    pri.textContent = p.priority || 'Medium';
+    const st = document.createElement('span');
+    st.className = 'badge ' + statusBadgeClass(p.status);
+    st.textContent = p.status || 'Active';
+    const dl = document.createElement('span');
+    dl.className = 'deadline-chip ' + deadlineClass(p.deadline);
+    dl.textContent = p.deadline ? fmtDate(p.deadline) : '\u2014';
+    let assigneeEl;
+    if (p.assignee) {
+      assigneeEl = document.createElement('span');
+      assigneeEl.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px";
+      assigneeEl.textContent = p.assignee.name || '';
+    } else {
+      assigneeEl = document.createElement('span');
+      assigneeEl.style.cssText = 'font-size:11px;color:var(--muted)';
+      assigneeEl.textContent = '\u2014';
+    }
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px';
+    actions.addEventListener('click', (e) => e.stopPropagation());
+    const b1 = document.createElement('button');
+    b1.type = 'button';
+    b1.className = 'btn btn-ghost btn-sm';
+    b1.textContent = 'Editar';
+    b1.addEventListener('click', () => openCreateModal(p.id));
+    const b2 = document.createElement('button');
+    b2.type = 'button';
+    b2.className = 'btn btn-ghost btn-sm';
+    b2.textContent = 'Clone';
+    b2.addEventListener('click', () => openCloneModal(p.id));
+    const b3 = document.createElement('button');
+    b3.type = 'button';
+    b3.className = 'btn btn-danger btn-sm';
+    b3.textContent = '\u00d7';
+    b3.addEventListener('click', () => confirmDelete(p.id));
+    actions.appendChild(b1);
+    actions.appendChild(b2);
+    actions.appendChild(b3);
+    row.appendChild(col);
+    row.appendChild(pri);
+    row.appendChild(st);
+    row.appendChild(dl);
+    row.appendChild(assigneeEl);
+    row.appendChild(actions);
+    listWrap.appendChild(row);
+  }
+  el.appendChild(listWrap);
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -648,8 +808,8 @@ function openCreateModal(id = null) {
     <div class="modal-tag">${p ? 'Editar Processo' : 'Novo Processo'}</div>
     <div class="modal-title">${p ? esc(p.project_name) : 'Criar Processo'}</div>
     <div class="form-grid-2">
-      <div><label>Nome do Cliente</label><input id="f_client" value="${esc(p?.client_name||'')}" placeholder="Ex: Banco BCI"></div>
-      <div><label>Nome do Projeto</label><input id="f_project" value="${esc(p?.project_name||'')}" placeholder="Ex: Upgrade Server Room"></div>
+      <div><label>Nome do Cliente</label><input id="f_client" value="" placeholder="Ex: Banco BCI"></div>
+      <div><label>Nome do Projeto</label><input id="f_project" value="" placeholder="Ex: Upgrade Server Room"></div>
     </div>
     <div class="form-grid-2">
       <div><label>Deadline</label><input type="date" id="f_deadline" value="${p?.deadline||''}"></div>
@@ -682,19 +842,25 @@ function openCreateModal(id = null) {
         }
         if (p.assigned_to) {
           const assignee = procUsers.find(u => u.id === p.assigned_to);
-          return `<input type="hidden" id="f_assigned" value="${esc(p.assigned_to)}">`;
+          return `<input type="hidden" id="f_assigned" value="">`;
         }
         return `<input type="hidden" id="f_assigned" value=""><div class="form-row" style="font-size:12px;color:var(--muted)">Responsável: <em>Não atribuído — auto-atribuição disponível após 12h</em></div>`;
       }
       return `<input type="hidden" id="f_assigned" value="">`;
     })()}
     <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto — opcional)</span></label><div class="tag-input-box" id="f_catBox"></div></div>
-    <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observações...">${esc(p?.notes||'')}</textarea></div>
+    <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observações..."></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveProcess()">Guardar</button>
     </div>
   `);
+  const _fc = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+  _fc('f_client', p?.client_name || '');
+  _fc('f_project', p?.project_name || '');
+  _fc('f_notes', p?.notes || '');
+  const fAssigned = document.getElementById('f_assigned');
+  if (fAssigned && p?.assigned_to && fAssigned.type === 'hidden') fAssigned.value = p.assigned_to;
   renderProcTagBox('f_catBox', pendingProcessCategories);
 }
 
@@ -785,8 +951,8 @@ function openCloneModal(id) {
     <div class="modal-tag">Clonar Processo</div>
     <div class="modal-title">Duplicar "${esc(p.project_name)}"</div>
     <div class="form-grid-2">
-      <div><label>Nome do Projeto</label><input id="cl_project" value="${esc(p.project_name)} [Clone]"></div>
-      <div><label>Cliente</label><input id="cl_client" value="${esc(p.client_name)}"></div>
+      <div><label>Nome do Projeto</label><input id="cl_project" value=""></div>
+      <div><label>Cliente</label><input id="cl_client" value=""></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px;margin:16px 0">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)">
@@ -811,6 +977,10 @@ function openCloneModal(id) {
       <button class="btn btn-primary" onclick="doClone('${id}')">Clonar</button>
     </div>
   `);
+  const clp = document.getElementById('cl_project');
+  const clc = document.getElementById('cl_client');
+  if (clp) clp.value = (p.project_name || '') + ' [Clone]';
+  if (clc) clc.value = p.client_name || '';
 }
 
 function updateCloneUI() {
@@ -855,10 +1025,18 @@ async function doClone(sourceId) {
 // ── Modal helpers ──
 function showModal(html) {
   const root = document.getElementById('modalRoot');
-  root.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-box">${html}</div></div>`;
+  root.replaceChildren();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  const box = document.createElement('div');
+  box.className = 'modal-box';
+  box.appendChild(document.createRange().createContextualFragment(html));
+  overlay.appendChild(box);
+  root.appendChild(overlay);
 }
 function closeModal() {
-  document.getElementById('modalRoot').innerHTML = '';
+  document.getElementById('modalRoot').replaceChildren();
 }
 
 // ── Helpers ──
