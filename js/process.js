@@ -640,64 +640,68 @@ function toggleAllRFQ(checked) {
   document.querySelectorAll('.rfq-item-cb').forEach(cb => cb.checked = checked);
 }
 
-function sendRFQ(supplierIdx) {
+function buildRFQHtml(selected, supplierName) {
+  const td = 'style="border:1px solid #cbd5e1;padding:7px 10px"';
+  const tdC = 'style="border:1px solid #cbd5e1;padding:7px 10px;text-align:center"';
+  const tdMono = 'style="border:1px solid #cbd5e1;padding:7px 10px;font-family:monospace;font-size:12px"';
+
+  let rows = '';
+  let lastCat = undefined;
+  for (const bi of selected) {
+    if (bi.category !== lastCat) {
+      if (bi.category) {
+        rows += '<tr style="background:#e8f0fe"><td colspan="4" style="border:1px solid #cbd5e1;padding:5px 10px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#1e40af">' + esc(bi.category) + '</td></tr>';
+      }
+      lastCat = bi.category;
+    }
+    rows += '<tr>';
+    rows += '<td ' + tdMono + '>' + esc(bi.part_number || '-') + '</td>';
+    rows += '<td ' + td + '>' + esc(bi.description || '-') + '</td>';
+    rows += '<td ' + tdC + '>' + (bi.quantity || 1) + '</td>';
+    rows += '<td ' + td + '>' + esc(bi.unit || 'Unidade') + '</td>';
+    rows += '</tr>';
+  }
+
+  return '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6">'
+    + '<p>Boa tarde, Prezados,</p>'
+    + '<p>Espero que este e-mail os encontre bem.</p>'
+    + '<p>Queria solicitar uma cota&ccedil;&atilde;o para o equipamento abaixo:</p>'
+    + '<table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;width:100%;max-width:720px">'
+    + '<thead><tr style="background:#f0f4f8">'
+    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Artigo</th>'
+    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Descri&ccedil;&atilde;o</th>'
+    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;font-weight:600">Qtd.</th>'
+    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Unidade</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '</table>'
+    + '</div>';
+}
+
+async function sendRFQ(supplierIdx) {
   const s = suppliers[supplierIdx];
   const selected = [...document.querySelectorAll('.rfq-item-cb:checked')]
     .map(cb => bomItems[parseInt(cb.value)])
     .filter(Boolean);
   if (!selected.length) { showToast('Seleciona pelo menos um item.', true); return; }
 
-  const subject = `Pedido de Cotação — ${process.project_name} — ${process.client_name}`;
+  const subject = 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
+  const html = buildRFQHtml(selected, s.name);
 
-  // Box-drawing table (renders in Outlook/Gmail with monospace font)
-  const A = 14, D = 36, Q = 8, U = 8;
-  const p = (v, n) => String(v||'').substring(0, n).padEnd(n);
-  const d = n => '─'.repeat(n);
-  const sA = d(A+2), sD = d(D+2), sQ = d(Q+2), sU = d(U+2);
-  const FULL = (A+2)+1+(D+2)+1+(Q+2)+1+(U+2); // inner width for full-span rows
-  const center = (s, w) => { const l = Math.max(0, Math.floor((w-s.length)/2)); return ' '.repeat(l)+s+' '.repeat(Math.max(0,w-l-s.length)); };
-
-  const dataRow = bi => `│ ${p(bi.part_number,A)} │ ${p(bi.description,D)} │ ${p(bi.quantity,Q)} │ ${p(bi.unit||'Unidade',U)} │`;
-  const sepRow  = ()  => `├${sA}┼${sD}┼${sQ}┼${sU}┤`;
-  const catTop  = ()  => `├${'─'.repeat(FULL)}┤`;
-  const catName = c   => `│${center(c.toUpperCase(), FULL)}│`;
-  const catBot  = ()  => `├${sA}┬${sD}┬${sQ}┬${sU}┤`;
-
-  const lines = [];
-  lines.push(`┌${sA}┬${sD}┬${sQ}┬${sU}┐`);
-  lines.push(`│ ${p('Artigo',A)} │ ${p('Descrição',D)} │ ${p('Qtd.',Q)} │ ${p('Unidade',U)} │`);
-
-  let lastCat = undefined;
-  for (const bi of selected) {
-    if (bi.category !== lastCat) {
-      if (bi.category) {
-        lines.push(catTop());
-        lines.push(catName(bi.category));
-        lines.push(catBot());
-      } else {
-        lines.push(sepRow());
-      }
-      lastCat = bi.category;
-    }
-    lines.push(dataRow(bi));
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })
+    ]);
+  } catch (e) {
+    showToast('Nao foi possivel copiar automaticamente.', true);
+    return;
   }
-  lines.push(`└${sA}┴${sD}┴${sQ}┴${sU}┘`);
-
-  const body = [
-    'Boa tarde, Prezados,',
-    '',
-    'Espero que este e-mail os encontre bem.',
-    '',
-    'Queria solicitar uma cotação para o equipamento abaixo:',
-    '',
-    ...lines,
-    '',
-  ].join('\n');
 
   const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
-  const mailto = `mailto:${encodeURIComponent(s.email)}?cc=${ccEmails}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
   window.location.href = mailto;
   closeModal();
+  showToast('Email copiado — cola no body do email (Ctrl+V)');
 }
 
 function autoFillSupplierEmail(name) {
