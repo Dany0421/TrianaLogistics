@@ -132,7 +132,7 @@ function closeModal() {
 window.addEventListener('load', async () => {
   if (hasRole('commercial')) { window.location.href = 'dashboard.html'; return; }
   await requireAuth('index.html');
-  document.getElementById('topbarRight').innerHTML = renderUserChip();
+  mountUserChip(document.getElementById('topbarRight'));
   document.getElementById('addBtn').style.display = hasRole('admin') || hasRole('procurement') ? '' : 'none';
   await loadSuppliers();
 });
@@ -143,7 +143,16 @@ async function loadSuppliers() {
     renderCatChips();
     filterSuppliers();
   } catch(e) {
-    document.getElementById('suppArea').innerHTML = '<div class="empty-state"><div class="msg" style="color:var(--danger)">' + esc(e.message) + '</div></div>';
+    const area = document.getElementById('suppArea');
+    area.replaceChildren();
+    const wrap = document.createElement('div');
+    wrap.className = 'empty-state';
+    const msg = document.createElement('div');
+    msg.className = 'msg';
+    msg.style.color = 'var(--danger)';
+    msg.textContent = e.message;
+    wrap.appendChild(msg);
+    area.appendChild(wrap);
   }
 }
 
@@ -151,11 +160,19 @@ function renderCatChips() {
   const all = new Set();
   allSuppliers.forEach(s => (s.categories||[]).forEach(c => all.add(c)));
   const chips = document.getElementById('catChips');
-  let html = '<span class="cat-chip-filter' + (!activeCat ? ' active' : '') + '" onclick="setCatFilter(\'\')">Todos</span>';
+  chips.replaceChildren();
+  const allSpan = document.createElement('span');
+  allSpan.className = 'cat-chip-filter' + (!activeCat ? ' active' : '');
+  allSpan.textContent = 'Todos';
+  allSpan.addEventListener('click', () => setCatFilter(''));
+  chips.appendChild(allSpan);
   [...all].sort().forEach(c => {
-    html += '<span class="cat-chip-filter' + (activeCat === c ? ' active' : '') + '" onclick="setCatFilter(\'' + esc(c) + '\')">' + esc(c) + '</span>';
+    const s = document.createElement('span');
+    s.className = 'cat-chip-filter' + (activeCat === c ? ' active' : '');
+    s.textContent = c;
+    s.addEventListener('click', () => setCatFilter(c));
+    chips.appendChild(s);
   });
-  chips.innerHTML = html;
 }
 
 function setCatFilter(cat) {
@@ -183,35 +200,158 @@ function clearSearch() {
   filterSuppliers();
 }
 
-function highlight(text, q) {
-  if (!q) return esc(text);
-  const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
-  return esc(text).replace(re, '<mark style="background:rgba(251,191,36,.2);color:#fcd34d;border-radius:2px;padding:0 1px">$1</mark>');
+function appendHighlightedName(el, text, q) {
+  if (!q) { el.textContent = text; return; }
+  const lower = text.toLowerCase();
+  const qq = q.toLowerCase();
+  let idx = 0;
+  while (idx < text.length) {
+    const i = lower.indexOf(qq, idx);
+    if (i < 0) { el.appendChild(document.createTextNode(text.slice(idx))); break; }
+    if (i > idx) el.appendChild(document.createTextNode(text.slice(idx, i)));
+    const mark = document.createElement('mark');
+    mark.style.cssText = 'background:rgba(251,191,36,.2);color:#fcd34d;border-radius:2px;padding:0 1px';
+    mark.textContent = text.slice(i, i + qq.length);
+    el.appendChild(mark);
+    idx = i + qq.length;
+  }
 }
 
 function renderTable(list, q) {
   const area = document.getElementById('suppArea');
   if (!list.length) {
-    area.innerHTML = '<div class="empty-state"><div class="icon">&#128101;</div><div class="msg">Nenhum fornecedor encontrado.</div></div>';
+    area.replaceChildren();
+    const wrap = document.createElement('div');
+    wrap.className = 'empty-state';
+    const icon = document.createElement('div');
+    icon.className = 'icon';
+    icon.textContent = '\u{1F465}';
+    const msg = document.createElement('div');
+    msg.className = 'msg';
+    msg.textContent = 'Nenhum fornecedor encontrado.';
+    wrap.appendChild(icon);
+    wrap.appendChild(msg);
+    area.appendChild(wrap);
     return;
   }
   const canEdit = hasRole('admin') || hasRole('procurement');
-  let rows = list.map(s => {
-    const cats = (s.categories||[]).map(c => '<span class="chip">' + esc(c) + '</span>').join('');
-    const brands = (s.brands||[]).map(b => '<span class="chip chip-brand">' + esc(b) + '</span>').join('');
-    const viewBtn = '<button class="btn btn-ghost btn-sm" onclick="window.location.href=\'supplier-detail.html?name=\'+encodeURIComponent(\'' + esc(s.name) + '\')">Ver</button>';
-    const actions = canEdit
-      ? '<div class="supp-actions">' + viewBtn + '<button class="btn btn-ghost btn-sm" onclick="openSupplierModal(\'' + s.id + '\')">Editar</button><button class="btn btn-danger btn-sm" onclick="confirmDelete(\'' + s.id + '\', \'' + esc(s.name) + '\')">&#215;</button></div>'
-      : '<div class="supp-actions">' + viewBtn + '</div>';
-    return '<tr><td><div class="supp-name">' + highlight(s.name, q) + '</div>' +
-      (s.email ? '<div class="supp-email">' + esc(s.email) + '</div>' : '') +
-      (s.email_cc ? '<div class="supp-email" style="color:var(--muted)">cc: ' + esc(s.email_cc) + '</div>' : '') +
-      '</td><td>' + (cats || '<span style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
-      '<td>' + (brands || '<span style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
-      '<td>' + (s.avg_response_hours > 0 ? '<span class="resp-time-badge">~' + formatResponseTime(s.avg_response_hours) + '</span> <span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--muted)">(n=' + s.response_count + ')</span>' : '<span style="color:var(--muted);font-size:12px">—</span>') + '</td>' +
-      '<td>' + actions + '</td></tr>';
-  }).join('');
-  area.innerHTML = '<table class="supp-table"><thead><tr><th>Fornecedor</th><th>Categorias</th><th>Marcas</th><th>Tempo Médio</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+  const table = document.createElement('table');
+  table.className = 'supp-table';
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  ['Fornecedor', 'Categorias', 'Marcas', 'Tempo Médio', ''].forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  for (const s of list) {
+    const tr = document.createElement('tr');
+    const tdName = document.createElement('td');
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'supp-name';
+    appendHighlightedName(nameDiv, s.name || '', q);
+    tdName.appendChild(nameDiv);
+    if (s.email) {
+      const em = document.createElement('div');
+      em.className = 'supp-email';
+      em.textContent = s.email;
+      tdName.appendChild(em);
+    }
+    if (s.email_cc) {
+      const emc = document.createElement('div');
+      emc.className = 'supp-email';
+      emc.style.color = 'var(--muted)';
+      emc.textContent = 'cc: ' + s.email_cc;
+      tdName.appendChild(emc);
+    }
+    const tdCats = document.createElement('td');
+    const cats = s.categories || [];
+    if (cats.length) {
+      cats.forEach(c => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = c;
+        tdCats.appendChild(chip);
+      });
+    } else {
+      const sp = document.createElement('span');
+      sp.style.color = 'var(--muted)';
+      sp.style.fontSize = '12px';
+      sp.textContent = '\u2014';
+      tdCats.appendChild(sp);
+    }
+    const tdBrands = document.createElement('td');
+    const brands = s.brands || [];
+    if (brands.length) {
+      brands.forEach(b => {
+        const chip = document.createElement('span');
+        chip.className = 'chip chip-brand';
+        chip.textContent = b;
+        tdBrands.appendChild(chip);
+      });
+    } else {
+      const sp = document.createElement('span');
+      sp.style.color = 'var(--muted)';
+      sp.style.fontSize = '12px';
+      sp.textContent = '\u2014';
+      tdBrands.appendChild(sp);
+    }
+    const tdTime = document.createElement('td');
+    if (s.avg_response_hours > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'resp-time-badge';
+      badge.textContent = '~' + formatResponseTime(s.avg_response_hours);
+      tdTime.appendChild(badge);
+      tdTime.appendChild(document.createTextNode(' '));
+      const n = document.createElement('span');
+      n.style.fontFamily = "'JetBrains Mono',monospace";
+      n.style.fontSize = '10px';
+      n.style.color = 'var(--muted)';
+      n.textContent = '(n=' + s.response_count + ')';
+      tdTime.appendChild(n);
+    } else {
+      const sp = document.createElement('span');
+      sp.style.color = 'var(--muted)';
+      sp.style.fontSize = '12px';
+      sp.textContent = '\u2014';
+      tdTime.appendChild(sp);
+    }
+    const tdAct = document.createElement('td');
+    const actDiv = document.createElement('div');
+    actDiv.className = 'supp-actions';
+    const viewBtn = document.createElement('button');
+    viewBtn.className = 'btn btn-ghost btn-sm';
+    viewBtn.textContent = 'Ver';
+    viewBtn.addEventListener('click', () => {
+      window.location.href = 'supplier-detail.html?name=' + encodeURIComponent(s.name);
+    });
+    actDiv.appendChild(viewBtn);
+    if (canEdit) {
+      const ed = document.createElement('button');
+      ed.className = 'btn btn-ghost btn-sm';
+      ed.textContent = 'Editar';
+      ed.addEventListener('click', () => openSupplierModal(s.id));
+      const del = document.createElement('button');
+      del.className = 'btn btn-danger btn-sm';
+      del.textContent = '\u00d7';
+      del.addEventListener('click', () => confirmDelete(s.id, s.name));
+      actDiv.appendChild(ed);
+      actDiv.appendChild(del);
+    }
+    tdAct.appendChild(actDiv);
+    tr.appendChild(tdName);
+    tr.appendChild(tdCats);
+    tr.appendChild(tdBrands);
+    tr.appendChild(tdTime);
+    tr.appendChild(tdAct);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  area.replaceChildren();
+  area.appendChild(table);
 }
 
 // ── Tag input helpers ──
@@ -263,23 +403,28 @@ function openSupplierModal(id = null) {
     '<div class="modal-tag">' + (s ? 'Editar Fornecedor' : 'Novo Fornecedor') + '</div>' +
     '<div class="modal-title">' + (s ? esc(s.name) : 'Adicionar Fornecedor') + '</div>' +
     '<div class="form-grid-2">' +
-      '<div><label>Nome</label><input id="gs_name" value="' + esc(s?.name||'') + '" placeholder="Ex: Tech Solutions"></div>' +
-      '<div><label>Email Principal</label><input id="gs_email" value="' + esc(s?.email||'') + '" placeholder="email@fornecedor.com"></div>' +
+      '<div><label>Nome</label><input id="gs_name" value="" placeholder="Ex: Tech Solutions"></div>' +
+      '<div><label>Email Principal</label><input id="gs_email" value="" placeholder="email@fornecedor.com"></div>' +
     '</div>' +
     '<div class="form-row"><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label>' +
-      '<input id="gs_email_cc" value="' + esc(s?.email_cc||'') + '" placeholder="cc@fornecedor.com"></div>' +
+      '<input id="gs_email_cc" value="" placeholder="cc@fornecedor.com"></div>' +
     '<div class="form-grid-2">' +
       '<div><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipos de equipamento)</span></label>' +
         '<div class="tag-input-box" id="gsCatBox"></div></div>' +
       '<div><label>Marcas</label>' +
         '<div class="tag-input-box" id="gsBrandBox"></div></div>' +
     '</div>' +
-    '<div class="form-row"><label>Notas</label><textarea id="gs_notes">' + esc(s?.notes||'') + '</textarea></div>' +
+    '<div class="form-row"><label>Notas</label><textarea id="gs_notes"></textarea></div>' +
     '<div class="modal-actions">' +
       '<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>' +
       '<button class="btn btn-primary" onclick="saveSupplier()">Guardar</button>' +
     '</div>'
   );
+  const _gs = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+  _gs('gs_name', s?.name || '');
+  _gs('gs_email', s?.email || '');
+  _gs('gs_email_cc', s?.email_cc || '');
+  _gs('gs_notes', s?.notes || '');
   renderTagBox('gsCatBox', pendingCats, 'cat', '');
   renderTagBox('gsBrandBox', pendingBrands, 'brand', 'tag-chip-brand');
 }

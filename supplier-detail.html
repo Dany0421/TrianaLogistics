@@ -93,7 +93,7 @@ function mkTable(headers){
 window.addEventListener('load',async()=>{
   if(hasRole('commercial')){window.location.href='dashboard.html';return;}
   await requireAuth('index.html');
-  document.getElementById('topbarRight').appendChild(document.createRange().createContextualFragment(renderUserChip()));
+  mountUserChip(document.getElementById('topbarRight'));
   const params=new URLSearchParams(location.search);
   const name=params.get('name');
   if(!name){window.location.href='suppliers.html';return;}

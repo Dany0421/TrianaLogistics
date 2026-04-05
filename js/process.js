@@ -35,10 +35,19 @@ let pendingProcessCategories = [];
 window.addEventListener('load', async () => {
   if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
   await requireAuth('index.html');
-  const adminLink = hasRole('admin')
-    ? `<a href="admin.html" class="btn btn-ghost btn-sm" style="margin-right:4px;border-color:rgba(16,185,129,.3);color:#34d399">Admin</a>`
-    : '';
-  document.getElementById('topbarRight').innerHTML = adminLink + renderUserChip();
+  const trTop = document.getElementById('topbarRight');
+  trTop.replaceChildren();
+  if (hasRole('admin')) {
+    const aAdm = document.createElement('a');
+    aAdm.href = 'admin.html';
+    aAdm.className = 'btn btn-ghost btn-sm';
+    aAdm.style.marginRight = '4px';
+    aAdm.style.borderColor = 'rgba(16,185,129,.3)';
+    aAdm.style.color = '#34d399';
+    aAdm.textContent = 'Admin';
+    trTop.appendChild(aAdm);
+  }
+  mountUserChip(trTop);
   renderTabs();
 
   const params = new URLSearchParams(location.search);
@@ -71,13 +80,44 @@ async function loadAll() {
       // Show "Nova Revisão" button + "Ver ficheiro" if BOM already exists
       const bomBtn = document.querySelector('#tab-bom .section-header > div');
       if (bomBtn) {
-        bomBtn.innerHTML = `
-          <input type="file" id="bomFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleBomUpload(this)">
-          ${v.file_path ? `<button class="btn btn-ghost btn-sm" onclick="viewBomFile('${v.file_path}')">📄 Ver ficheiro</button>` : ''}
-          ${bomVersions.length >= 2 ? `<button class="btn btn-ghost btn-sm" onclick="openBomHistoryModal()">📋 Histórico</button>` : ''}
-          <button class="btn btn-ghost btn-sm" onclick="openManualBomEntry()">✏ Editar BOM</button>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bomFileInput').click()" style="border-color:#ff8800;color:#ff8800">📂 Nova Revisão (v${v.version_number+1})</button>
-        `;
+        bomBtn.replaceChildren();
+        const finp = document.createElement('input');
+        finp.type = 'file';
+        finp.id = 'bomFileInput';
+        finp.accept = '.xlsx,.xls';
+        finp.style.display = 'none';
+        finp.addEventListener('change', function() { handleBomUpload(this); });
+        bomBtn.appendChild(finp);
+        if (v.file_path) {
+          const bView = document.createElement('button');
+          bView.type = 'button';
+          bView.className = 'btn btn-ghost btn-sm';
+          bView.textContent = '\u{1F4C4} Ver ficheiro';
+          bView.addEventListener('click', () => viewBomFile(v.file_path));
+          bomBtn.appendChild(bView);
+        }
+        if (bomVersions.length >= 2) {
+          const bHist = document.createElement('button');
+          bHist.type = 'button';
+          bHist.className = 'btn btn-ghost btn-sm';
+          bHist.textContent = '\u{1F4CB} Histórico';
+          bHist.addEventListener('click', () => openBomHistoryModal());
+          bomBtn.appendChild(bHist);
+        }
+        const bEdit = document.createElement('button');
+        bEdit.type = 'button';
+        bEdit.className = 'btn btn-ghost btn-sm';
+        bEdit.textContent = '\u270F Editar BOM';
+        bEdit.addEventListener('click', () => openManualBomEntry());
+        bomBtn.appendChild(bEdit);
+        const bRev = document.createElement('button');
+        bRev.type = 'button';
+        bRev.className = 'btn btn-ghost btn-sm';
+        bRev.style.borderColor = '#ff8800';
+        bRev.style.color = '#ff8800';
+        bRev.textContent = '\u{1F4C2} Nova Revisão (v' + (v.version_number + 1) + ')';
+        bRev.addEventListener('click', () => document.getElementById('bomFileInput').click());
+        bomBtn.appendChild(bRev);
       }
     }
     if (!hasRole('commercial')) {
@@ -132,13 +172,35 @@ function renderHeader() {
   document.getElementById('procTitle').textContent   = process.project_name;
   document.getElementById('procClient').textContent  = process.client_name;
   const assigneeName = process.assignee?.name;
-  document.getElementById('procMeta').innerHTML = `
-    <span class="badge ${statusBadgeClass(process.status)}">${process.status}</span>
-    <span class="priority-${(process.priority||'medium').toLowerCase()}" style="font-family:'IBM Plex Mono',monospace;font-size:12px">${process.priority}</span>
-    ${process.deadline ? `<span class="deadline-chip ${deadlineClass(process.deadline)}">📅 ${fmtDate(process.deadline)}</span>` : ''}
-    ${assigneeName ? `<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px">${esc(assigneeName)}</span>` : ''}
-    <button class="btn btn-ghost btn-sm" onclick="openEditModal()">Editar</button>
-  `;
+  const meta = document.getElementById('procMeta');
+  meta.replaceChildren();
+  const stBadge = document.createElement('span');
+  stBadge.className = 'badge ' + statusBadgeClass(process.status);
+  stBadge.textContent = process.status || '';
+  meta.appendChild(stBadge);
+  const pri = document.createElement('span');
+  pri.className = 'priority-' + (process.priority || 'medium').toLowerCase();
+  pri.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:12px";
+  pri.textContent = process.priority || '';
+  meta.appendChild(pri);
+  if (process.deadline) {
+    const dl = document.createElement('span');
+    dl.className = 'deadline-chip ' + deadlineClass(process.deadline);
+    dl.textContent = '\u{1F4C5} ' + fmtDate(process.deadline);
+    meta.appendChild(dl);
+  }
+  if (assigneeName) {
+    const as = document.createElement('span');
+    as.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px";
+    as.textContent = assigneeName;
+    meta.appendChild(as);
+  }
+  const edBtn = document.createElement('button');
+  edBtn.type = 'button';
+  edBtn.className = 'btn btn-ghost btn-sm';
+  edBtn.textContent = 'Editar';
+  edBtn.addEventListener('click', () => openEditModal());
+  meta.appendChild(edBtn);
   document.title = `${process.project_name} — Procurement`;
 }
 
@@ -148,14 +210,20 @@ function renderTabs() {
   const tabs = isCommercial
     ? [['bom', 'BOM']]
     : [['bom', 'BOM'], ['suppliers', 'Fornecedores'], ['matching', 'Matching'], ['comparacao', 'Comparação'], ['install', 'Instalação']];
-  document.getElementById('tabBar').innerHTML = tabs.map(([ id, label], i) =>
-    `<div class="tab${i===0?' active':''}" onclick="switchTab('${id}')">${label}</div>`
-  ).join('');
+  const tabBar = document.getElementById('tabBar');
+  tabBar.replaceChildren();
+  tabs.forEach(([id, label], i) => {
+    const d = document.createElement('div');
+    d.className = 'tab' + (i === 0 ? ' active' : '');
+    d.dataset.tab = id;
+    d.textContent = label;
+    d.addEventListener('click', () => switchTab(id));
+    tabBar.appendChild(d);
+  });
 }
 
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll(`[onclick="switchTab('${name}')"]`).forEach(t => t.classList.add('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'matching') renderMatchingTab();
@@ -255,15 +323,15 @@ function openBomValidationModal(fileName, techInfo) {
     <div class="modal-title">${esc(fileName)}</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:8px">${pendingBomItems.length} linha(s) encontrada(s). Revê e confirma antes de guardar.</div>
     ${diffSummary}
-    <div style="max-height:360px;overflow-y:auto;margin-bottom:16px">
+    <div style="max-height:380px;overflow-y:auto;margin-bottom:12px">
       <table class="bom-validate-table">
         <thead><tr>
           ${isRevision ? '<th style="width:8%">Estado</th>' : ''}
-          <th style="width:${isRevision?'12%':'14%'}">Part #</th>
-          <th style="width:${isRevision?'38%':'46%'}">Descrição</th>
-          <th style="width:9%">Qty</th>
+          <th style="width:12%">Part #</th>
+          <th style="width:${isRevision ? '34%' : '42%'}">Descrição</th>
+          <th style="width:8%">Qty</th>
           <th style="width:9%">Unid.</th>
-          <th style="width:${isRevision?'10%':'12%'}">Categoria</th>
+          <th style="width:10%">Categoria</th>
           <th style="width:8%"></th>
         </tr></thead>
         <tbody id="bomValTbody"></tbody>
@@ -316,15 +384,76 @@ function renderBomValTable() {
   const tbody = document.getElementById('bomValTbody');
   if (!tbody) return;
   const isRevision = pendingDiff !== null;
-  tbody.innerHTML = pendingBomItems.map((item, i) => `<tr>
-    ${isRevision ? `<td style="white-space:nowrap">${diffStatusBadge(item._diffStatus)}</td>` : ''}
-    <td><input type="text" value="${esc(item.part_number||'')}" onchange="pendingBomItems[${i}].part_number=this.value||null"></td>
-    <td><input type="text" value="${esc(item.description)}" onchange="pendingBomItems[${i}].description=this.value"></td>
-    <td><input type="number" value="${item.quantity}" style="width:70px" onchange="pendingBomItems[${i}].quantity=parseFloat(this.value)||1"></td>
-    <td><input type="text" value="${esc(item.unit||'')}" style="width:60px" onchange="pendingBomItems[${i}].unit=this.value||null"></td>
-    <td><input type="text" value="${esc(item.category||'')}" style="width:110px" placeholder="Categoria" onchange="pendingBomItems[${i}].category=this.value||null"></td>
-    <td><button class="btn btn-danger btn-sm" onclick="pendingBomItems.splice(${i},1);renderBomValTable()">×</button></td>
-  </tr>`).join('');
+  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+  pendingBomItems.forEach((item, i) => {
+    const tr = document.createElement('tr');
+
+    if (isRevision) {
+      const tdStat = document.createElement('td');
+      tdStat.style.whiteSpace = 'nowrap';
+      const badgeHtml = diffStatusBadge(item._diffStatus);
+      if (badgeHtml) tdStat.appendChild(document.createRange().createContextualFragment(badgeHtml));
+      tr.appendChild(tdStat);
+    }
+
+    const tdPart = document.createElement('td');
+    const inPart = document.createElement('input');
+    inPart.type = 'text';
+    inPart.value = item.part_number == null ? '' : String(item.part_number);
+    inPart.style.width = '100%';
+    inPart.onchange = function() { pendingBomItems[i].part_number = this.value || null; };
+    tdPart.appendChild(inPart);
+    tr.appendChild(tdPart);
+
+    const tdDesc = document.createElement('td');
+    const inDesc = document.createElement('input');
+    inDesc.type = 'text';
+    inDesc.value = item.description || '';
+    inDesc.style.width = '100%';
+    inDesc.onchange = function() { pendingBomItems[i].description = this.value; };
+    tdDesc.appendChild(inDesc);
+    tr.appendChild(tdDesc);
+
+    const tdQty = document.createElement('td');
+    const inQty = document.createElement('input');
+    inQty.type = 'number';
+    inQty.value = item.quantity;
+    inQty.style.width = '55px';
+    inQty.onchange = function() { pendingBomItems[i].quantity = parseFloat(this.value) || 1; };
+    tdQty.appendChild(inQty);
+    tr.appendChild(tdQty);
+
+    const tdUnit = document.createElement('td');
+    const inUnit = document.createElement('input');
+    inUnit.type = 'text';
+    inUnit.value = item.unit || '';
+    inUnit.style.width = '66px';
+    inUnit.onchange = function() { pendingBomItems[i].unit = this.value || null; };
+    tdUnit.appendChild(inUnit);
+    tr.appendChild(tdUnit);
+
+    const tdCat = document.createElement('td');
+    const inCat = document.createElement('input');
+    inCat.type = 'text';
+    inCat.placeholder = 'Categoria';
+    inCat.value = item.category || '';
+    inCat.style.width = '100%';
+    inCat.onchange = function() { pendingBomItems[i].category = this.value || null; };
+    tdCat.appendChild(inCat);
+    tr.appendChild(tdCat);
+
+    const tdDel = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-danger btn-sm';
+    delBtn.textContent = '\u00d7';
+    delBtn.onclick = () => { pendingBomItems.splice(i, 1); renderBomValTable(); };
+    tdDel.appendChild(delBtn);
+    tr.appendChild(tdDel);
+
+    tbody.appendChild(tr);
+  });
 }
 
 async function confirmBom() {
@@ -391,8 +520,13 @@ async function confirmBom() {
 
 // ── BOM Table (saved) ──
 function renderBomTable(items) {
+  const holder = document.getElementById('bomContent');
+  holder.replaceChildren();
   if (!items.length) {
-    document.getElementById('bomContent').innerHTML = '<div class="empty-state">BOM sem itens.</div>';
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'BOM sem itens.';
+    holder.appendChild(empty);
     return;
   }
   let html = `<table class="bom-table"><thead><tr>
@@ -418,7 +552,7 @@ function renderBomTable(items) {
     </tr>`;
   }
   html += '</tbody></table>';
-  document.getElementById('bomContent').innerHTML = html;
+  holder.appendChild(document.createRange().createContextualFragment(html));
 }
 
 // ── Suppliers ──
@@ -535,11 +669,17 @@ function renderSupplierSuggestions() {
 function renderSuppliers() {
   document.getElementById('suppCount').textContent = `${suppliers.length} fornecedor${suppliers.length !== 1 ? 'es' : ''}`;
   const el = document.getElementById('suppliersContent');
+  el.replaceChildren();
   if (!suppliers.length) {
-    el.innerHTML = '<div class="empty-state">Sem fornecedores.<br>Adiciona o primeiro fornecedor.</div>';
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.appendChild(document.createTextNode('Sem fornecedores.'));
+    empty.appendChild(document.createElement('br'));
+    empty.appendChild(document.createTextNode('Adiciona o primeiro fornecedor.'));
+    el.appendChild(empty);
     return;
   }
-  el.innerHTML = suppliers.map((s, i) => {
+  const suppHtml = suppliers.map((s, i) => {
     const qItems = quotationMap[s.id] || [];
     const qCount = qItems.length;
     const gs = supplierHistory[s.name?.trim().toLowerCase()];
@@ -591,6 +731,7 @@ function renderSuppliers() {
       </div>
     </div>`;
   }).join('');
+  el.appendChild(document.createRange().createContextualFragment(suppHtml));
 }
 
 function toggleSupplier(i) {
@@ -777,11 +918,11 @@ function openSupplierModal(idx = null, prefill = {}) {
     <div class="modal-title">${s ? esc(s.name) : 'Adicionar Fornecedor'}</div>
     <datalist id="supplierNameList">${Object.values(supplierHistory).map(sh=>`<option value="${esc(sh.name)}">`).join('')}</datalist>
     <div class="form-grid-2">
-      <div><label>Nome</label><input id="sf_name" value="${esc(s?.name||prefill.name||'')}" placeholder="Ex: Tech Solutions" list="supplierNameList" oninput="autoFillSupplierEmail(this.value)"></div>
-      <div><label>Email Principal</label><input id="sf_email" value="${esc(s?.email||prefill.email||'')}" placeholder="email@fornecedor.com"></div>
+      <div><label>Nome</label><input id="sf_name" value="" placeholder="Ex: Tech Solutions" list="supplierNameList" oninput="autoFillSupplierEmail(this.value)"></div>
+      <div><label>Email Principal</label><input id="sf_email" value="" placeholder="email@fornecedor.com"></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" value="${esc(s?.email_cc||prefill.email_cc||'')}" placeholder="cc@fornecedor.com"></div>
+      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" value="" placeholder="cc@fornecedor.com"></div>
       <div></div>
     </div>
     <div class="form-grid-2">
@@ -806,7 +947,7 @@ function openSupplierModal(idx = null, prefill = {}) {
       <div><label>Último Contacto</label><input type="date" id="sf_last" value="${s?.last_contact_at||''}"></div>
       <div><label>Próximo Follow-up</label><input type="date" id="sf_followup" value="${s?.next_followup_at||''}"></div>
     </div>
-    <div class="form-row"><label>Notas</label><textarea id="sf_notes">${esc(s?.notes||'')}</textarea></div>
+    <div class="form-row"><label>Notas</label><textarea id="sf_notes"></textarea></div>
     <div class="form-grid-2">
       <div>
         <label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipos de equipamento — opcional)</span></label>
@@ -822,6 +963,11 @@ function openSupplierModal(idx = null, prefill = {}) {
       <button class="btn btn-primary" onclick="saveSupplier()">Guardar</button>
     </div>
   `);
+  const _sf = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+  _sf('sf_name', s?.name || prefill.name || '');
+  _sf('sf_email', s?.email || prefill.email || '');
+  _sf('sf_email_cc', s?.email_cc || prefill.email_cc || '');
+  _sf('sf_notes', s?.notes || '');
   renderTagBox('sfCatBox', pendingSupplierCategories, 'cat');
   renderTagBox('sfBrandBox', pendingSupplierBrands, 'brand');
   if (document.getElementById('ep_catBox')) renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
@@ -1081,12 +1227,14 @@ function openQuotationValModal(fileName, rawPdfText) {
       <button class="btn btn-ghost btn-sm" onclick="addQuotRow()">+ Linha</button>
       ${rawPdfText ? `<button class="btn btn-ghost btn-sm" onclick="document.getElementById('quotRaw').style.display=document.getElementById('quotRaw').style.display==='none'?'block':'none'">Ver texto extraído</button>` : ''}
     </div>
-    ${rawPdfText ? `<div id="quotRaw" style="display:none;margin-bottom:12px"><textarea style="width:100%;min-height:100px;max-height:180px;background:#0a0a0a;border:1px solid var(--border);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:10px;resize:none;border-radius:4px" readonly>${esc(rawPdfText)}</textarea></div>` : ''}
+    ${rawPdfText ? `<div id="quotRaw" style="display:none;margin-bottom:12px"><textarea id="quotRawTa" style="width:100%;min-height:100px;max-height:180px;background:#0a0a0a;border:1px solid var(--border);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:10px;resize:none;border-radius:4px" readonly></textarea></div>` : ''}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="confirmQuotation()">Guardar Cotação</button>
     </div>
   `);
+  const _qrt = document.getElementById('quotRawTa');
+  if (_qrt && rawPdfText) _qrt.value = rawPdfText;
   priceAnomalies = {};
   renderQuotValTable();
   checkPriceAnomalies(pendingQuotItems).then(a => {
@@ -1241,8 +1389,22 @@ async function viewQuotFile(filePath) {
 function renderMatchingTab() {
   const el = document.getElementById('matchingContent');
   if (!el) return;
-  if (!bomItems.length) { el.innerHTML = '<div class="empty-state">Carrega o BOM primeiro.</div>'; return; }
-  if (!suppliers.length) { el.innerHTML = '<div class="empty-state">Adiciona fornecedores primeiro.</div>'; return; }
+  if (!bomItems.length) {
+    el.replaceChildren();
+    const d = document.createElement('div');
+    d.className = 'empty-state';
+    d.textContent = 'Carrega o BOM primeiro.';
+    el.appendChild(d);
+    return;
+  }
+  if (!suppliers.length) {
+    el.replaceChildren();
+    const d = document.createElement('div');
+    d.className = 'empty-state';
+    d.textContent = 'Adiciona fornecedores primeiro.';
+    el.appendChild(d);
+    return;
+  }
 
   // Build lookups
   const matchLookup = {};  // bomItemId → supplierId → match record
@@ -1324,7 +1486,8 @@ function renderMatchingTab() {
   }
 
   html += '</tbody></table></div>';
-  el.innerHTML = html;
+  el.replaceChildren();
+  el.appendChild(document.createRange().createContextualFragment(html));
 }
 
 function openMatchModal(bomItemId, supplierId) {
@@ -1465,8 +1628,22 @@ async function runAutoMatch() {
 function renderComparacaoTab() {
   const el = document.getElementById('comparacaoContent');
   if (!el) return;
-  if (!bomItems.length) { el.innerHTML = '<div class="empty-state">Carrega o BOM primeiro.</div>'; return; }
-  if (!suppliers.length) { el.innerHTML = '<div class="empty-state">Adiciona fornecedores primeiro.</div>'; return; }
+  if (!bomItems.length) {
+    el.replaceChildren();
+    const d = document.createElement('div');
+    d.className = 'empty-state';
+    d.textContent = 'Carrega o BOM primeiro.';
+    el.appendChild(d);
+    return;
+  }
+  if (!suppliers.length) {
+    el.replaceChildren();
+    const d = document.createElement('div');
+    d.className = 'empty-state';
+    d.textContent = 'Adiciona fornecedores primeiro.';
+    el.appendChild(d);
+    return;
+  }
 
   const matchLookup = {};
   for (const m of matches) {
@@ -1558,7 +1735,8 @@ function renderComparacaoTab() {
     </tr></tfoot>
     </table></div>`;
 
-  el.innerHTML = html;
+  el.replaceChildren();
+  el.appendChild(document.createRange().createContextualFragment(html));
 }
 
 // ── PDF Quotation (ported from planilha-generator) ──
@@ -2041,8 +2219,8 @@ function openEditModal() {
   showModal(`
     <div class="modal-tag">Editar Processo</div>
     <div class="form-grid-2">
-      <div><label>Cliente</label><input id="ep_client" value="${esc(p.client_name)}"></div>
-      <div><label>Projeto</label><input id="ep_project" value="${esc(p.project_name)}"></div>
+      <div><label>Cliente</label><input id="ep_client" value=""></div>
+      <div><label>Projeto</label><input id="ep_project" value=""></div>
     </div>
     <div class="form-grid-2">
       <div><label>Deadline</label><input type="date" id="ep_deadline" value="${p.deadline||''}"></div>
@@ -2058,12 +2236,16 @@ function openEditModal() {
       </select>
     </div>
     <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto — opcional)</span></label><div class="tag-input-box" id="ep_catBox"></div></div>
-    <div class="form-row"><label>Notas</label><textarea id="ep_notes">${esc(p.notes||'')}</textarea></div>
+    <div class="form-row"><label>Notas</label><textarea id="ep_notes"></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveEditProcess()">Guardar</button>
     </div>
   `);
+  const _ep = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+  _ep('ep_client', p.client_name || '');
+  _ep('ep_project', p.project_name || '');
+  _ep('ep_notes', p.notes || '');
 }
 
 async function saveEditProcess() {
@@ -2109,106 +2291,6 @@ async function openBomHistoryModal() {
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
       <label style="font-size:12px;color:var(--muted);white-space:nowrap">Comparar:</label>
       <select id="histPairSel" class="input" style="flex:1;max-width:360px" onchange="renderBomHistoryDiff(window._bomHistoryPairs[+this.value].newer.id, window._bomHistoryPairs[+this.value].older.id)">
-        ${options}
-      </select>
-    </div>
-    <div id="historyDiffContent" style="max-height:420px;overflow-y:auto"></div>
-    <div style="margin-top:16px;display:flex;justify-content:flex-end">
-      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
-    </div>
-  `);
-
-  await renderBomHistoryDiff(pairs[0].newer.id, pairs[0].older.id);
-}
-
-async function renderBomHistoryDiff(newerId, olderId) {
-  const container = document.getElementById('historyDiffContent');
-  if (!container) return;
-  container.textContent = '';
-  const loading = document.createElement('div');
-  loading.style.cssText = 'color:var(--muted);font-size:13px;padding:20px 0';
-  loading.textContent = 'A carregar...';
-  container.appendChild(loading);
-
-  const [newerItems, olderItems] = await Promise.all([
-    API.getBomItems(processId, newerId),
-    API.getBomItems(processId, olderId),
-  ]);
-
-  const { result, removed } = diffBom(olderItems, newerItems);
-
-  const counts = { unchanged: 0, qty_changed: 0, changed: 0, new: 0 };
-  result.forEach(i => { counts[i._diffStatus] = (counts[i._diffStatus] || 0) + 1; });
-
-  // Build HTML using same pattern as rest of codebase (esc() on all user data)
-  const summaryParts = [];
-  if (counts.unchanged) summaryParts.push(`<span style="color:var(--muted)">${counts.unchanged} iguais</span>`);
-  if (counts.qty_changed) summaryParts.push(`<span style="color:#ffcc00">${counts.qty_changed} qty alterada</span>`);
-  if (counts.changed) summaryParts.push(`<span style="color:#ff8800">${counts.changed} alterados</span>`);
-  if (counts.new) summaryParts.push(`<span style="color:#60a5fa">${counts.new} novos</span>`);
-  if (removed.length) summaryParts.push(`<span style="color:#ff4444">${removed.length} removidos</span>`);
-  const summary = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12px">${summaryParts.join('')}</div>`;
-
-  const changedRows = result.filter(i => i._diffStatus !== 'unchanged').map(item => {
-    const qtyCell = item._diffStatus === 'qty_changed'
-      ? `<span style="color:#ffcc00">${esc(String(item._oldQty))} \u2192 ${esc(String(item.quantity))}</span>`
-      : esc(String(item.quantity));
-    return `<tr>
-      <td>${diffStatusBadge(item._diffStatus)}</td>
-      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${esc(item.part_number || '\u2014')}</td>
-      <td>${esc(item.description)}</td>
-      <td style="text-align:center">${qtyCell}</td>
-      <td style="color:var(--muted);font-size:12px">${esc(item.unit || '')}</td>
-      <td style="color:var(--muted);font-size:12px">${esc(item.category || '')}</td>
-    </tr>`;
-  }).join('');
-
-  const removedRows = removed.map(item => `
-    <tr style="background:#1a0505">
-      <td><span style="background:#3a0000;color:#ff4444;border:1px solid #ff4444;border-radius:3px;font-size:10px;padding:1px 5px;font-family:'IBM Plex Mono',monospace">Removido</span></td>
-      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${esc(item.part_number || '\u2014')}</td>
-      <td style="color:#ff4444">${esc(item.description)}</td>
-      <td style="text-align:center;color:var(--muted)">${esc(String(item.quantity))}</td>
-      <td style="color:var(--muted);font-size:12px">${esc(item.unit || '')}</td>
-      <td style="color:var(--muted);font-size:12px">${esc(item.category || '')}</td>
-    </tr>`).join('');
-
-  const hasChanges = changedRows || removedRows;
-  container.innerHTML = summary + (hasChanges
-    ? `<table class="bom-validate-table">
-        <thead><tr>
-          <th style="width:8%">Estado</th>
-          <th style="width:12%">Part #</th>
-          <th>Descri\u00e7\u00e3o</th>
-          <th style="width:10%;text-align:center">Qty</th>
-          <th style="width:8%">Unid.</th>
-          <th style="width:14%">Categoria</th>
-        </tr></thead>
-        <tbody>${changedRows}${removedRows}</tbody>
-      </table>`
-    : '<div style="color:var(--muted);font-size:13px;padding:16px 0">Sem altera\u00e7\u00f5es entre estas vers\u00f5es.</div>');
-}
-
-// ── BOM Revision History ──
-async function openBomHistoryModal() {
-  // bomVersions sorted desc (newest first), build consecutive pairs
-  const pairs = [];
-  for (let i = 0; i < bomVersions.length - 1; i++) {
-    pairs.push({ newer: bomVersions[i], older: bomVersions[i + 1] });
-  }
-  window._bomHistoryPairs = pairs;
-
-  const options = pairs.map((p, idx) =>
-    `<option value="${idx}">v${p.newer.version_number} → v${p.older.version_number} &nbsp;(${esc(p.newer.original_name || '')})</option>`
-  ).join('');
-
-  showModalLg(`
-    <div class="modal-tag">Histórico de Revisões</div>
-    <div class="modal-title">Comparação entre versões BOM</div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <label style="font-size:12px;color:var(--muted);white-space:nowrap">Comparar:</label>
-      <select id="histPairSel" class="input" style="flex:1;max-width:360px"
-        onchange="renderBomHistoryDiff(window._bomHistoryPairs[+this.value].newer.id, window._bomHistoryPairs[+this.value].older.id)">
         ${options}
       </select>
     </div>
@@ -2299,7 +2381,8 @@ async function renderBomHistoryDiff(newerId, olderId) {
       badge.textContent = 'Removido';
       tdStatus.appendChild(badge);
     } else {
-      tdStatus.innerHTML = diffStatusBadge(item._diffStatus);
+      const badgeHtml = diffStatusBadge(item._diffStatus);
+      if (badgeHtml) tdStatus.appendChild(document.createRange().createContextualFragment(badgeHtml));
     }
 
     // Part #
@@ -2341,12 +2424,30 @@ async function renderBomHistoryDiff(newerId, olderId) {
 }
 
 function showModal(html) {
-  document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-box">${html}</div></div>`;
+  const root = document.getElementById('modalRoot');
+  root.replaceChildren();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  const box = document.createElement('div');
+  box.className = 'modal-box';
+  box.appendChild(document.createRange().createContextualFragment(html));
+  overlay.appendChild(box);
+  root.appendChild(overlay);
 }
 function showModalLg(html) {
-  document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-box-lg">${html}</div></div>`;
+  const root = document.getElementById('modalRoot');
+  root.replaceChildren();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  const box = document.createElement('div');
+  box.className = 'modal-box-lg';
+  box.appendChild(document.createRange().createContextualFragment(html));
+  overlay.appendChild(box);
+  root.appendChild(overlay);
 }
-function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+function closeModal() { document.getElementById('modalRoot').replaceChildren(); }
 
 // ── Helpers ──
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
