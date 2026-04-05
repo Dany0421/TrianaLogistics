@@ -107,6 +107,9 @@
     <!-- Stats -->
     <div class="stats-grid" id="statsGrid"></div>
 
+    <!-- User performance (admin only) -->
+    <div id="userStatsSection" style="display:none"></div>
+
     <!-- Follow-up alerts -->
     <div id="followupBanner" style="display:none"></div>
 
@@ -274,6 +277,27 @@ window.addEventListener('load', async () => {
   ]);
   renderStats();
   renderList();
+  if (hasRole('admin') && procUsers.length) {
+    const filterBar = document.querySelector('.filter-bar');
+    const newBtn = filterBar?.querySelector('[onclick="openCreateModal()"]')?.parentElement;
+    if (filterBar && newBtn) {
+      const sel = document.createElement('select');
+      sel.id = 'filterAssignee';
+      sel.style.maxWidth = '160px';
+      sel.addEventListener('change', renderList);
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = 'Todos os responsáveis';
+      sel.appendChild(defaultOpt);
+      for (const u of procUsers) {
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = u.name;
+        sel.appendChild(opt);
+      }
+      filterBar.insertBefore(sel, newBtn);
+    }
+  }
   try { topSuppliers = await API.getTopSuppliers(); } catch(_) {}
   renderCharts(allProcesses, topSuppliers);
   if (!hasRole('commercial')) {
@@ -442,6 +466,78 @@ function renderStats() {
       <div class="stat-label">Follow-ups</div>
     </div>
   `;
+  renderUserStats();
+}
+
+function renderUserStats() {
+  const section = document.getElementById('userStatsSection');
+  if (!section || !hasRole('admin') || !procUsers.length) { if (section) section.style.display = 'none'; return; }
+
+  // Count open processes per user (not Closed / Cancelled)
+  const openByUser = {};
+  for (const p of allProcesses) {
+    if (!p.assigned_to || p.status === 'Closed' || p.status === 'Cancelled') continue;
+    openByUser[p.assigned_to] = (openByUser[p.assigned_to] || 0) + 1;
+  }
+
+  // Avg completion time per user (closed processes)
+  const avgByUser = {};
+  for (const p of allProcesses) {
+    if (p.status !== 'Closed' || !p.closed_at || !p.assigned_to) continue;
+    const days = (new Date(p.closed_at) - new Date(p.created_at)) / 86400000;
+    if (days < 0 || days > 730) continue;
+    if (!avgByUser[p.assigned_to]) avgByUser[p.assigned_to] = [];
+    avgByUser[p.assigned_to].push(days);
+  }
+
+  section.style.display = '';
+  while (section.firstChild) section.removeChild(section.firstChild);
+
+  const lbl = document.createElement('div');
+  lbl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:20px 0 10px";
+  lbl.textContent = 'Carga por Responsável';
+  section.appendChild(lbl);
+
+  const grid = document.createElement('div');
+  grid.className = 'stats-grid';
+  grid.style.marginBottom = '0';
+
+  for (const u of procUsers) {
+    const open = openByUser[u.id] || 0;
+    const closedVals = avgByUser[u.id] || [];
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    card.style.cursor = 'pointer';
+    card.title = 'Filtrar por ' + u.name;
+    card.addEventListener('click', () => {
+      const sel = document.getElementById('filterAssignee');
+      if (sel) { sel.value = u.id; renderList(); }
+    });
+
+    const numDiv = document.createElement('div');
+    numDiv.className = 'stat-number';
+    numDiv.style.color = 'var(--text)';
+    numDiv.textContent = String(open);
+
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'stat-label';
+    labelDiv.textContent = u.name;
+
+    const subDiv = document.createElement('div');
+    subDiv.style.cssText = "font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:4px";
+    if (closedVals.length) {
+      const avg = closedVals.reduce((a, b) => a + b, 0) / closedVals.length;
+      subDiv.textContent = 'média ' + Math.round(avg) + 'd · ' + closedVals.length + ' fechados';
+    } else {
+      subDiv.textContent = 'sem histórico';
+    }
+
+    card.appendChild(numDiv);
+    card.appendChild(labelDiv);
+    card.appendChild(subDiv);
+    grid.appendChild(card);
+  }
+  section.appendChild(grid);
 }
 
 function setFilter(val) {
@@ -466,6 +562,8 @@ function renderList() {
   if (fs) list = list.filter(p => p.status === fs);
   if (fp) list = list.filter(p => p.priority === fp);
   if (document.getElementById('filterMine')?.checked) list = list.filter(p => p.assigned_to === currentUser.id);
+  const fa = document.getElementById('filterAssignee')?.value || '';
+  if (fa) list = list.filter(p => p.assigned_to === fa);
 
   list.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || new Date(a.deadline||'9999') - new Date(b.deadline||'9999'));
 

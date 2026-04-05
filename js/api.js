@@ -431,7 +431,6 @@ const API = {
             const newQItems = items.map(qi => ({
               supplier_id: newS.id,
               part_number: qi.part_number,
-              description: qi.description,
               price:       qi.price,
               currency:    qi.currency,
               unit:        qi.unit,
