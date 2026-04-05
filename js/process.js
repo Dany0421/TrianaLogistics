@@ -298,10 +298,16 @@ function addBomRow() {
 }
 
 function openManualBomEntry() {
-  // Pre-populate with existing items if available (strip DB-only fields)
-  pendingBomItems = bomItems.map(({ id, process_id, bom_version_id, created_at, sort_order, ...item }) => ({ ...item }));
-  pendingDiff = null;
+  const stripped = bomItems.map(({ id, process_id, bom_version_id, created_at, sort_order, ...item }) => ({ ...item }));
   pendingBomFile = null;
+  if (bomItems.length) {
+    const { result, removed } = diffBom(bomItems, stripped);
+    pendingDiff = { items: result, removed };
+    pendingBomItems = result.map(i => ({ ...i }));
+  } else {
+    pendingDiff = null;
+    pendingBomItems = stripped;
+  }
   openBomValidationModal(bomItems.length ? 'Editar BOM' : 'Entrada Manual', { senior: 0, intermediate: 0, junior: 0, hours: 0 });
 }
 
@@ -350,13 +356,12 @@ async function confirmBom() {
       const preserved = pendingBomItems
         .map((item, idx) => ({ item, newId: savedItems[idx]?.id }))
         .filter(({ item, newId }) => newId && item._oldId &&
-          (item._diffStatus === 'unchanged' || item._diffStatus === 'qty_changed'));
+          ['unchanged', 'qty_changed', 'changed'].includes(item._diffStatus));
 
       await Promise.all(preserved.map(({ item, newId }) =>
         API.copyItemMatches(item._oldId, newId, processId)
       ));
-      const unchangedOffers = preserved.filter(({ item }) => item._diffStatus === 'unchanged');
-      await Promise.all(unchangedOffers.map(({ item, newId }) =>
+      await Promise.all(preserved.map(({ item, newId }) =>
         API.copySelectedOffer(item._oldId, newId, processId)
       ));
 
