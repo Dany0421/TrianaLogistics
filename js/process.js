@@ -74,6 +74,7 @@ async function loadAll() {
         bomBtn.innerHTML = `
           <input type="file" id="bomFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleBomUpload(this)">
           ${v.file_path ? `<button class="btn btn-ghost btn-sm" onclick="viewBomFile('${v.file_path}')">📄 Ver ficheiro</button>` : ''}
+          ${bomVersions.length >= 2 ? `<button class="btn btn-ghost btn-sm" onclick="openBomHistoryModal()">📋 Histórico</button>` : ''}
           <button class="btn btn-ghost btn-sm" onclick="openManualBomEntry()">✏ Editar BOM</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bomFileInput').click()" style="border-color:#ff8800;color:#ff8800">📂 Nova Revisão (v${v.version_number+1})</button>
         `;
@@ -2089,6 +2090,256 @@ async function saveEditProcess() {
 }
 
 // ── Modal helpers ──
+// ── BOM Revision History ──
+async function openBomHistoryModal() {
+  // bomVersions sorted desc (newest first), build consecutive pairs
+  const pairs = [];
+  for (let i = 0; i < bomVersions.length - 1; i++) {
+    pairs.push({ newer: bomVersions[i], older: bomVersions[i + 1] });
+  }
+  window._bomHistoryPairs = pairs;
+
+  const options = pairs.map((p, idx) =>
+    `<option value="${idx}">v${p.newer.version_number} \u2192 v${p.older.version_number} \u00a0(${esc(p.newer.original_name || '')})</option>`
+  ).join('');
+
+  showModalLg(`
+    <div class="modal-tag">Hist\u00f3rico de Revis\u00f5es</div>
+    <div class="modal-title">Compara\u00e7\u00e3o entre vers\u00f5es BOM</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <label style="font-size:12px;color:var(--muted);white-space:nowrap">Comparar:</label>
+      <select id="histPairSel" class="input" style="flex:1;max-width:360px" onchange="renderBomHistoryDiff(window._bomHistoryPairs[+this.value].newer.id, window._bomHistoryPairs[+this.value].older.id)">
+        ${options}
+      </select>
+    </div>
+    <div id="historyDiffContent" style="max-height:420px;overflow-y:auto"></div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
+    </div>
+  `);
+
+  await renderBomHistoryDiff(pairs[0].newer.id, pairs[0].older.id);
+}
+
+async function renderBomHistoryDiff(newerId, olderId) {
+  const container = document.getElementById('historyDiffContent');
+  if (!container) return;
+  container.textContent = '';
+  const loading = document.createElement('div');
+  loading.style.cssText = 'color:var(--muted);font-size:13px;padding:20px 0';
+  loading.textContent = 'A carregar...';
+  container.appendChild(loading);
+
+  const [newerItems, olderItems] = await Promise.all([
+    API.getBomItems(processId, newerId),
+    API.getBomItems(processId, olderId),
+  ]);
+
+  const { result, removed } = diffBom(olderItems, newerItems);
+
+  const counts = { unchanged: 0, qty_changed: 0, changed: 0, new: 0 };
+  result.forEach(i => { counts[i._diffStatus] = (counts[i._diffStatus] || 0) + 1; });
+
+  // Build HTML using same pattern as rest of codebase (esc() on all user data)
+  const summaryParts = [];
+  if (counts.unchanged) summaryParts.push(`<span style="color:var(--muted)">${counts.unchanged} iguais</span>`);
+  if (counts.qty_changed) summaryParts.push(`<span style="color:#ffcc00">${counts.qty_changed} qty alterada</span>`);
+  if (counts.changed) summaryParts.push(`<span style="color:#ff8800">${counts.changed} alterados</span>`);
+  if (counts.new) summaryParts.push(`<span style="color:#60a5fa">${counts.new} novos</span>`);
+  if (removed.length) summaryParts.push(`<span style="color:#ff4444">${removed.length} removidos</span>`);
+  const summary = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12px">${summaryParts.join('')}</div>`;
+
+  const changedRows = result.filter(i => i._diffStatus !== 'unchanged').map(item => {
+    const qtyCell = item._diffStatus === 'qty_changed'
+      ? `<span style="color:#ffcc00">${esc(String(item._oldQty))} \u2192 ${esc(String(item.quantity))}</span>`
+      : esc(String(item.quantity));
+    return `<tr>
+      <td>${diffStatusBadge(item._diffStatus)}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${esc(item.part_number || '\u2014')}</td>
+      <td>${esc(item.description)}</td>
+      <td style="text-align:center">${qtyCell}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(item.unit || '')}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(item.category || '')}</td>
+    </tr>`;
+  }).join('');
+
+  const removedRows = removed.map(item => `
+    <tr style="background:#1a0505">
+      <td><span style="background:#3a0000;color:#ff4444;border:1px solid #ff4444;border-radius:3px;font-size:10px;padding:1px 5px;font-family:'IBM Plex Mono',monospace">Removido</span></td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${esc(item.part_number || '\u2014')}</td>
+      <td style="color:#ff4444">${esc(item.description)}</td>
+      <td style="text-align:center;color:var(--muted)">${esc(String(item.quantity))}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(item.unit || '')}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(item.category || '')}</td>
+    </tr>`).join('');
+
+  const hasChanges = changedRows || removedRows;
+  container.innerHTML = summary + (hasChanges
+    ? `<table class="bom-validate-table">
+        <thead><tr>
+          <th style="width:8%">Estado</th>
+          <th style="width:12%">Part #</th>
+          <th>Descri\u00e7\u00e3o</th>
+          <th style="width:10%;text-align:center">Qty</th>
+          <th style="width:8%">Unid.</th>
+          <th style="width:14%">Categoria</th>
+        </tr></thead>
+        <tbody>${changedRows}${removedRows}</tbody>
+      </table>`
+    : '<div style="color:var(--muted);font-size:13px;padding:16px 0">Sem altera\u00e7\u00f5es entre estas vers\u00f5es.</div>');
+}
+
+// ── BOM Revision History ──
+async function openBomHistoryModal() {
+  // bomVersions sorted desc (newest first), build consecutive pairs
+  const pairs = [];
+  for (let i = 0; i < bomVersions.length - 1; i++) {
+    pairs.push({ newer: bomVersions[i], older: bomVersions[i + 1] });
+  }
+  window._bomHistoryPairs = pairs;
+
+  const options = pairs.map((p, idx) =>
+    `<option value="${idx}">v${p.newer.version_number} → v${p.older.version_number} &nbsp;(${esc(p.newer.original_name || '')})</option>`
+  ).join('');
+
+  showModalLg(`
+    <div class="modal-tag">Histórico de Revisões</div>
+    <div class="modal-title">Comparação entre versões BOM</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <label style="font-size:12px;color:var(--muted);white-space:nowrap">Comparar:</label>
+      <select id="histPairSel" class="input" style="flex:1;max-width:360px"
+        onchange="renderBomHistoryDiff(window._bomHistoryPairs[+this.value].newer.id, window._bomHistoryPairs[+this.value].older.id)">
+        ${options}
+      </select>
+    </div>
+    <div id="historyDiffContent" style="max-height:420px;overflow-y:auto"></div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
+    </div>
+  `);
+
+  await renderBomHistoryDiff(pairs[0].newer.id, pairs[0].older.id);
+}
+
+async function renderBomHistoryDiff(newerId, olderId) {
+  const container = document.getElementById('historyDiffContent');
+  if (!container) return;
+
+  // Clear + loading state
+  while (container.firstChild) container.removeChild(container.firstChild);
+  const loading = document.createElement('div');
+  loading.style.cssText = 'color:var(--muted);font-size:13px;padding:20px 0';
+  loading.textContent = 'A carregar...';
+  container.appendChild(loading);
+
+  const [newerItems, olderItems] = await Promise.all([
+    API.getBomItems(processId, newerId),
+    API.getBomItems(processId, olderId),
+  ]);
+
+  const { result, removed } = diffBom(olderItems, newerItems);
+  while (container.firstChild) container.removeChild(container.firstChild);
+
+  // Summary bar
+  const counts = { unchanged: 0, qty_changed: 0, changed: 0, new: 0 };
+  result.forEach(i => { counts[i._diffStatus] = (counts[i._diffStatus] || 0) + 1; });
+
+  const summary = document.createElement('div');
+  summary.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12px';
+  const addTag = (text, color) => {
+    const s = document.createElement('span');
+    s.style.color = color;
+    s.textContent = text;
+    summary.appendChild(s);
+  };
+  if (counts.unchanged)   addTag(`${counts.unchanged} iguais`, 'var(--muted)');
+  if (counts.qty_changed) addTag(`${counts.qty_changed} qty alterada`, '#ffcc00');
+  if (counts.changed)     addTag(`${counts.changed} alterados`, '#ff8800');
+  if (counts.new)         addTag(`${counts.new} novos`, '#60a5fa');
+  if (removed.length)     addTag(`${removed.length} removidos`, '#ff4444');
+  container.appendChild(summary);
+
+  const changed = result.filter(i => i._diffStatus !== 'unchanged');
+  if (!changed.length && !removed.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--muted);font-size:13px;padding:16px 0';
+    empty.textContent = 'Sem alterações entre estas versões.';
+    container.appendChild(empty);
+    return;
+  }
+
+  // Table
+  const table = document.createElement('table');
+  table.className = 'bom-validate-table';
+
+  const thead = table.createTHead();
+  const hrow = thead.insertRow();
+  ['Estado', 'Part #', 'Descrição', 'Qty', 'Unid.', 'Categoria'].forEach((h, i) => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    if (i === 0) th.style.width = '8%';
+    if (i === 1) th.style.width = '12%';
+    if (i === 3) { th.style.width = '10%'; th.style.textAlign = 'center'; }
+    if (i === 4) th.style.width = '8%';
+    if (i === 5) th.style.width = '14%';
+    hrow.appendChild(th);
+  });
+
+  const tbody = table.createTBody();
+
+  const addRow = (item, isRemoved) => {
+    const tr = tbody.insertRow();
+    if (isRemoved) tr.style.background = '#1a0505';
+
+    // Estado cell — diffStatusBadge output is static/hardcoded (no user data), safe to set
+    const tdStatus = tr.insertCell();
+    if (isRemoved) {
+      const badge = document.createElement('span');
+      badge.style.cssText = 'background:#3a0000;color:#ff4444;border:1px solid #ff4444;border-radius:3px;font-size:10px;padding:1px 5px;font-family:IBM Plex Mono,monospace';
+      badge.textContent = 'Removido';
+      tdStatus.appendChild(badge);
+    } else {
+      tdStatus.innerHTML = diffStatusBadge(item._diffStatus);
+    }
+
+    // Part #
+    const tdPn = tr.insertCell();
+    tdPn.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)";
+    tdPn.textContent = item.part_number || '—';
+
+    // Descrição
+    const tdDesc = tr.insertCell();
+    if (isRemoved) tdDesc.style.color = '#ff4444';
+    tdDesc.textContent = item.description || '';
+
+    // Qty
+    const tdQty = tr.insertCell();
+    tdQty.style.textAlign = 'center';
+    if (!isRemoved && item._diffStatus === 'qty_changed') {
+      tdQty.style.color = '#ffcc00';
+      tdQty.textContent = `${item._oldQty} → ${item.quantity}`;
+    } else {
+      if (isRemoved) tdQty.style.color = 'var(--muted)';
+      tdQty.textContent = item.quantity;
+    }
+
+    // Unid.
+    const tdUnit = tr.insertCell();
+    tdUnit.style.cssText = 'color:var(--muted);font-size:12px';
+    tdUnit.textContent = item.unit || '';
+
+    // Categoria
+    const tdCat = tr.insertCell();
+    tdCat.style.cssText = 'color:var(--muted);font-size:12px';
+    tdCat.textContent = item.category || '';
+  };
+
+  changed.forEach(item => addRow(item, false));
+  removed.forEach(item => addRow(item, true));
+
+  container.appendChild(table);
+}
+
 function showModal(html) {
   document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal-box">${html}</div></div>`;
 }
