@@ -199,7 +199,7 @@ textarea { resize: vertical; min-height: 80px; }
 /* ── Process table ── */
 .process-table-header {
   display: grid;
-  grid-template-columns: 1fr 90px 170px 110px 150px auto;
+  grid-template-columns: 1.5fr 90px 180px 100px 140px 160px;
   padding: 8px 20px; margin-bottom: 4px; gap: 14px;
   font-family: 'DM Mono', monospace; font-size: 10px;
   color: var(--muted); letter-spacing: .7px; text-transform: uppercase;
@@ -210,7 +210,7 @@ textarea { resize: vertical; min-height: 80px; }
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 9px; padding: 14px 20px;
   display: grid;
-  grid-template-columns: 1fr 90px 170px 110px 150px auto;
+  grid-template-columns: 1.5fr 90px 180px 100px 140px 160px;
   align-items: center; gap: 14px; cursor: pointer;
   transition: border-color .15s, box-shadow .15s;
   position: relative; overflow: hidden;
