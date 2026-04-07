@@ -176,7 +176,7 @@ function renderHeader() {
   const meta = document.getElementById('procMeta');
   meta.replaceChildren();
   const stBadge = document.createElement('span');
-  stBadge.className = 'badge ' + statusBadgeClass(process.status);
+  applyStatusBadge(stBadge, process.status, process.status_color);
   stBadge.textContent = process.status || '';
   meta.appendChild(stBadge);
   const pri = document.createElement('span');
@@ -2667,8 +2667,14 @@ function openEditModal() {
     </div>
     <div class="form-row"><label>Estado</label>
       <select id="ep_status">
-        ${['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'].map(v=>`<option ${p.status===v?'selected':''}>${v}</option>`).join('')}
+        ${STANDARD_STATUSES.map(v=>`<option ${p.status===v?'selected':''}>${v}</option>`).join('')}
+        ${!STANDARD_STATUSES.includes(p.status) ? `<option value="${esc(p.status)}" selected>${esc(p.status)}</option>` : ''}
+        <option value="__custom__">+ Criar estado...</option>
       </select>
+      <div id="ep_custom_row" style="display:${!STANDARD_STATUSES.includes(p.status)?'flex':'none'};gap:8px;margin-top:6px;align-items:center">
+        <input type="text" id="ep_custom_name" placeholder="Nome do estado" style="flex:1" value="${!STANDARD_STATUSES.includes(p.status)?esc(p.status):''}">
+        <input type="color" id="ep_custom_color" value="${p.status_color||'#3b82f6'}" style="width:40px;height:36px;padding:2px;cursor:pointer">
+      </div>
     </div>
     <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto — opcional)</span></label><div class="tag-input-box" id="ep_catBox"></div></div>
     <div class="form-row"><label>Notas</label><textarea id="ep_notes"></textarea></div>
@@ -2681,6 +2687,9 @@ function openEditModal() {
   _ep('ep_client', p.client_name || '');
   _ep('ep_project', p.project_name || '');
   _ep('ep_notes', p.notes || '');
+  document.getElementById('ep_status').addEventListener('change', function() {
+    document.getElementById('ep_custom_row').style.display = this.value === '__custom__' ? 'flex' : 'none';
+  });
 }
 
 async function saveEditProcess() {
@@ -2689,10 +2698,19 @@ async function saveEditProcess() {
     project_name: document.getElementById('ep_project').value.trim(),
     deadline:     document.getElementById('ep_deadline').value || null,
     priority:     document.getElementById('ep_priority').value,
-    status:       document.getElementById('ep_status').value,
     notes:        document.getElementById('ep_notes').value.trim(),
     categories:   pendingProcessCategories,
   };
+  const epStatusVal = document.getElementById('ep_status').value;
+  if (epStatusVal === '__custom__' || !STANDARD_STATUSES.includes(epStatusVal)) {
+    fields.status = epStatusVal === '__custom__'
+      ? (document.getElementById('ep_custom_name').value.trim() || 'Custom').slice(0, 100)
+      : epStatusVal;
+    fields.status_color = document.getElementById('ep_custom_color').value;
+  } else {
+    fields.status = epStatusVal;
+    fields.status_color = null;
+  }
   if (fields.status === 'Closed' && process.status !== 'Closed') fields.closed_at = new Date().toISOString();
   if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto são obrigatórios.', true); return; }
   if (fields.client_name.length > 200 || fields.project_name.length > 200) { showToast('Nome demasiado longo (máx 200 caracteres).', true); return; }
@@ -2890,9 +2908,25 @@ function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateStrin
 function formatResponseTime(hours) { if (!hours || hours <= 0) return '—'; return hours < 24 ? Math.round(hours) + 'h' : (hours / 24).toFixed(1) + ' dias'; }
 function fmtPrice(p) { if (p==null) return '—'; return new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2}).format(p); }
 function deadlineClass(d) { if (!d) return ''; const diff = (new Date(d)-new Date())/86400000; return diff < 0 ? 'overdue' : diff < 5 ? 'soon' : ''; }
+const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'];
 function statusBadgeClass(s) {
   const map = { 'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting','Partial responses':'badge-partial','Ready for Excel':'badge-ready','Closed':'badge-closed','Cancelled':'badge-cancelled' };
   return map[s] || 'badge-active';
+}
+function applyStatusBadge(el, status, color) {
+  if (color) {
+    const r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), b = parseInt(color.slice(5,7),16);
+    el.className = 'badge';
+    el.style.background = `rgba(${r},${g},${b},.1)`;
+    el.style.color = color;
+    el.style.borderColor = `rgba(${r},${g},${b},.3)`;
+    el.style.border = `1px solid rgba(${r},${g},${b},.3)`;
+  } else {
+    el.className = 'badge ' + statusBadgeClass(status);
+    el.style.background = '';
+    el.style.color = '';
+    el.style.border = '';
+  }
 }
 function suppStatusClass(s) {
   if (['Replied complete'].includes(s)) return 'badge-ready';

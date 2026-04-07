@@ -372,6 +372,9 @@ GRANT EXECUTE ON FUNCTION upsert_global_supplier TO authenticated;
 ALTER TABLE processes ADD COLUMN IF NOT EXISTS categories text[] DEFAULT '{}';
 ALTER TABLE processes ADD COLUMN IF NOT EXISTS closed_at timestamptz;
 
+-- Custom process status color
+ALTER TABLE processes ADD COLUMN IF NOT EXISTS status_color text;
+
 -- RPC: estimate process duration based on historical closed processes
 CREATE OR REPLACE FUNCTION get_duration_estimates(p_categories text[])
 RETURNS TABLE(avg_days numeric, min_days numeric, max_days numeric, sample_count int)
