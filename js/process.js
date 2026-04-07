@@ -25,6 +25,7 @@ let selectedOffers = [];
 let pendingQuotItems = [];
 let currentQuotSuppId = null;
 let installData = null;
+let matchingView = 'matching'; // 'matching' | 'comparacao'
 let supplierHistory = {}; // normalised name → { email, email_cc }
 let globalSuppliersList = [];
 let priceAnomalies = {};   // modal: itemIndex → { type, median, ratio }
@@ -209,7 +210,7 @@ function renderTabs() {
   const isCommercial = hasRole('commercial');
   const tabs = isCommercial
     ? [['bom', 'BOM']]
-    : [['bom', 'BOM'], ['suppliers', 'Fornecedores'], ['matching', 'Matching'], ['comparacao', 'Comparação'], ['install', 'Instalação']];
+    : [['bom', 'BOM'], ['suppliers', 'Fornecedores'], ['matching', 'Matching'], ['install', 'Instalação']];
   const tabBar = document.getElementById('tabBar');
   tabBar.replaceChildren();
   tabs.forEach(([id, label], i) => {
@@ -227,7 +228,6 @@ function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'matching') renderMatchingTab();
-  if (name === 'comparacao') renderComparacaoTab();
 }
 
 // ── BOM Diff ──
@@ -271,7 +271,7 @@ async function handleBomUpload(input) {
   if (!ALLOWED_BOM_TYPES.includes(file.type) && !file.name.match(/\.xlsx?$/i)) { showToast('Tipo de ficheiro não permitido. Usa .xlsx ou .xls.', true); return; }
 
   const buf = await file.arrayBuffer();
-  const { items, techInfo } = parseBomFile(buf);
+  const { items, techInfos } = parseBomFile(buf);
 
   if (!items.length) { showToast('Não foi possível extrair itens do BOM.', true); return; }
 
@@ -286,7 +286,7 @@ async function handleBomUpload(input) {
   }
 
   pendingBomFile = file;
-  openBomValidationModal(file.name, techInfo);
+  openBomValidationModal(file.name, techInfos);
 }
 
 function diffStatusBadge(status) {
@@ -300,7 +300,7 @@ function diffStatusBadge(status) {
   return `<span style="background:${bg};color:${color};border:1px solid ${color};border-radius:3px;font-size:10px;padding:1px 5px;font-family:'IBM Plex Mono',monospace">${label}</span>`;
 }
 
-function openBomValidationModal(fileName, techInfo) {
+function openBomValidationModal(fileName, techInfos) {
   const isRevision = pendingDiff !== null;
   const removed = isRevision ? pendingDiff.removed : [];
 
@@ -326,13 +326,14 @@ function openBomValidationModal(fileName, techInfo) {
     <div style="max-height:380px;overflow-y:auto;margin-bottom:12px">
       <table class="bom-validate-table">
         <thead><tr>
-          ${isRevision ? '<th style="width:8%">Estado</th>' : ''}
-          <th style="width:12%">Part #</th>
-          <th style="width:${isRevision ? '34%' : '42%'}">Descrição</th>
-          <th style="width:8%">Qty</th>
-          <th style="width:9%">Unid.</th>
-          <th style="width:10%">Categoria</th>
-          <th style="width:8%"></th>
+          ${isRevision ? '<th style="width:7%">Estado</th>' : ''}
+          <th style="width:11%">Part #</th>
+          <th style="width:${isRevision ? '31%' : '38%'}">Descrição</th>
+          <th style="width:7%">Qty</th>
+          <th style="width:8%">Unid.</th>
+          <th style="width:9%">Categoria</th>
+          <th style="width:5%" title="Serviço Triana">Serv.</th>
+          <th style="width:7%"></th>
         </tr></thead>
         <tbody id="bomValTbody"></tbody>
       </table>
@@ -342,16 +343,7 @@ function openBomValidationModal(fileName, techInfo) {
       <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#ff4444;letter-spacing:1px;margin-bottom:6px">REMOVIDOS DO BOM (${removed.length})</div>
       ${removed.map(r => `<div style="color:#ff8888;padding:2px 0">${esc(r.part_number ? r.part_number+' — ' : '')}${esc(r.description)}</div>`).join('')}
     </div>` : ''}
-    <div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.18);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px">TÉCNICOS DE INSTALAÇÃO</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
-        <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Senior (nº)</label><input type="number" id="ti_senior" value="${techInfo.senior||0}" min="0" style="width:100%"></div>
-        <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Intermédio (nº)</label><input type="number" id="ti_inter" value="${techInfo.intermediate||0}" min="0" style="width:100%"></div>
-        <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Junior (nº)</label><input type="number" id="ti_junior" value="${techInfo.junior||0}" min="0" style="width:100%"></div>
-        <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Horas</label><input type="number" id="ti_hours" value="${techInfo.hours||0}" min="0" style="width:100%"></div>
-      </div>
-      <div style="margin-top:6px;color:var(--muted);font-size:11px">Pré-preenchido do BOM. Edita se necessário — será guardado nos custos de instalação.</div>
-    </div>
+    <div id="techSectionsContainer"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" onclick="addBomRow()">+ Linha</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -359,10 +351,95 @@ function openBomValidationModal(fileName, techInfo) {
     </div>
   `);
   renderBomValTable();
+  renderTechSections(techInfos);
+}
+
+function renderTechSections(techInfos) {
+  const container = document.getElementById('techSectionsContainer');
+  if (!container) return;
+  container.replaceChildren();
+  if (!techInfos || !techInfos.length) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.18);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px';
+
+  const title = document.createElement('div');
+  title.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px";
+  title.textContent = 'TÉCNICOS DE INSTALAÇÃO';
+  wrapper.appendChild(title);
+
+  techInfos.forEach((t, sheetIdx) => {
+    if (techInfos.length > 1) {
+      const sheetLabel = document.createElement('div');
+      sheetLabel.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:6px;' + (sheetIdx > 0 ? 'margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);' : '');
+      sheetLabel.textContent = t.sheet_name;
+      wrapper.appendChild(sheetLabel);
+    }
+
+    // One row per tech in BOM order
+    const techRows = t.rows || [];
+    const sheetContainer = document.createElement('div');
+    sheetContainer.dataset.sheetGrid = t.sheet_name;
+
+    if (!techRows.length) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:var(--muted);font-size:11px';
+      empty.textContent = 'Sem técnicos nesta sheet.';
+      sheetContainer.appendChild(empty);
+    } else {
+      techRows.forEach((row, rowIdx) => {
+        const rowDiv = document.createElement('div');
+        rowDiv.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:6px';
+        rowDiv.dataset.techRow = rowIdx;
+
+        [
+          { label: row.description, key: 'count', val: row.count || 0, readonlyLabel: true },
+          { label: 'Nº', key: 'count', val: row.count || 0 },
+          { label: 'Horas', key: 'hours', val: row.hours || 0 },
+        ].forEach((f, fi) => {
+          const cell = document.createElement('div');
+          const lbl = document.createElement('label');
+          lbl.style.cssText = 'font-size:11px;color:var(--muted);display:block;margin-bottom:2px';
+          lbl.textContent = fi === 0 ? row.description : f.label;
+
+          if (fi === 0) {
+            // Description label cell — no input, just label styled as value
+            lbl.style.color = 'var(--text)';
+            lbl.style.fontSize = '12px';
+            lbl.style.marginTop = '18px'; // align with inputs
+            cell.appendChild(lbl);
+          } else {
+            const inp = document.createElement('input');
+            inp.type = 'number';
+            inp.min = '0';
+            inp.step = f.key === 'hours' ? '0.5' : '1';
+            inp.value = f.val;
+            inp.style.width = '100%';
+            inp.dataset.techField = f.key;
+            cell.appendChild(lbl);
+            cell.appendChild(inp);
+          }
+          rowDiv.appendChild(cell);
+        });
+
+        sheetContainer.appendChild(rowDiv);
+      });
+    }
+
+    wrapper.appendChild(sheetContainer);
+  });
+
+  const hint = document.createElement('div');
+  hint.style.cssText = 'margin-top:6px;color:var(--muted);font-size:11px';
+  hint.textContent = 'Pré-preenchido do BOM. Edita se necessário — será guardado nos custos de instalação.';
+  wrapper.appendChild(hint);
+
+  container.appendChild(wrapper);
 }
 
 function addBomRow() {
-  pendingBomItems.push({ part_number: null, description: '', quantity: 1, unit: '', category: pendingBomItems.length ? pendingBomItems[pendingBomItems.length-1].category : '' });
+  const last = pendingBomItems[pendingBomItems.length - 1];
+  pendingBomItems.push({ part_number: null, description: '', quantity: 1, unit: '', category: last?.category || '', sheet_name: last?.sheet_name || null });
   renderBomValTable();
 }
 
@@ -377,7 +454,12 @@ function openManualBomEntry() {
     pendingDiff = null;
     pendingBomItems = stripped;
   }
-  openBomValidationModal(bomItems.length ? 'Editar BOM' : 'Entrada Manual', { senior: 0, intermediate: 0, junior: 0, hours: 0 });
+  // Build techInfos from existing installData so per-sheet techs are preserved
+  const techInfos = Array.isArray(installData) ? installData.map(r => ({
+    sheet_name: r.sheet_name || 'Sheet1',
+    rows: Array.isArray(r.tech_rows) ? r.tech_rows : [],
+  })) : [];
+  openBomValidationModal(bomItems.length ? 'Editar BOM' : 'Entrada Manual', techInfos);
 }
 
 function renderBomValTable() {
@@ -386,7 +468,29 @@ function renderBomValTable() {
   const isRevision = pendingDiff !== null;
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
+  // Determine if we should show sheet dividers (more than one unique sheet name)
+  const sheetNames = [...new Set(pendingBomItems.map(i => i.sheet_name).filter(Boolean))];
+  const showDividers = sheetNames.length > 1;
+  let lastSheet = null;
+  const colSpan = isRevision ? 8 : 7; // +1 for Serv. column
+
   pendingBomItems.forEach((item, i) => {
+    // Insert sheet divider row when sheet changes
+    if (showDividers && item.sheet_name && item.sheet_name !== lastSheet) {
+      lastSheet = item.sheet_name;
+      const divRow = document.createElement('tr');
+      divRow.className = 'sheet-divider-row';
+      const divTd = document.createElement('td');
+      divTd.colSpan = colSpan;
+      divTd.style.cssText = 'padding:6px 8px;background:rgba(99,102,241,.1);border-top:1px solid rgba(99,102,241,.3);border-bottom:1px solid rgba(99,102,241,.3)';
+      const label = document.createElement('span');
+      label.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:#818cf8;letter-spacing:.8px;text-transform:uppercase";
+      label.textContent = '── Sheet: ' + item.sheet_name + ' ──';
+      divTd.appendChild(label);
+      divRow.appendChild(divTd);
+      tbody.appendChild(divRow);
+    }
+
     const tr = document.createElement('tr');
 
     if (isRevision) {
@@ -443,6 +547,16 @@ function renderBomValTable() {
     tdCat.appendChild(inCat);
     tr.appendChild(tdCat);
 
+    const tdSvc = document.createElement('td');
+    tdSvc.style.textAlign = 'center';
+    const chkSvc = document.createElement('input');
+    chkSvc.type = 'checkbox';
+    chkSvc.checked = !!item.is_service;
+    chkSvc.title = 'Marcar como serviço Triana (aparece em Instalação)';
+    chkSvc.onchange = function() { pendingBomItems[i].is_service = this.checked; };
+    tdSvc.appendChild(chkSvc);
+    tr.appendChild(tdSvc);
+
     const tdDel = document.createElement('td');
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
@@ -458,8 +572,20 @@ function renderBomValTable() {
 
 async function confirmBom() {
   try {
-    const g = id => parseFloat(document.getElementById(id)?.value) || 0;
-    const techInfo = { senior: g('ti_senior'), intermediate: g('ti_inter'), junior: g('ti_junior'), hours: g('ti_hours') };
+    // Collect per-sheet tech rows from DOM (rendered by renderTechSections)
+    const techGrids = document.querySelectorAll('#techSectionsContainer [data-sheet-grid]');
+    const techInfosFromModal = Array.from(techGrids).map(grid => {
+      const rowDivs = grid.querySelectorAll('[data-tech-row]');
+      const rows = Array.from(rowDivs).map((rowDiv, ri) => {
+        // description comes from the original techInfos — re-read from the label text
+        const descEl = rowDiv.firstChild; // first cell has the description text
+        const description = descEl ? (descEl.querySelector('label')?.textContent || '') : '';
+        const count = parseFloat(rowDiv.querySelector('[data-tech-field="count"]')?.value) || 0;
+        const hours = parseFloat(rowDiv.querySelector('[data-tech-field="hours"]')?.value) || 0;
+        return { description, count, hours, rate: 0 };
+      });
+      return { sheet_name: grid.dataset.sheetGrid, rows };
+    });
 
     const versionNumber = (bomVersions[0]?.version_number || 0) + 1;
     let bomFilePath = null;
@@ -499,16 +625,17 @@ async function confirmBom() {
       if (preservedCount) showToast(`BOM v${versionNumber} — ${preservedCount} match${preservedCount!==1?'es':''} preservado${preservedCount!==1?'s':''}.`);
     }
 
-    // Save installation costs (procurement/admin only)
-    if (!hasRole('commercial') && (techInfo.senior || techInfo.junior || techInfo.intermediate || techInfo.hours)) {
-      await API.saveInstallation(processId, {
-        senior_count: techInfo.senior,
-        junior_count: techInfo.junior,
-        intermediate_count: techInfo.intermediate,
-        senior_hours: techInfo.hours,
-        junior_hours: techInfo.hours,
-        intermediate_hours: techInfo.hours,
-      });
+    // Save installation costs per sheet (procurement/admin only)
+    if (!hasRole('commercial') && techInfosFromModal.length) {
+      const records = techInfosFromModal
+        .filter(t => t.rows && t.rows.length)
+        .map((t, idx) => ({
+          sheet_name: t.sheet_name,
+          sort_order: idx,
+          tech_rows: t.rows,
+          diversos: 0,
+        }));
+      if (records.length) installData = await API.saveInstallation(processId, records);
     }
 
     pendingDiff = null;
@@ -530,17 +657,18 @@ function renderBomTable(items) {
     return;
   }
   let html = `<table class="bom-table"><thead><tr>
-    <th style="width:14%">Part #</th>
-    <th style="width:48%">Descrição</th>
-    <th style="width:8%">Qty</th>
-    <th style="width:8%">Unid.</th>
-    <th style="width:22%">Categoria</th>
+    <th style="width:13%">Part #</th>
+    <th style="width:42%">Descrição</th>
+    <th style="width:7%">Qty</th>
+    <th style="width:7%">Unid.</th>
+    <th style="width:19%">Categoria</th>
+    <th style="width:5%;text-align:center" title="Serviço Triana">Serv.</th>
   </tr></thead><tbody>`;
 
   let lastCat = null;
   for (const item of items) {
     if (item.category && item.category !== lastCat) {
-      html += `<tr class="category-row"><td colspan="5">${esc(item.category)}</td></tr>`;
+      html += `<tr class="category-row"><td colspan="6">${esc(item.category)}</td></tr>`;
       lastCat = item.category;
     }
     html += `<tr>
@@ -549,10 +677,27 @@ function renderBomTable(items) {
       <td style="text-align:center">${item.quantity}</td>
       <td style="color:var(--muted)">${esc(item.unit||'')}</td>
       <td style="font-size:11px;color:var(--muted)">${esc(item.category||'')}</td>
+      <td style="text-align:center"><input type="checkbox" ${item.is_service ? 'checked' : ''} onchange="toggleServiceItem('${item.id}',this.checked)" title="Serviço Triana"></td>
     </tr>`;
   }
   html += '</tbody></table>';
   holder.appendChild(document.createRange().createContextualFragment(html));
+}
+
+async function toggleServiceItem(bomItemId, isService) {
+  const bi = bomItems.find(b => b.id === bomItemId);
+  if (!bi) return;
+  bi.is_service = isService;
+  renderBomTable(bomItems);
+  renderInstallTab();
+  try {
+    await API.updateBomItemService(bomItemId, isService);
+  } catch(e) {
+    bi.is_service = !isService;
+    renderBomTable(bomItems);
+    renderInstallTab();
+    showToast('Erro: ' + e.message, true);
+  }
 }
 
 // ── Suppliers ──
@@ -1386,11 +1531,17 @@ async function viewQuotFile(filePath) {
 }
 
 // ── Matching Tab ──
+function switchMatchingView(v) {
+  matchingView = v;
+  renderMatchingTab();
+}
+
 function renderMatchingTab() {
   const el = document.getElementById('matchingContent');
   if (!el) return;
+  el.replaceChildren();
+
   if (!bomItems.length) {
-    el.replaceChildren();
     const d = document.createElement('div');
     d.className = 'empty-state';
     d.textContent = 'Carrega o BOM primeiro.';
@@ -1398,7 +1549,6 @@ function renderMatchingTab() {
     return;
   }
   if (!suppliers.length) {
-    el.replaceChildren();
     const d = document.createElement('div');
     d.className = 'empty-state';
     d.textContent = 'Adiciona fornecedores primeiro.';
@@ -1406,24 +1556,46 @@ function renderMatchingTab() {
     return;
   }
 
-  // Build lookups
-  const matchLookup = {};  // bomItemId → supplierId → match record
+  // Build lookups (shared by both views)
+  const matchLookup = {};
   for (const m of matches) {
     if (!matchLookup[m.bom_item_id]) matchLookup[m.bom_item_id] = {};
     matchLookup[m.bom_item_id][m.supplier_id] = m;
   }
-  const selLookup = {};  // bomItemId → supplierId
+  const selLookup = {};
   for (const o of selectedOffers) selLookup[o.bom_item_id] = o.supplier_id;
 
   const covered = bomItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length;
   const pct = bomItems.length ? Math.round(covered / bomItems.length * 100) : 0;
   const pctColor = pct === 100 ? 'var(--accent)' : pct > 50 ? '#4fc3f7' : 'var(--danger)';
 
+  // ── Toggle bar ──
+  const toggleBar = document.createElement('div');
+  toggleBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:16px';
+
+  ['matching', 'comparacao'].forEach(v => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm' + (matchingView === v ? ' btn-primary' : ' btn-ghost');
+    btn.textContent = v === 'matching' ? 'Matching' : 'Comparação';
+    btn.addEventListener('click', () => switchMatchingView(v));
+    toggleBar.appendChild(btn);
+  });
+  el.appendChild(toggleBar);
+
+  if (matchingView === 'matching') {
+    _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered);
+  } else {
+    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered);
+  }
+}
+
+function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered) {
+  const pctColor2 = pctColor;
   let html = `
     <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;flex-wrap:wrap">
       <div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
-        <div style="font-size:28px;font-weight:700;color:${pctColor}">${pct}%</div>
+        <div style="font-size:28px;font-weight:700;color:${pctColor2}">${pct}%</div>
         <div style="color:var(--muted);font-size:12px">${covered}/${bomItems.length} itens</div>
       </div>
       <div style="flex:1">
@@ -1448,14 +1620,11 @@ function renderMatchingTab() {
       lastCat = bi.category;
     }
     const selectedSuppId = selLookup[bi.id];
-
-    // Lowest price across suppliers for this item
     let lowestPrice = Infinity;
     for (const s of suppliers) {
       const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
       if (p != null && p < lowestPrice) lowestPrice = p;
     }
-
     html += `<tr>
       <td>
         <div style="font-size:13px">${esc(bi.description)}</div>
@@ -1473,9 +1642,8 @@ function renderMatchingTab() {
             ${isSel?`<div style="font-size:9px;color:var(--accent);letter-spacing:1px">SELECIONADO</div>`:''}
             ${isLowest&&!isSel?`<div style="font-size:9px;color:#4fc3f7;letter-spacing:1px">MAIS BAIXO</div>`:''}
           </div></td>`;
-        } else {
-          return `<td><div class="match-cell match-empty" onclick="openMatchModal('${bi.id}','${s.id}')">+</div></td>`;
         }
+        return `<td><div class="match-cell match-empty" onclick="openMatchModal('${bi.id}','${s.id}')">+</div></td>`;
       }).join('')}
       <td style="text-align:center">
         ${selectedSuppId
@@ -1486,7 +1654,91 @@ function renderMatchingTab() {
   }
 
   html += '</tbody></table></div>';
-  el.replaceChildren();
+  el.appendChild(document.createRange().createContextualFragment(html));
+}
+
+function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered) {
+  const suppCoverage = {};
+  for (const s of suppliers) suppCoverage[s.id] = bomItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
+  const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
+
+  const colTotals = {};
+  for (const s of suppliers) {
+    colTotals[s.id] = bomItems.reduce((sum, bi) => {
+      const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
+      return sum + (p != null ? p : 0);
+    }, 0);
+  }
+
+  const totalSelected = selectedOffers.reduce((sum, o) => {
+    const p = matchLookup[o.bom_item_id]?.[o.supplier_id]?.quotation_items?.price;
+    return sum + (p || 0);
+  }, 0);
+
+  let html = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
+        <div style="font-size:24px;font-weight:700;color:${pctColor}">${pct}%</div>
+        <div style="color:var(--muted);font-size:12px">${covered}/${bomItems.length} itens</div>
+      </div>
+      ${topSupp ? `<div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">MAIS COBERTURA</div>
+        <div style="font-size:15px;font-weight:600;color:#fff">${esc(topSupp.name)}</div>
+        <div style="color:var(--muted);font-size:12px">${suppCoverage[topSupp.id]} itens</div>
+      </div>` : ''}
+      ${totalSelected > 0 ? `<div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">TOTAL SELECIONADO</div>
+        <div style="font-size:15px;font-weight:600;color:var(--accent)">${fmtPrice(totalSelected)}</div>
+      </div>` : ''}
+    </div>
+    <div class="comp-wrap">
+    <table class="comp-table">
+      <thead><tr>
+        <th>Item BOM</th>
+        ${suppliers.map(s => `<th>${esc(s.name)}</th>`).join('')}
+      </tr></thead>
+      <tbody>`;
+
+  let lastCat = null;
+  for (const bi of bomItems) {
+    if (bi.category && bi.category !== lastCat) {
+      html += `<tr class="comp-cat-row"><td colspan="${1 + suppliers.length}">${esc(bi.category)}</td></tr>`;
+      lastCat = bi.category;
+    }
+    let lowestPrice = Infinity;
+    for (const s of suppliers) {
+      const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
+      if (p != null && p < lowestPrice) lowestPrice = p;
+    }
+    const selectedSuppId = selLookup[bi.id];
+    html += `<tr>
+      <td>
+        <div style="font-size:13px">${esc(bi.description)}</div>
+        ${bi.part_number ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
+      </td>
+      ${suppliers.map(s => {
+        const m = matchLookup[bi.id]?.[s.id];
+        const price = m?.quotation_items?.price;
+        const currency = m?.quotation_items?.currency || '';
+        const isSel = selectedSuppId === s.id;
+        const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
+        if (price != null) {
+          const cls = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
+          return `<td><span class="${cls}">${fmtPrice(price)}<span style="font-size:9px;opacity:.7;margin-left:3px">${esc(currency)}</span></span></td>`;
+        }
+        return `<td><span class="comp-cell comp-cell-none">—</span></td>`;
+      }).join('')}
+    </tr>`;
+  }
+
+  html += `</tbody>
+    <tfoot><tr>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total</td>
+      ${suppliers.map(s => `<td>${colTotals[s.id] > 0 ? fmtPrice(colTotals[s.id]) : '<span style="color:#334">—</span>'}</td>`).join('')}
+    </tr></tfoot>
+    </table></div>`;
+
   el.appendChild(document.createRange().createContextualFragment(html));
 }
 
@@ -1624,8 +1876,9 @@ async function runAutoMatch() {
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
 
-// ── Comparação de Preços ──
+// ── Comparação de Preços (dead code — integrada no Matching tab) ──
 function renderComparacaoTab() {
+  // Kept as stub — logic moved to _renderComparacaoView inside renderMatchingTab
   const el = document.getElementById('comparacaoContent');
   if (!el) return;
   if (!bomItems.length) {
@@ -1810,27 +2063,186 @@ async function handlePdfQuotation(file) {
 
 // ── Installation costs ──
 function renderInstallTab() {
-  const d = installData;
-  if (!d) return;
-  const f = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-  f('in_sc', d.senior_count); f('in_sh', d.senior_hours); f('in_sr', d.senior_rate);
-  f('in_ic', d.intermediate_count); f('in_ih', d.intermediate_hours); f('in_ir', d.intermediate_rate);
-  f('in_jc', d.junior_count); f('in_jh', d.junior_hours); f('in_jr', d.junior_rate);
-  f('in_div', d.diversos);
+  const container = document.getElementById('install-content');
+  if (!container) return;
+  container.replaceChildren();
+
+  // Index tech records and service items by sheet
+  const techBySheet = {};
+  for (const r of (Array.isArray(installData) ? installData : [])) {
+    techBySheet[r.sheet_name || 'Sheet1'] = r;
+  }
+  const svcBySheet = {};
+  for (const bi of bomItems) {
+    if (!bi.is_service) continue;
+    const s = bi.sheet_name || 'Sheet1';
+    if (!svcBySheet[s]) svcBySheet[s] = [];
+    svcBySheet[s].push(bi);
+  }
+
+  // Sheets in BOM order that have techs or services
+  const bomSheetOrder = [...new Set(bomItems.map(bi => bi.sheet_name || 'Sheet1'))];
+  const sheetsWithContent = [...new Set([
+    ...bomSheetOrder.filter(s => techBySheet[s] || svcBySheet[s]),
+    ...(Array.isArray(installData) ? installData : []).map(r => r.sheet_name || 'Sheet1'),
+  ])].filter(s => techBySheet[s] || svcBySheet[s]);
+
+  if (!sheetsWithContent.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--muted);font-size:13px;padding:12px 0';
+    empty.textContent = 'Nenhum técnico nem serviço definido. Faz upload de um BOM com técnicos ou activa o switch de serviço em itens do BOM.';
+    container.appendChild(empty);
+  } else {
+    sheetsWithContent.forEach(sheetName => {
+      const d = techBySheet[sheetName];
+      const svcItems = svcBySheet[sheetName] || [];
+
+      const section = document.createElement('div');
+      section.style.cssText = 'max-width:560px;margin-bottom:24px';
+      section.dataset.installSheet = sheetName;
+
+      const label = document.createElement('div');
+      label.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px";
+      label.textContent = sheetName;
+      section.appendChild(label);
+
+      // ── Tech table ──
+      if (d) {
+        const techRowsData = Array.isArray(d.tech_rows) ? d.tech_rows : [];
+        const table = document.createElement('table');
+        table.className = 'bom-table';
+        table.style.marginBottom = '12px';
+
+        const thead = document.createElement('thead');
+        const hrow = document.createElement('tr');
+        ['Técnico', 'Nº', 'Horas', 'Taxa/Hora (MZN)'].forEach((txt, hi) => {
+          const th = document.createElement('th');
+          th.textContent = txt;
+          if (hi > 0) { th.style.textAlign = 'center'; th.style.width = (hi === 3 ? 140 : 100) + 'px'; }
+          hrow.appendChild(th);
+        });
+        thead.appendChild(hrow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        techRowsData.forEach((trow, ri) => {
+          const tr = document.createElement('tr');
+          tr.dataset.techRowIdx = ri;
+          const tdLbl = document.createElement('td');
+          tdLbl.textContent = trow.description || '';
+          tr.appendChild(tdLbl);
+          [{ key: 'count', step: '1', w: 80 }, { key: 'hours', step: '0.5', w: 80 }, { key: 'rate', step: '0.01', w: 110 }].forEach(({ key, step, w }) => {
+            const td = document.createElement('td');
+            td.style.textAlign = 'center';
+            const inp = document.createElement('input');
+            inp.type = 'number'; inp.min = '0'; inp.step = step;
+            inp.value = trow[key] || 0;
+            inp.style.cssText = `width:${w}px;text-align:${key === 'rate' ? 'right' : 'center'}`;
+            inp.dataset.techRowKey = key;
+            td.appendChild(inp); tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+
+
+        table.appendChild(tbody);
+        section.appendChild(table);
+      }
+
+      // ── Service items ──
+      if (svcItems.length) {
+        const svcLbl = document.createElement('div');
+        svcLbl.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px;" + (d ? 'margin-top:12px;' : '');
+        svcLbl.textContent = 'SERVIÇOS';
+        section.appendChild(svcLbl);
+
+        const svcTable = document.createElement('table');
+        svcTable.className = 'bom-table';
+        svcTable.style.marginBottom = '8px';
+
+        const sthead = document.createElement('thead');
+        const shrow = document.createElement('tr');
+        [{ t: 'Serviço' }, { t: 'Custo (MZN)', w: 150 }].forEach(h => {
+          const th = document.createElement('th');
+          th.textContent = h.t;
+          if (h.w) { th.style.width = h.w + 'px'; th.style.textAlign = 'right'; }
+          shrow.appendChild(th);
+        });
+        sthead.appendChild(shrow);
+        svcTable.appendChild(sthead);
+
+        const stbody = document.createElement('tbody');
+        svcItems.forEach(bi => {
+          const tr = document.createElement('tr');
+          const tdDesc = document.createElement('td');
+          tdDesc.textContent = bi.description;
+          tr.appendChild(tdDesc);
+          const tdPrice = document.createElement('td');
+          const inp = document.createElement('input');
+          inp.type = 'number'; inp.min = '0'; inp.step = '0.01';
+          inp.value = bi.service_price || 0;
+          inp.style.cssText = 'width:130px;text-align:right';
+          inp.dataset.servicePriceId = bi.id;
+          tdPrice.appendChild(inp);
+          tr.appendChild(tdPrice);
+          stbody.appendChild(tr);
+        });
+        svcTable.appendChild(stbody);
+        section.appendChild(svcTable);
+      }
+
+      container.appendChild(section);
+    });
+  }
+
+  // Save button + feedback
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:4px';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-ghost btn-sm';
+  saveBtn.textContent = 'Guardar custos';
+  saveBtn.addEventListener('click', saveInstallCosts);
+  const savedMsg = document.createElement('div');
+  savedMsg.id = 'installSaved';
+  savedMsg.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);opacity:0;transition:opacity .4s";
+  savedMsg.textContent = 'Guardado';
+  actions.appendChild(saveBtn);
+  actions.appendChild(savedMsg);
+  container.appendChild(actions);
 }
 
 async function saveInstallCosts() {
-  const g = id => parseFloat(document.getElementById(id)?.value) || 0;
-  const fields = {
-    senior_count: g('in_sc'), senior_hours: g('in_sh'), senior_rate: g('in_sr'),
-    intermediate_count: g('in_ic'), intermediate_hours: g('in_ih'), intermediate_rate: g('in_ir'),
-    junior_count: g('in_jc'), junior_hours: g('in_jh'), junior_rate: g('in_jr'),
-    diversos: g('in_div'),
-  };
+  const sections = document.querySelectorAll('#install-content [data-install-sheet]');
+  const records = Array.from(sections).map((sec, idx) => {
+    const techRowEls = sec.querySelectorAll('[data-tech-row-idx]');
+    const tech_rows = Array.from(techRowEls).map(rowEl => ({
+      description: rowEl.querySelector('td:first-child')?.textContent || '',
+      count: parseFloat(rowEl.querySelector('[data-tech-row-key="count"]')?.value) || 0,
+      hours: parseFloat(rowEl.querySelector('[data-tech-row-key="hours"]')?.value) || 0,
+      rate: parseFloat(rowEl.querySelector('[data-tech-row-key="rate"]')?.value) || 0,
+    }));
+    const diversos = parseFloat(sec.querySelector('[data-install-key="diversos"]')?.value) || 0;
+    return { sheet_name: sec.dataset.installSheet, sort_order: idx, tech_rows, diversos };
+  });
+
+  // Save service item prices
+  const svcInputs = document.querySelectorAll('#install-content [data-service-price-id]');
+  const svcSavePromises = Array.from(svcInputs).map(inp => {
+    const id = inp.dataset.servicePriceId;
+    const price = parseFloat(inp.value) || 0;
+    const bi = bomItems.find(b => b.id === id);
+    if (bi) bi.service_price = price;
+    return API.updateBomItemServicePrice(id, price);
+  });
+
   try {
-    installData = await API.saveInstallation(processId, fields);
+    const [saved] = await Promise.all([
+      API.saveInstallation(processId, records),
+      ...svcSavePromises,
+    ]);
+    installData = saved;
     const el = document.getElementById('installSaved');
-    el.style.opacity = '1'; setTimeout(() => el.style.opacity = '0', 2000);
+    if (el) { el.style.opacity = '1'; setTimeout(() => el.style.opacity = '0', 2000); }
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
 
@@ -1899,8 +2311,33 @@ function buildSupSheet(wb, supplier) {
   return { dataStart: DS };
 }
 
-function fillMain(ws, suppliers, sheetNames, dataStarts, inst) {
-  const hasTechs=inst.sc>0||inst.ic>0||inst.jc>0||inst.div>0;
+function fillMain(ws, suppliers, sheetNames, dataStarts, orderedItems, instRecords, serviceRowsBySheet = {}) {
+  // instRecords is array of { sheet_name, tech_rows: [{description, count, hours, rate}], diversos }
+  const allTechRows = [];
+  const allSvcSheets = Object.keys(serviceRowsBySheet).filter(s => (serviceRowsBySheet[s] || []).some(sv => sv.value > 0));
+  const multiSheet = instRecords.length > 1 || allSvcSheets.length > 1 || (instRecords.length === 1 && allSvcSheets.length === 1 && instRecords[0].sheet_name !== allSvcSheets[0]);
+  const processedSheets = new Set();
+  for (const r of instRecords) {
+    const sheetSuffix = multiSheet ? ` — ${r.sheet_name}` : '';
+    const rows = Array.isArray(r.tech_rows) ? r.tech_rows : [];
+    for (const t of rows) {
+      if (t.count > 0) allTechRows.push({ label: `${t.description} (${t.count})${sheetSuffix}`, count: t.count, rate: t.rate || 0, hours: t.hours || 0 });
+    }
+    for (const svc of (serviceRowsBySheet[r.sheet_name] || [])) {
+      if (svc.value > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, value: svc.value });
+    }
+    if (r.diversos > 0) allTechRows.push({ label: `Diversos${sheetSuffix}`, isDiversos: true, value: r.diversos });
+    processedSheets.add(r.sheet_name);
+  }
+  // Service items on sheets with no instRecord
+  for (const [sheetName, svcRows] of Object.entries(serviceRowsBySheet)) {
+    if (processedSheets.has(sheetName)) continue;
+    const sheetSuffix = multiSheet ? ` — ${sheetName}` : '';
+    for (const svc of svcRows) {
+      if (svc.value > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, value: svc.value });
+    }
+  }
+  const hasTechs = allTechRows.length > 0;
   const trCol=hasTechs?4+suppliers.length:null;
   const vc=hasTechs?trCol+1:4+suppliers.length;
   const tc=vc+1;
@@ -1921,41 +2358,32 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, inst) {
   sc2(ws.getCell(3,tc),{value:'Preco Total',font:hF,fill:OF,border:MB,alignment:hA});
   let row=4;
   const vl=col2l(vc);
-  suppliers.forEach((s,si)=>{
-    const items=s.items.filter(i=>i.model&&i.model.trim());if(!items.length)return;
+  // Iterate in BOM order — each item knows its supplier and row index in that supplier's sheet
+  orderedItems.forEach(oi=>{
+    const si=suppliers.findIndex(s=>s.id===oi.suppId);
+    if(si<0)return;
     const ss=sheetNames[si].includes(' ')?`'${sheetNames[si]}'`:sheetNames[si];
     const ds=dataStarts[si];
-    items.forEach((item,ii)=>{
-      const qty=parseFloat(item.qty)||1;
-      for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
-      sc2(ws.getCell(row,1),{value:item.part||'',font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-      sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
-      sc2(ws.getCell(row,3),{value:qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-      sc2(ws.getCell(row,4+si),{value:{formula:`${ss}!R${ds+ii}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      sc2(ws.getCell(row,tc),{value:{formula:`+${vl}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      row++;
-    });
+    for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
+    sc2(ws.getCell(row,1),{value:oi.part||'',font:dF,alignment:{horizontal:'center',vertical:'middle'}});
+    sc2(ws.getCell(row,2),{value:oi.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
+    sc2(ws.getCell(row,3),{value:oi.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
+    sc2(ws.getCell(row,4+si),{value:{formula:`${ss}!R${ds+oi.indexInSupplier}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+    sc2(ws.getCell(row,tc),{value:{formula:`+${vl}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+    row++;
   });
   if(hasTechs){
     const trL=col2l(trCol);
-    const techs=[
-      {label:`Técnico Sénior (${inst.sc})`,count:inst.sc,rate:inst.sr,hours:inst.sh},
-      {label:`Técnico Intermédio (${inst.ic})`,count:inst.ic,rate:inst.ir,hours:inst.ih},
-      {label:`Técnico Júnior (${inst.jc})`,count:inst.jc,rate:inst.jr,hours:inst.jh},
-    ].filter(t=>t.count>0);
-    for(const t of techs){
+    for(const t of allTechRows){
       for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
       sc2(ws.getCell(row,2),{value:t.label,font:dF,alignment:{horizontal:'left',vertical:'middle'}});
-      sc2(ws.getCell(row,3),{value:t.hours,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      sc2(ws.getCell(row,trCol),{value:t.rate*t.count,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      sc2(ws.getCell(row,tc),{value:{formula:`+${trL}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      row++;
-    }
-    if(inst.div>0){
-      for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
-      sc2(ws.getCell(row,2),{value:'Diversos',font:dF,alignment:{horizontal:'left',vertical:'middle'}});
-      sc2(ws.getCell(row,3),{value:1,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-      sc2(ws.getCell(row,trCol),{value:inst.div,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+      if(t.isDiversos){
+        sc2(ws.getCell(row,3),{value:1,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
+        sc2(ws.getCell(row,trCol),{value:t.value,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+      } else {
+        sc2(ws.getCell(row,3),{value:t.hours,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+        sc2(ws.getCell(row,trCol),{value:t.rate*t.count,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+      }
       sc2(ws.getCell(row,tc),{value:{formula:`+${trL}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
       row++;
     }
@@ -1976,39 +2404,48 @@ async function generateExcel() {
     matchLookup[m.bom_item_id][m.supplier_id] = m;
   }
 
-  // Group items by supplier: confirmed offer first, else any match that has a price
-  const supplierItems = {};
+  // Build supplier items AND ordered item list (BOM order) in one pass
+  const supplierItems = {};       // supplierId → items array for buildSupSheet
+  const supplierCounters = {};    // supplierId → how many items added so far (= indexInSupplier)
+  const orderedItems = [];        // flat list in BOM order: { part, model, qty, supplierId, indexInSupplier }
+
   for (const bi of bomItems) {
     const confirmed = selLookup[bi.id];
+    let suppId = null, qi = null;
+
     if (confirmed) {
-      const qi = (quotationMap[confirmed.supplier_id] || []).find(q => q.id === confirmed.quotation_item_id);
-      if (!qi) continue;
-      if (!supplierItems[confirmed.supplier_id]) supplierItems[confirmed.supplier_id] = [];
-      supplierItems[confirmed.supplier_id].push({ part: bi.part_number || '', model: bi.description, qty: String(bi.quantity), price: String(qi.price) });
+      qi = (quotationMap[confirmed.supplier_id] || []).find(q => q.id === confirmed.quotation_item_id);
+      if (qi) suppId = confirmed.supplier_id;
     } else {
-      // No confirmed offer — use first match that has a price
       const itemMatches = matchLookup[bi.id];
-      if (!itemMatches) continue;
-      for (const [suppId, m] of Object.entries(itemMatches)) {
-        const qi = (quotationMap[suppId] || []).find(q => q.id === m.quotation_item_id);
-        if (qi && qi.price != null) {
-          if (!supplierItems[suppId]) supplierItems[suppId] = [];
-          supplierItems[suppId].push({ part: bi.part_number || '', model: bi.description, qty: String(bi.quantity), price: String(qi.price) });
-          break; // use only one supplier per item
+      if (itemMatches) {
+        for (const [sid, m] of Object.entries(itemMatches)) {
+          const q = (quotationMap[sid] || []).find(q => q.id === m.quotation_item_id);
+          if (q && q.price != null) { suppId = sid; qi = q; break; }
         }
       }
     }
+
+    if (!suppId || !qi) continue;
+
+    if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
+    const indexInSupplier = supplierCounters[suppId]++;
+    supplierItems[suppId].push({ part: bi.part_number || '', model: bi.description, qty: String(bi.quantity), price: String(qi.price) });
+    orderedItems.push({ part: bi.part_number || '', model: bi.description, qty: bi.quantity, suppId, indexInSupplier });
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
   if (!activeSuppliers.length) { showToast('Sem itens com preço no Matching.', true); return; }
 
-  const inst = installData ? {
-    sc: installData.senior_count||0, sr: installData.senior_rate||0, sh: installData.senior_hours||0,
-    ic: installData.intermediate_count||0, ir: installData.intermediate_rate||0, ih: installData.intermediate_hours||0,
-    jc: installData.junior_count||0, jr: installData.junior_rate||0, jh: installData.junior_hours||0,
-    div: installData.diversos||0,
-  } : { sc:0,sr:0,sh:0,ic:0,ir:0,ih:0,jc:0,jr:0,jh:0,div:0 };
+  const instRecords = Array.isArray(installData) ? installData : [];
+
+  const serviceRowsBySheet = {};
+  for (const bi of bomItems) {
+    if (!bi.is_service) continue;
+    const sheet = bi.sheet_name || 'Sheet1';
+    if (!serviceRowsBySheet[sheet]) serviceRowsBySheet[sheet] = [];
+    serviceRowsBySheet[sheet].push({ label: bi.description, value: bi.service_price || 0 });
+  }
 
   try {
     const wb = new ExcelJS.Workbook();
@@ -2023,7 +2460,7 @@ async function generateExcel() {
       sheetNames.push(s.name.substring(0, 31));
       dataStarts.push(dataStart);
     }
-    fillMain(mainWs, suppliersForMain, sheetNames, dataStarts, inst);
+    fillMain(mainWs, activeSuppliers, sheetNames, dataStarts, orderedItems, instRecords, serviceRowsBySheet);
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
@@ -2055,13 +2492,12 @@ function generateReport() {
       supplier: suppLookup[o.supplier_id] || '-', unitPrice: qi.price || 0, totalPrice: total });
   }
 
-  const inst = installData;
   let installTotal = 0;
-  if (inst) {
-    installTotal += (inst.senior_count||0) * (inst.senior_hours||0) * (inst.senior_rate||0);
-    installTotal += (inst.intermediate_count||0) * (inst.intermediate_hours||0) * (inst.intermediate_rate||0);
-    installTotal += (inst.junior_count||0) * (inst.junior_hours||0) * (inst.junior_rate||0);
-    installTotal += (inst.diversos||0);
+  for (const inst of (Array.isArray(installData) ? installData : [])) {
+    for (const t of (Array.isArray(inst.tech_rows) ? inst.tech_rows : [])) {
+      installTotal += (t.count || 0) * (t.hours || 0) * (t.rate || 0);
+    }
+    installTotal += (inst.diversos || 0);
   }
   const grandTotal = equipTotal + installTotal;
 
@@ -2140,20 +2576,19 @@ function generateReport() {
     html += '</tbody></table>';
   }
 
-  if (installTotal > 0 && inst) {
+  if (installTotal > 0) {
     html += '<h2>Instalacao / Tecnicos</h2>';
     html += '<table><thead><tr><th>Tecnico</th><th class="r">Nr</th><th class="r">Horas</th><th class="r">Taxa/h</th><th class="r">Total</th></tr></thead><tbody>';
-    if ((inst.senior_count||0) > 0) {
-      html += '<tr><td>Tecnico Senior</td><td class="r">' + inst.senior_count + '</td><td class="r">' + inst.senior_hours + '</td><td class="r">' + fmt(inst.senior_rate) + '</td><td class="r">' + fmt((inst.senior_count||0)*(inst.senior_hours||0)*(inst.senior_rate||0)) + '</td></tr>';
-    }
-    if ((inst.intermediate_count||0) > 0) {
-      html += '<tr><td>Tecnico Intermedio</td><td class="r">' + inst.intermediate_count + '</td><td class="r">' + inst.intermediate_hours + '</td><td class="r">' + fmt(inst.intermediate_rate) + '</td><td class="r">' + fmt((inst.intermediate_count||0)*(inst.intermediate_hours||0)*(inst.intermediate_rate||0)) + '</td></tr>';
-    }
-    if ((inst.junior_count||0) > 0) {
-      html += '<tr><td>Tecnico Junior</td><td class="r">' + inst.junior_count + '</td><td class="r">' + inst.junior_hours + '</td><td class="r">' + fmt(inst.junior_rate) + '</td><td class="r">' + fmt((inst.junior_count||0)*(inst.junior_hours||0)*(inst.junior_rate||0)) + '</td></tr>';
-    }
-    if ((inst.diversos||0) > 0) {
-      html += '<tr><td>Diversos</td><td colspan="3"></td><td class="r">' + fmt(inst.diversos) + '</td></tr>';
+    for (const inst of (Array.isArray(installData) ? installData : [])) {
+      for (const t of (Array.isArray(inst.tech_rows) ? inst.tech_rows : [])) {
+        if ((t.count || 0) > 0) {
+          const tot = (t.count||0)*(t.hours||0)*(t.rate||0);
+          html += '<tr><td>' + esc(t.description) + '</td><td class="r">' + t.count + '</td><td class="r">' + t.hours + '</td><td class="r">' + fmt(t.rate) + '</td><td class="r">' + fmt(tot) + '</td></tr>';
+        }
+      }
+      if ((inst.diversos||0) > 0) {
+        html += '<tr><td>Diversos</td><td colspan="3"></td><td class="r">' + fmt(inst.diversos) + '</td></tr>';
+      }
     }
     html += '<tr class="total-row"><td colspan="4">Subtotal Instalacao</td><td class="r">' + fmt(installTotal) + '</td></tr>';
     html += '</tbody></table>';

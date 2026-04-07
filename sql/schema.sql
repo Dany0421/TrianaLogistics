@@ -394,4 +394,20 @@ BEGIN
   HAVING COUNT(*) >= 2;
 END;
 $$;
+
+-- ── Service items in BOM ──
+ALTER TABLE bom_items ADD COLUMN IF NOT EXISTS is_service boolean DEFAULT false;
+ALTER TABLE bom_items ADD COLUMN IF NOT EXISTS service_price numeric DEFAULT 0;
+
+-- ── Multi-sheet BOM support ──
+-- bom_items: track which sheet each item came from
+ALTER TABLE bom_items ADD COLUMN IF NOT EXISTS sheet_name text DEFAULT 'Sheet1';
+
+-- installation_costs: one row per sheet instead of one per process
+-- tech_rows stores ordered technician rows as [{ description, count, hours, rate }]
+ALTER TABLE installation_costs DROP CONSTRAINT IF EXISTS installation_costs_process_id_key;
+ALTER TABLE installation_costs ADD COLUMN IF NOT EXISTS sheet_name text NOT NULL DEFAULT 'Sheet1';
+ALTER TABLE installation_costs ADD COLUMN IF NOT EXISTS sort_order int DEFAULT 0;
+ALTER TABLE installation_costs ADD COLUMN IF NOT EXISTS tech_rows jsonb DEFAULT '[]';
+ALTER TABLE installation_costs ADD CONSTRAINT installation_costs_process_sheet_unique UNIQUE (process_id, sheet_name);
 GRANT EXECUTE ON FUNCTION get_duration_estimates TO authenticated;
