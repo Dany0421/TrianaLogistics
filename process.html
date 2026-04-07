@@ -144,59 +144,21 @@
       <div id="suppliersContent"><div class="empty-state">Sem fornecedores.<br>Adiciona o primeiro fornecedor.</div></div>
     </div>
 
-    <!-- Matching Tab -->
+    <!-- Matching Tab (inclui Comparação como view toggle) -->
     <div id="tab-matching" class="tab-panel">
       <div id="matchingContent"><div class="empty-state">Carrega o BOM e adiciona fornecedores primeiro.</div></div>
-    </div>
-
-    <!-- Comparação Tab -->
-    <div id="tab-comparacao" class="tab-panel">
-      <div id="comparacaoContent"></div>
     </div>
 
     <!-- Instalação Tab -->
     <div id="tab-install" class="tab-panel">
       <div class="section-header">
-        <span class="section-tag">Custos de Instalação / Técnicos</span>
+        <span class="section-tag">Custos de Instalação / Técnicos / Serviços</span>
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost btn-sm" onclick="generateReport()">📄 Relatório</button>
           <button class="btn btn-primary btn-sm" onclick="generateExcel()">↓ Gerar Excel</button>
         </div>
       </div>
-      <div style="max-width:560px">
-        <table class="bom-table" style="margin-bottom:20px">
-          <thead><tr>
-            <th>Técnico</th>
-            <th style="text-align:center;width:100px">Nº</th>
-            <th style="text-align:center;width:100px">Horas</th>
-            <th style="text-align:center;width:140px">Taxa/Hora (MZN)</th>
-          </tr></thead>
-          <tbody>
-            <tr><td>Senior</td>
-              <td><input type="number" id="in_sc" min="0" style="width:80px;text-align:center"></td>
-              <td><input type="number" id="in_sh" min="0" step="0.5" style="width:80px;text-align:center"></td>
-              <td><input type="number" id="in_sr" min="0" step="0.01" style="width:110px;text-align:right"></td>
-            </tr>
-            <tr><td>Intermédio</td>
-              <td><input type="number" id="in_ic" min="0" style="width:80px;text-align:center"></td>
-              <td><input type="number" id="in_ih" min="0" step="0.5" style="width:80px;text-align:center"></td>
-              <td><input type="number" id="in_ir" min="0" step="0.01" style="width:110px;text-align:right"></td>
-            </tr>
-            <tr><td>Junior</td>
-              <td><input type="number" id="in_jc" min="0" style="width:80px;text-align:center"></td>
-              <td><input type="number" id="in_jh" min="0" step="0.5" style="width:80px;text-align:center"></td>
-              <td><input type="number" id="in_jr" min="0" step="0.01" style="width:110px;text-align:right"></td>
-            </tr>
-            <tr><td colspan="3" style="color:var(--muted);font-size:12px;padding-top:10px">Diversos <span style="font-size:11px">(MZN)</span></td>
-              <td><input type="number" id="in_div" min="0" step="0.01" style="width:110px;text-align:right" placeholder="0.00"></td>
-            </tr>
-          </tbody>
-        </table>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-ghost btn-sm" onclick="saveInstallCosts()">Guardar custos</button>
-          <div id="installSaved" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);opacity:0;transition:opacity .4s">Guardado</div>
-        </div>
-      </div>
+      <div id="install-content"></div>
     </div>
 
   </div>

@@ -317,20 +317,35 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
-  // ── Installation Costs ──
-  async getInstallation(processId) {
-    const { data } = await supabase.from('installation_costs').select('*').eq('process_id', processId).single();
-    return data;
+  // ── BOM Item service flag ──
+  async updateBomItemService(id, isService) {
+    const { error } = await supabase.from('bom_items').update({ is_service: isService }).eq('id', id);
+    if (error) throw _sanitizeError(error);
   },
 
-  async saveInstallation(processId, fields) {
-    const { data, error } = await supabase
-      .from('installation_costs')
-      .upsert({ process_id: processId, ...fields, updated_at: new Date().toISOString() }, { onConflict: 'process_id' })
-      .select()
-      .single();
+  async updateBomItemServicePrice(id, price) {
+    const { error } = await supabase.from('bom_items').update({ service_price: price }).eq('id', id);
     if (error) throw _sanitizeError(error);
-    return data;
+  },
+
+  // ── Installation Costs ──
+  async getInstallation(processId) {
+    const { data } = await supabase.from('installation_costs')
+      .select('*')
+      .eq('process_id', processId)
+      .order('sort_order');
+    return data ?? [];
+  },
+
+  async saveInstallation(processId, records) {
+    // records = [{ sheet_name, sort_order, senior_count, ... }]
+    await supabase.from('installation_costs').delete().eq('process_id', processId);
+    if (!records.length) return [];
+    const { data, error } = await supabase.from('installation_costs')
+      .insert(records.map(r => ({ process_id: processId, updated_at: new Date().toISOString(), ...r })))
+      .select();
+    if (error) throw _sanitizeError(error);
+    return data ?? [];
   },
 
   // ── File upload ──
