@@ -328,6 +328,11 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async updateBomItemServiceCost(id, qty, price) {
+    const { error } = await supabase.from('bom_items').update({ quantity: qty, service_price: price }).eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
   // ── Installation Costs ──
   async getInstallation(processId) {
     const { data } = await supabase.from('installation_costs')

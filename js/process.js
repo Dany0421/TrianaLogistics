@@ -24,7 +24,6 @@ let matches = [];
 let selectedOffers = [];
 let pendingQuotItems = [];
 let currentQuotSuppId = null;
-let installData = null;
 let matchingView = 'matching'; // 'matching' | 'comparacao'
 let supplierHistory = {}; // normalised name → { email, email_cc }
 let globalSuppliersList = [];
@@ -123,12 +122,11 @@ async function loadAll() {
     }
     if (!hasRole('commercial')) {
       const supplierIds = suppliers.map(s => s.id);
-      const [allQFlat, mtch, selOfrs, qFiles, inst] = await Promise.all([
+      const [allQFlat, mtch, selOfrs, qFiles] = await Promise.all([
         API.getQuotationItemsForSuppliers(supplierIds),
         API.getMatches(processId),
         API.getSelectedOffers(processId),
         API.getQuotationFiles(supplierIds),
-        API.getInstallation(processId),
       ]);
       // Group quotation items by supplier
       quotationMap = {};
@@ -142,7 +140,6 @@ async function loadAll() {
       for (const f of qFiles) {
         if (!quotationFilesMap[f.supplier_id]) quotationFilesMap[f.supplier_id] = f;
       }
-      installData = inst;
       renderSuppliers();
       renderInstallTab();
       // Matching tab is rendered lazily on first switch
@@ -271,7 +268,7 @@ async function handleBomUpload(input) {
   if (!ALLOWED_BOM_TYPES.includes(file.type) && !file.name.match(/\.xlsx?$/i)) { showToast('Tipo de ficheiro não permitido. Usa .xlsx ou .xls.', true); return; }
 
   const buf = await file.arrayBuffer();
-  const { items, techInfos } = parseBomFile(buf);
+  const { items } = parseBomFile(buf);
 
   if (!items.length) { showToast('Não foi possível extrair itens do BOM.', true); return; }
 
@@ -286,7 +283,7 @@ async function handleBomUpload(input) {
   }
 
   pendingBomFile = file;
-  openBomValidationModal(file.name, techInfos);
+  openBomValidationModal(file.name);
 }
 
 function diffStatusBadge(status) {
@@ -300,7 +297,7 @@ function diffStatusBadge(status) {
   return `<span style="background:${bg};color:${color};border:1px solid ${color};border-radius:3px;font-size:10px;padding:1px 5px;font-family:'IBM Plex Mono',monospace">${label}</span>`;
 }
 
-function openBomValidationModal(fileName, techInfos) {
+function openBomValidationModal(fileName) {
   const isRevision = pendingDiff !== null;
   const removed = isRevision ? pendingDiff.removed : [];
 
@@ -343,7 +340,6 @@ function openBomValidationModal(fileName, techInfos) {
       <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#ff4444;letter-spacing:1px;margin-bottom:6px">REMOVIDOS DO BOM (${removed.length})</div>
       ${removed.map(r => `<div style="color:#ff8888;padding:2px 0">${esc(r.part_number ? r.part_number+' — ' : '')}${esc(r.description)}</div>`).join('')}
     </div>` : ''}
-    <div id="techSectionsContainer"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" onclick="addBomRow()">+ Linha</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -351,90 +347,6 @@ function openBomValidationModal(fileName, techInfos) {
     </div>
   `);
   renderBomValTable();
-  renderTechSections(techInfos);
-}
-
-function renderTechSections(techInfos) {
-  const container = document.getElementById('techSectionsContainer');
-  if (!container) return;
-  container.replaceChildren();
-  if (!techInfos || !techInfos.length) return;
-
-  const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.18);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px';
-
-  const title = document.createElement('div');
-  title.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px";
-  title.textContent = 'TÉCNICOS DE INSTALAÇÃO';
-  wrapper.appendChild(title);
-
-  techInfos.forEach((t, sheetIdx) => {
-    if (techInfos.length > 1) {
-      const sheetLabel = document.createElement('div');
-      sheetLabel.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:6px;' + (sheetIdx > 0 ? 'margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);' : '');
-      sheetLabel.textContent = t.sheet_name;
-      wrapper.appendChild(sheetLabel);
-    }
-
-    // One row per tech in BOM order
-    const techRows = t.rows || [];
-    const sheetContainer = document.createElement('div');
-    sheetContainer.dataset.sheetGrid = t.sheet_name;
-
-    if (!techRows.length) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'color:var(--muted);font-size:11px';
-      empty.textContent = 'Sem técnicos nesta sheet.';
-      sheetContainer.appendChild(empty);
-    } else {
-      techRows.forEach((row, rowIdx) => {
-        const rowDiv = document.createElement('div');
-        rowDiv.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:6px';
-        rowDiv.dataset.techRow = rowIdx;
-
-        [
-          { label: row.description, key: 'count', val: row.count || 0, readonlyLabel: true },
-          { label: 'Nº', key: 'count', val: row.count || 0 },
-          { label: 'Horas', key: 'hours', val: row.hours || 0 },
-        ].forEach((f, fi) => {
-          const cell = document.createElement('div');
-          const lbl = document.createElement('label');
-          lbl.style.cssText = 'font-size:11px;color:var(--muted);display:block;margin-bottom:2px';
-          lbl.textContent = fi === 0 ? row.description : f.label;
-
-          if (fi === 0) {
-            // Description label cell — no input, just label styled as value
-            lbl.style.color = 'var(--text)';
-            lbl.style.fontSize = '12px';
-            lbl.style.marginTop = '18px'; // align with inputs
-            cell.appendChild(lbl);
-          } else {
-            const inp = document.createElement('input');
-            inp.type = 'number';
-            inp.min = '0';
-            inp.step = f.key === 'hours' ? '0.5' : '1';
-            inp.value = f.val;
-            inp.style.width = '100%';
-            inp.dataset.techField = f.key;
-            cell.appendChild(lbl);
-            cell.appendChild(inp);
-          }
-          rowDiv.appendChild(cell);
-        });
-
-        sheetContainer.appendChild(rowDiv);
-      });
-    }
-
-    wrapper.appendChild(sheetContainer);
-  });
-
-  const hint = document.createElement('div');
-  hint.style.cssText = 'margin-top:6px;color:var(--muted);font-size:11px';
-  hint.textContent = 'Pré-preenchido do BOM. Edita se necessário — será guardado nos custos de instalação.';
-  wrapper.appendChild(hint);
-
-  container.appendChild(wrapper);
 }
 
 function addBomRow() {
@@ -454,12 +366,7 @@ function openManualBomEntry() {
     pendingDiff = null;
     pendingBomItems = stripped;
   }
-  // Build techInfos from existing installData so per-sheet techs are preserved
-  const techInfos = Array.isArray(installData) ? installData.map(r => ({
-    sheet_name: r.sheet_name || 'Sheet1',
-    rows: Array.isArray(r.tech_rows) ? r.tech_rows : [],
-  })) : [];
-  openBomValidationModal(bomItems.length ? 'Editar BOM' : 'Entrada Manual', techInfos);
+  openBomValidationModal(bomItems.length ? 'Editar BOM' : 'Entrada Manual');
 }
 
 function renderBomValTable() {
@@ -572,20 +479,6 @@ function renderBomValTable() {
 
 async function confirmBom() {
   try {
-    // Collect per-sheet tech rows from DOM (rendered by renderTechSections)
-    const techGrids = document.querySelectorAll('#techSectionsContainer [data-sheet-grid]');
-    const techInfosFromModal = Array.from(techGrids).map(grid => {
-      const rowDivs = grid.querySelectorAll('[data-tech-row]');
-      const rows = Array.from(rowDivs).map((rowDiv, ri) => {
-        // description comes from the original techInfos — re-read from the label text
-        const descEl = rowDiv.firstChild; // first cell has the description text
-        const description = descEl ? (descEl.querySelector('label')?.textContent || '') : '';
-        const count = parseFloat(rowDiv.querySelector('[data-tech-field="count"]')?.value) || 0;
-        const hours = parseFloat(rowDiv.querySelector('[data-tech-field="hours"]')?.value) || 0;
-        return { description, count, hours, rate: 0 };
-      });
-      return { sheet_name: grid.dataset.sheetGrid, rows };
-    });
 
     const versionNumber = (bomVersions[0]?.version_number || 0) + 1;
     let bomFilePath = null;
@@ -623,19 +516,6 @@ async function confirmBom() {
 
       const preservedCount = preserved.length;
       if (preservedCount) showToast(`BOM v${versionNumber} — ${preservedCount} match${preservedCount!==1?'es':''} preservado${preservedCount!==1?'s':''}.`);
-    }
-
-    // Save installation costs per sheet (procurement/admin only)
-    if (!hasRole('commercial') && techInfosFromModal.length) {
-      const records = techInfosFromModal
-        .filter(t => t.rows && t.rows.length)
-        .map((t, idx) => ({
-          sheet_name: t.sheet_name,
-          sort_order: idx,
-          tech_rows: t.rows,
-          diversos: 0,
-        }));
-      if (records.length) installData = await API.saveInstallation(processId, records);
     }
 
     pendingDiff = null;
@@ -2067,11 +1947,6 @@ function renderInstallTab() {
   if (!container) return;
   container.replaceChildren();
 
-  // Index tech records and service items by sheet
-  const techBySheet = {};
-  for (const r of (Array.isArray(installData) ? installData : [])) {
-    techBySheet[r.sheet_name || 'Sheet1'] = r;
-  }
   const svcBySheet = {};
   for (const bi of bomItems) {
     if (!bi.is_service) continue;
@@ -2079,125 +1954,90 @@ function renderInstallTab() {
     if (!svcBySheet[s]) svcBySheet[s] = [];
     svcBySheet[s].push(bi);
   }
+  const sheets = [...new Set(bomItems.filter(bi => bi.is_service).map(bi => bi.sheet_name || 'Sheet1'))];
 
-  // Sheets in BOM order that have techs or services
-  const bomSheetOrder = [...new Set(bomItems.map(bi => bi.sheet_name || 'Sheet1'))];
-  const sheetsWithContent = [...new Set([
-    ...bomSheetOrder.filter(s => techBySheet[s] || svcBySheet[s]),
-    ...(Array.isArray(installData) ? installData : []).map(r => r.sheet_name || 'Sheet1'),
-  ])].filter(s => techBySheet[s] || svcBySheet[s]);
-
-  if (!sheetsWithContent.length) {
+  if (!sheets.length) {
     const empty = document.createElement('div');
-    empty.style.cssText = 'color:var(--muted);font-size:13px;padding:12px 0';
-    empty.textContent = 'Nenhum técnico nem serviço definido. Faz upload de um BOM com técnicos ou activa o switch de serviço em itens do BOM.';
+    empty.className = 'card';
+    empty.style.cssText = 'color:var(--muted);font-size:13px;text-align:center;padding:32px';
+    empty.textContent = 'Nenhum serviço ativo. Ativa o switch de serviço nos itens do BOM para os ver aqui.';
     container.appendChild(empty);
   } else {
-    sheetsWithContent.forEach(sheetName => {
-      const d = techBySheet[sheetName];
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:flex;flex-direction:column;gap:16px';
+    container.appendChild(grid);
+
+    sheets.forEach(sheetName => {
       const svcItems = svcBySheet[sheetName] || [];
+      if (!svcItems.length) return;
 
-      const section = document.createElement('div');
-      section.style.cssText = 'max-width:560px;margin-bottom:24px';
-      section.dataset.installSheet = sheetName;
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.padding = '16px 20px';
+      card.dataset.installSheet = sheetName;
 
-      const label = document.createElement('div');
-      label.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px";
-      label.textContent = sheetName;
-      section.appendChild(label);
+      const header = document.createElement('div');
+      header.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)";
+      header.textContent = sheetName;
+      card.appendChild(header);
 
-      // ── Tech table ──
-      if (d) {
-        const techRowsData = Array.isArray(d.tech_rows) ? d.tech_rows : [];
-        const table = document.createElement('table');
-        table.className = 'bom-table';
-        table.style.marginBottom = '12px';
+      const table = document.createElement('table');
+      table.className = 'bom-table';
+      const thead = document.createElement('thead');
+      const hrow = document.createElement('tr');
+      [
+        { t: 'Serviço' },
+        { t: 'Qty', w: '90px', center: true },
+        { t: 'Custo unit. (MZN)', w: '170px', right: true },
+      ].forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h.t;
+        if (h.w) th.style.width = h.w;
+        if (h.center) th.style.textAlign = 'center';
+        if (h.right) th.style.textAlign = 'right';
+        hrow.appendChild(th);
+      });
+      thead.appendChild(hrow);
+      table.appendChild(thead);
 
-        const thead = document.createElement('thead');
-        const hrow = document.createElement('tr');
-        ['Técnico', 'Nº', 'Horas', 'Taxa/Hora (MZN)'].forEach((txt, hi) => {
-          const th = document.createElement('th');
-          th.textContent = txt;
-          if (hi > 0) { th.style.textAlign = 'center'; th.style.width = (hi === 3 ? 140 : 100) + 'px'; }
-          hrow.appendChild(th);
-        });
-        thead.appendChild(hrow);
-        table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      svcItems.forEach(bi => {
+        const tr = document.createElement('tr');
 
-        const tbody = document.createElement('tbody');
-        techRowsData.forEach((trow, ri) => {
-          const tr = document.createElement('tr');
-          tr.dataset.techRowIdx = ri;
-          const tdLbl = document.createElement('td');
-          tdLbl.textContent = trow.description || '';
-          tr.appendChild(tdLbl);
-          [{ key: 'count', step: '1', w: 80 }, { key: 'hours', step: '0.5', w: 80 }, { key: 'rate', step: '0.01', w: 110 }].forEach(({ key, step, w }) => {
-            const td = document.createElement('td');
-            td.style.textAlign = 'center';
-            const inp = document.createElement('input');
-            inp.type = 'number'; inp.min = '0'; inp.step = step;
-            inp.value = trow[key] || 0;
-            inp.style.cssText = `width:${w}px;text-align:${key === 'rate' ? 'right' : 'center'}`;
-            inp.dataset.techRowKey = key;
-            td.appendChild(inp); tr.appendChild(td);
-          });
-          tbody.appendChild(tr);
-        });
+        const tdDesc = document.createElement('td');
+        tdDesc.textContent = bi.description;
+        tr.appendChild(tdDesc);
 
+        const tdQty = document.createElement('td');
+        tdQty.style.textAlign = 'center';
+        const qtyInp = document.createElement('input');
+        qtyInp.type = 'number'; qtyInp.min = '0'; qtyInp.step = '1';
+        qtyInp.value = bi.quantity || 1;
+        qtyInp.style.cssText = 'width:100%;text-align:center';
+        qtyInp.dataset.serviceQtyId = bi.id;
+        tdQty.appendChild(qtyInp);
+        tr.appendChild(tdQty);
 
-        table.appendChild(tbody);
-        section.appendChild(table);
-      }
+        const tdPrice = document.createElement('td');
+        tdPrice.style.textAlign = 'right';
+        const priceInp = document.createElement('input');
+        priceInp.type = 'number'; priceInp.min = '0'; priceInp.step = '0.01';
+        priceInp.value = bi.service_price || 0;
+        priceInp.style.cssText = 'width:100%;text-align:right';
+        priceInp.dataset.servicePriceId = bi.id;
+        tdPrice.appendChild(priceInp);
+        tr.appendChild(tdPrice);
 
-      // ── Service items ──
-      if (svcItems.length) {
-        const svcLbl = document.createElement('div');
-        svcLbl.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px;" + (d ? 'margin-top:12px;' : '');
-        svcLbl.textContent = 'SERVIÇOS';
-        section.appendChild(svcLbl);
-
-        const svcTable = document.createElement('table');
-        svcTable.className = 'bom-table';
-        svcTable.style.marginBottom = '8px';
-
-        const sthead = document.createElement('thead');
-        const shrow = document.createElement('tr');
-        [{ t: 'Serviço' }, { t: 'Custo (MZN)', w: 150 }].forEach(h => {
-          const th = document.createElement('th');
-          th.textContent = h.t;
-          if (h.w) { th.style.width = h.w + 'px'; th.style.textAlign = 'right'; }
-          shrow.appendChild(th);
-        });
-        sthead.appendChild(shrow);
-        svcTable.appendChild(sthead);
-
-        const stbody = document.createElement('tbody');
-        svcItems.forEach(bi => {
-          const tr = document.createElement('tr');
-          const tdDesc = document.createElement('td');
-          tdDesc.textContent = bi.description;
-          tr.appendChild(tdDesc);
-          const tdPrice = document.createElement('td');
-          const inp = document.createElement('input');
-          inp.type = 'number'; inp.min = '0'; inp.step = '0.01';
-          inp.value = bi.service_price || 0;
-          inp.style.cssText = 'width:130px;text-align:right';
-          inp.dataset.servicePriceId = bi.id;
-          tdPrice.appendChild(inp);
-          tr.appendChild(tdPrice);
-          stbody.appendChild(tr);
-        });
-        svcTable.appendChild(stbody);
-        section.appendChild(svcTable);
-      }
-
-      container.appendChild(section);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      card.appendChild(table);
+      grid.appendChild(card);
     });
   }
 
-  // Save button + feedback
   const actions = document.createElement('div');
-  actions.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:4px';
+  actions.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:8px';
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn btn-ghost btn-sm';
   saveBtn.textContent = 'Guardar custos';
@@ -2212,35 +2052,28 @@ function renderInstallTab() {
 }
 
 async function saveInstallCosts() {
-  const sections = document.querySelectorAll('#install-content [data-install-sheet]');
-  const records = Array.from(sections).map((sec, idx) => {
-    const techRowEls = sec.querySelectorAll('[data-tech-row-idx]');
-    const tech_rows = Array.from(techRowEls).map(rowEl => ({
-      description: rowEl.querySelector('td:first-child')?.textContent || '',
-      count: parseFloat(rowEl.querySelector('[data-tech-row-key="count"]')?.value) || 0,
-      hours: parseFloat(rowEl.querySelector('[data-tech-row-key="hours"]')?.value) || 0,
-      rate: parseFloat(rowEl.querySelector('[data-tech-row-key="rate"]')?.value) || 0,
-    }));
-    const diversos = parseFloat(sec.querySelector('[data-install-key="diversos"]')?.value) || 0;
-    return { sheet_name: sec.dataset.installSheet, sort_order: idx, tech_rows, diversos };
-  });
+  const priceInputs = document.querySelectorAll('#install-content [data-service-price-id]');
+  const qtyInputs = document.querySelectorAll('#install-content [data-service-qty-id]');
 
-  // Save service item prices
-  const svcInputs = document.querySelectorAll('#install-content [data-service-price-id]');
-  const svcSavePromises = Array.from(svcInputs).map(inp => {
+  // Build a map of id → { qty, price }
+  const updates = {};
+  priceInputs.forEach(inp => {
     const id = inp.dataset.servicePriceId;
-    const price = parseFloat(inp.value) || 0;
-    const bi = bomItems.find(b => b.id === id);
-    if (bi) bi.service_price = price;
-    return API.updateBomItemServicePrice(id, price);
+    if (!updates[id]) updates[id] = {};
+    updates[id].price = parseFloat(inp.value) || 0;
+  });
+  qtyInputs.forEach(inp => {
+    const id = inp.dataset.serviceQtyId;
+    if (!updates[id]) updates[id] = {};
+    updates[id].qty = parseFloat(inp.value) || 1;
   });
 
   try {
-    const [saved] = await Promise.all([
-      API.saveInstallation(processId, records),
-      ...svcSavePromises,
-    ]);
-    installData = saved;
+    await Promise.all(Object.entries(updates).map(([id, { qty = 1, price = 0 }]) => {
+      const bi = bomItems.find(b => b.id === id);
+      if (bi) { bi.quantity = qty; bi.service_price = price; }
+      return API.updateBomItemServiceCost(id, qty, price);
+    }));
     const el = document.getElementById('installSaved');
     if (el) { el.style.opacity = '1'; setTimeout(() => el.style.opacity = '0', 2000); }
   } catch(e) { showToast('Erro: ' + e.message, true); }
@@ -2311,27 +2144,11 @@ function buildSupSheet(wb, supplier) {
   return { dataStart: DS };
 }
 
-function fillMain(ws, suppliers, sheetNames, dataStarts, orderedItems, instRecords, serviceRowsBySheet = {}) {
-  // instRecords is array of { sheet_name, tech_rows: [{description, count, hours, rate}], diversos }
+function fillMain(ws, suppliers, sheetNames, dataStarts, orderedItems, serviceRowsBySheet = {}) {
   const allTechRows = [];
   const allSvcSheets = Object.keys(serviceRowsBySheet).filter(s => (serviceRowsBySheet[s] || []).some(sv => sv.value > 0));
-  const multiSheet = instRecords.length > 1 || allSvcSheets.length > 1 || (instRecords.length === 1 && allSvcSheets.length === 1 && instRecords[0].sheet_name !== allSvcSheets[0]);
-  const processedSheets = new Set();
-  for (const r of instRecords) {
-    const sheetSuffix = multiSheet ? ` — ${r.sheet_name}` : '';
-    const rows = Array.isArray(r.tech_rows) ? r.tech_rows : [];
-    for (const t of rows) {
-      if (t.count > 0) allTechRows.push({ label: `${t.description} (${t.count})${sheetSuffix}`, count: t.count, rate: t.rate || 0, hours: t.hours || 0 });
-    }
-    for (const svc of (serviceRowsBySheet[r.sheet_name] || [])) {
-      if (svc.value > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, value: svc.value });
-    }
-    if (r.diversos > 0) allTechRows.push({ label: `Diversos${sheetSuffix}`, isDiversos: true, value: r.diversos });
-    processedSheets.add(r.sheet_name);
-  }
-  // Service items on sheets with no instRecord
+  const multiSheet = allSvcSheets.length > 1;
   for (const [sheetName, svcRows] of Object.entries(serviceRowsBySheet)) {
-    if (processedSheets.has(sheetName)) continue;
     const sheetSuffix = multiSheet ? ` — ${sheetName}` : '';
     for (const svc of svcRows) {
       if (svc.value > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, value: svc.value });
@@ -2437,14 +2254,12 @@ async function generateExcel() {
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
   if (!activeSuppliers.length) { showToast('Sem itens com preço no Matching.', true); return; }
 
-  const instRecords = Array.isArray(installData) ? installData : [];
-
   const serviceRowsBySheet = {};
   for (const bi of bomItems) {
     if (!bi.is_service) continue;
     const sheet = bi.sheet_name || 'Sheet1';
     if (!serviceRowsBySheet[sheet]) serviceRowsBySheet[sheet] = [];
-    serviceRowsBySheet[sheet].push({ label: bi.description, value: bi.service_price || 0 });
+    serviceRowsBySheet[sheet].push({ label: bi.description, value: (bi.service_price || 0) * (bi.quantity || 1) });
   }
 
   try {
@@ -2460,7 +2275,7 @@ async function generateExcel() {
       sheetNames.push(s.name.substring(0, 31));
       dataStarts.push(dataStart);
     }
-    fillMain(mainWs, activeSuppliers, sheetNames, dataStarts, orderedItems, instRecords, serviceRowsBySheet);
+    fillMain(mainWs, activeSuppliers, sheetNames, dataStarts, orderedItems, serviceRowsBySheet);
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
@@ -2493,11 +2308,8 @@ function generateReport() {
   }
 
   let installTotal = 0;
-  for (const inst of (Array.isArray(installData) ? installData : [])) {
-    for (const t of (Array.isArray(inst.tech_rows) ? inst.tech_rows : [])) {
-      installTotal += (t.count || 0) * (t.hours || 0) * (t.rate || 0);
-    }
-    installTotal += (inst.diversos || 0);
+  for (const bi of bomItems) {
+    if (bi.is_service) installTotal += (bi.service_price || 0) * (bi.quantity || 1);
   }
   const grandTotal = equipTotal + installTotal;
 
@@ -2577,20 +2389,14 @@ function generateReport() {
   }
 
   if (installTotal > 0) {
-    html += '<h2>Instalacao / Tecnicos</h2>';
-    html += '<table><thead><tr><th>Tecnico</th><th class="r">Nr</th><th class="r">Horas</th><th class="r">Taxa/h</th><th class="r">Total</th></tr></thead><tbody>';
-    for (const inst of (Array.isArray(installData) ? installData : [])) {
-      for (const t of (Array.isArray(inst.tech_rows) ? inst.tech_rows : [])) {
-        if ((t.count || 0) > 0) {
-          const tot = (t.count||0)*(t.hours||0)*(t.rate||0);
-          html += '<tr><td>' + esc(t.description) + '</td><td class="r">' + t.count + '</td><td class="r">' + t.hours + '</td><td class="r">' + fmt(t.rate) + '</td><td class="r">' + fmt(tot) + '</td></tr>';
-        }
-      }
-      if ((inst.diversos||0) > 0) {
-        html += '<tr><td>Diversos</td><td colspan="3"></td><td class="r">' + fmt(inst.diversos) + '</td></tr>';
-      }
+    html += '<h2>Serviços / Instalação</h2>';
+    html += '<table><thead><tr><th>Serviço</th><th class="r">Qty</th><th class="r">Custo unit.</th><th class="r">Total</th></tr></thead><tbody>';
+    for (const bi of bomItems) {
+      if (!bi.is_service || !(bi.service_price > 0)) continue;
+      const tot = (bi.service_price || 0) * (bi.quantity || 1);
+      html += '<tr><td>' + esc(bi.description) + '</td><td class="r">' + (bi.quantity || 1) + '</td><td class="r">' + fmt(bi.service_price) + '</td><td class="r">' + fmt(tot) + '</td></tr>';
     }
-    html += '<tr class="total-row"><td colspan="4">Subtotal Instalacao</td><td class="r">' + fmt(installTotal) + '</td></tr>';
+    html += '<tr class="total-row"><td colspan="3">Subtotal Serviços</td><td class="r">' + fmt(installTotal) + '</td></tr>';
     html += '</tbody></table>';
   }
 
