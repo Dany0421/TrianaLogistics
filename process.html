@@ -98,6 +98,16 @@
   .comp-cell-sel  { background:rgba(59,130,246,.15);  color:#60a5fa; }
   .comp-cell-both { background:rgba(16,185,129,.2);   color:#34d399; outline:1px solid rgba(59,130,246,.5); }
   .comp-cell-none { color:#334; font-size:16px; }
+
+  @media (max-width: 768px) {
+    /* Tab bar — horizontal scroll */
+    .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+    .tab { white-space: nowrap; flex-shrink: 0; padding: 10px 14px; font-size: 11px; }
+    /* Process header wraps on small screens */
+    .process-header { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
+    /* BOM validation + matching tables — horizontal scroll */
+    .bom-validate-table, .match-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
 </style>
 </head>
 <body>
