@@ -459,3 +459,67 @@ textarea { resize: vertical; min-height: 80px; }
   .login-panel-left { display: none; }
   .login-panel-right { padding: 40px 24px; }
 }
+
+/* ──────────────────────────────────────────────
+   MOBILE  (≤ 768px)  — desktop styles unchanged
+────────────────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* Topbar */
+  .topbar { padding: 0 14px; gap: 8px; }
+  .user-chip { display: none; }
+
+  /* Page */
+  .page-content { padding: 20px 14px; }
+
+  /* Stat cards — 2 columns */
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 24px; }
+  .stat-number { font-size: 26px; }
+  .stat-card { padding: 14px 16px; }
+
+  /* Dashboard process list — collapse fixed grid to card-style */
+  .process-table-header { display: none; }
+  .process-row {
+    grid-template-columns: 1fr 1fr;
+    padding: 12px 14px;
+    gap: 6px 10px;
+  }
+  /* Name/client col spans full row; actions col spans full row */
+  .process-row > *:nth-child(1),
+  .process-row > *:nth-child(6) { grid-column: 1 / -1; }
+
+  /* Cards */
+  .card { padding: 14px; }
+  .card-header { flex-wrap: wrap; gap: 8px; }
+
+  /* Modals — slide up from bottom */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal-box, .modal-box-lg {
+    width: 100%;
+    padding: 22px 18px;
+    border-radius: 16px 16px 0 0;
+    max-height: 90vh;
+  }
+  .modal-actions { flex-wrap: wrap; gap: 8px; }
+  .modal-actions .btn { flex: 1 1 auto; justify-content: center; min-width: 120px; }
+
+  /* Form grids → single column */
+  .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; gap: 0; }
+
+  /* Toast — full-width at bottom */
+  #toast { right: 12px; left: 12px; bottom: 16px; max-width: none; min-width: 0; }
+
+  /* Filter bar — stack vertically */
+  .filter-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .filter-bar input, .filter-bar select { max-width: none; }
+
+  /* Section header */
+  .section-header { flex-wrap: wrap; gap: 8px; }
+
+  /* Tables — horizontal scroll */
+  .bom-table, .bom-validate-table, .match-table, .supp-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
