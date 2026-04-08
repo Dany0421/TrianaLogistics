@@ -416,7 +416,7 @@ function renderCharts(processes, topSuppliers) {
     return x;
   }
 
-  const mon = mondayOfWeekContaining(cutoff);
+  let mon = mondayOfWeekContaining(cutoff);
 
   const trendPeriods = [];
   while (mon.getTime() <= now.getTime()) {
