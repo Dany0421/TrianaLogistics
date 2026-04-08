@@ -1436,6 +1436,9 @@ function renderMatchingTab() {
     return;
   }
 
+  const equipItems = bomItems.filter(bi => !bi.is_service);
+  const serviceItems = bomItems.filter(bi => bi.is_service);
+
   // Build lookups (shared by both views)
   const matchLookup = {};
   for (const m of matches) {
@@ -1445,8 +1448,8 @@ function renderMatchingTab() {
   const selLookup = {};
   for (const o of selectedOffers) selLookup[o.bom_item_id] = o.supplier_id;
 
-  const covered = bomItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length;
-  const pct = bomItems.length ? Math.round(covered / bomItems.length * 100) : 0;
+  const covered = equipItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length;
+  const pct = equipItems.length ? Math.round(covered / equipItems.length * 100) : 0;
   const pctColor = pct === 100 ? 'var(--accent)' : pct > 50 ? '#4fc3f7' : 'var(--danger)';
 
   // ── Toggle bar ──
@@ -1463,20 +1466,20 @@ function renderMatchingTab() {
   el.appendChild(toggleBar);
 
   if (matchingView === 'matching') {
-    _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered);
+    _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems);
   } else {
-    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered);
+    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems);
   }
 }
 
-function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered) {
+function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems) {
   const pctColor2 = pctColor;
   let html = `
     <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;flex-wrap:wrap">
       <div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
         <div style="font-size:28px;font-weight:700;color:${pctColor2}">${pct}%</div>
-        <div style="color:var(--muted);font-size:12px">${covered}/${bomItems.length} itens</div>
+        <div style="color:var(--muted);font-size:12px">${covered}/${equipItems.length} itens</div>
       </div>
       <div style="flex:1">
         <div class="coverage-bar"><div class="coverage-bar-fill" style="width:${pct}%"></div></div>
@@ -1494,7 +1497,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered)
       <tbody>`;
 
   let lastCat = null;
-  for (const bi of bomItems) {
+  for (const bi of equipItems) {
     if (bi.category && bi.category !== lastCat) {
       html += `<tr class="match-cat-row"><td colspan="${3+suppliers.length}">${esc(bi.category)}</td></tr>`;
       lastCat = bi.category;
@@ -1537,14 +1540,14 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered)
   el.appendChild(document.createRange().createContextualFragment(html));
 }
 
-function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered) {
+function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems) {
   const suppCoverage = {};
-  for (const s of suppliers) suppCoverage[s.id] = bomItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
+  for (const s of suppliers) suppCoverage[s.id] = equipItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
   const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
 
   const colTotals = {};
   for (const s of suppliers) {
-    colTotals[s.id] = bomItems.reduce((sum, bi) => {
+    colTotals[s.id] = equipItems.reduce((sum, bi) => {
       const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
       return sum + (p != null ? p : 0);
     }, 0);
@@ -1555,12 +1558,16 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
     return sum + (p || 0);
   }, 0);
 
+  const serviceTotal = serviceItems.reduce((sum, bi) => sum + ((bi.service_price || 0) * (bi.quantity || 1)), 0);
+
+  const numCols = suppliers.length + (serviceItems.length ? 1 : 0);
+
   let html = `
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px">
       <div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
         <div style="font-size:24px;font-weight:700;color:${pctColor}">${pct}%</div>
-        <div style="color:var(--muted);font-size:12px">${covered}/${bomItems.length} itens</div>
+        <div style="color:var(--muted);font-size:12px">${covered}/${equipItems.length} itens</div>
       </div>
       ${topSupp ? `<div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">MAIS COBERTURA</div>
@@ -1571,19 +1578,24 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">TOTAL SELECIONADO</div>
         <div style="font-size:15px;font-weight:600;color:var(--accent)">${fmtPrice(totalSelected)}</div>
       </div>` : ''}
+      ${serviceTotal > 0 ? `<div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">SERVIÇOS TRIANA</div>
+        <div style="font-size:15px;font-weight:600;color:var(--warn)">${fmtPrice(serviceTotal)}</div>
+      </div>` : ''}
     </div>
     <div class="comp-wrap">
     <table class="comp-table">
       <thead><tr>
         <th>Item BOM</th>
         ${suppliers.map(s => `<th>${esc(s.name)}</th>`).join('')}
+        ${serviceItems.length ? '<th style="color:var(--warn)">Triana</th>' : ''}
       </tr></thead>
       <tbody>`;
 
   let lastCat = null;
-  for (const bi of bomItems) {
+  for (const bi of equipItems) {
     if (bi.category && bi.category !== lastCat) {
-      html += `<tr class="comp-cat-row"><td colspan="${1 + suppliers.length}">${esc(bi.category)}</td></tr>`;
+      html += `<tr class="comp-cat-row"><td colspan="${1 + numCols}">${esc(bi.category)}</td></tr>`;
       lastCat = bi.category;
     }
     let lowestPrice = Infinity;
@@ -1609,13 +1621,30 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
         }
         return `<td><span class="comp-cell comp-cell-none">—</span></td>`;
       }).join('')}
+      ${serviceItems.length ? '<td></td>' : ''}
     </tr>`;
+  }
+
+  if (serviceItems.length) {
+    html += `<tr class="comp-cat-row"><td colspan="${1 + numCols}" style="color:var(--warn)">Serviços Triana</td></tr>`;
+    for (const bi of serviceItems) {
+      const svcTotal = (bi.service_price || 0) * (bi.quantity || 1);
+      html += `<tr>
+        <td>
+          <div style="font-size:13px">${esc(bi.description)}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">Qty: ${bi.quantity || 1}</div>
+        </td>
+        ${suppliers.map(() => '<td></td>').join('')}
+        <td><span class="comp-cell" style="color:var(--warn)">${svcTotal > 0 ? fmtPrice(svcTotal) : '—'}<span style="font-size:9px;opacity:.7;margin-left:3px">MZN</span></span></td>
+      </tr>`;
+    }
   }
 
   html += `</tbody>
     <tfoot><tr>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total Equipamento</td>
       ${suppliers.map(s => `<td>${colTotals[s.id] > 0 ? fmtPrice(colTotals[s.id]) : '<span style="color:#334">—</span>'}</td>`).join('')}
+      ${serviceItems.length ? `<td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--warn);font-weight:600">${serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'}</td>` : ''}
     </tr></tfoot>
     </table></div>`;
 
@@ -1729,6 +1758,7 @@ async function runAutoMatch() {
 
   const newMatches = [];
   for (const bi of bomItems) {
+    if (bi.is_service) continue;
     const biWords = bi.description.toLowerCase().split(/\W+/).filter(w => w.length > 2);
     if (!biWords.length) continue;
     for (const s of suppliersWithItems) {
