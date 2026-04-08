@@ -2276,8 +2276,8 @@ async function generateExcel() {
 
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
     const indexInSupplier = supplierCounters[suppId]++;
-    supplierItems[suppId].push({ part: bi.part_number || '', model: bi.description, qty: String(bi.quantity), price: String(qi.price) });
-    orderedItems.push({ part: bi.part_number || '', model: bi.description, qty: bi.quantity, suppId, indexInSupplier });
+    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: String(bi.quantity), price: String(qi.price) });
+    orderedItems.push({ part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: bi.quantity, suppId, indexInSupplier });
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
