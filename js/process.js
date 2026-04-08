@@ -2281,7 +2281,6 @@ async function generateExcel() {
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
-  if (!activeSuppliers.length) { showToast('Sem itens com preço no Matching.', true); return; }
 
   const serviceRowsBySheet = {};
   for (const bi of bomItems) {
@@ -2290,6 +2289,9 @@ async function generateExcel() {
     if (!serviceRowsBySheet[sheet]) serviceRowsBySheet[sheet] = [];
     serviceRowsBySheet[sheet].push({ label: bi.description, value: (bi.service_price || 0) * (bi.quantity || 1) });
   }
+
+  const hasServices = Object.values(serviceRowsBySheet).some(arr => arr.some(s => s.value > 0));
+  if (!activeSuppliers.length && !hasServices) { showToast('Sem itens com preço no Matching nem serviços.', true); return; }
 
   try {
     const wb = new ExcelJS.Workbook();
