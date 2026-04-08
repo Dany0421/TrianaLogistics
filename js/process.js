@@ -2175,12 +2175,12 @@ function buildSupSheet(wb, supplier) {
 
 function fillMain(ws, suppliers, sheetNames, dataStarts, orderedItems, serviceRowsBySheet = {}) {
   const allTechRows = [];
-  const allSvcSheets = Object.keys(serviceRowsBySheet).filter(s => (serviceRowsBySheet[s] || []).some(sv => sv.value > 0));
+  const allSvcSheets = Object.keys(serviceRowsBySheet).filter(s => (serviceRowsBySheet[s] || []).some(sv => sv.unitPrice > 0));
   const multiSheet = allSvcSheets.length > 1;
   for (const [sheetName, svcRows] of Object.entries(serviceRowsBySheet)) {
     const sheetSuffix = multiSheet ? ` — ${sheetName}` : '';
     for (const svc of svcRows) {
-      if (svc.value > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, value: svc.value });
+      if (svc.unitPrice > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, qty: svc.qty, unitPrice: svc.unitPrice });
     }
   }
   const hasTechs = allTechRows.length > 0;
@@ -2223,13 +2223,8 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, orderedItems, serviceRo
     for(const t of allTechRows){
       for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
       sc2(ws.getCell(row,2),{value:t.label,font:dF,alignment:{horizontal:'left',vertical:'middle'}});
-      if(t.isDiversos){
-        sc2(ws.getCell(row,3),{value:1,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-        sc2(ws.getCell(row,trCol),{value:t.value,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      } else {
-        sc2(ws.getCell(row,3),{value:t.hours,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-        sc2(ws.getCell(row,trCol),{value:t.rate*t.count,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      }
+      sc2(ws.getCell(row,3),{value:t.qty||1,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
+      sc2(ws.getCell(row,trCol),{value:t.unitPrice,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
       sc2(ws.getCell(row,tc),{value:{formula:`+${trL}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
       row++;
     }
@@ -2287,10 +2282,10 @@ async function generateExcel() {
     if (!bi.is_service) continue;
     const sheet = bi.sheet_name || 'Sheet1';
     if (!serviceRowsBySheet[sheet]) serviceRowsBySheet[sheet] = [];
-    serviceRowsBySheet[sheet].push({ label: bi.description, value: (bi.service_price || 0) * (bi.quantity || 1) });
+    serviceRowsBySheet[sheet].push({ label: bi.description, qty: bi.quantity || 1, unitPrice: bi.service_price || 0 });
   }
 
-  const hasServices = Object.values(serviceRowsBySheet).some(arr => arr.some(s => s.value > 0));
+  const hasServices = Object.values(serviceRowsBySheet).some(arr => arr.some(s => s.unitPrice > 0));
   if (!activeSuppliers.length && !hasServices) { showToast('Sem itens com preço no Matching nem serviços.', true); return; }
 
   try {
