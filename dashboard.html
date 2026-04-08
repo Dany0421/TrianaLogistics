@@ -153,9 +153,6 @@
         <option>Medium</option>
         <option>Low</option>
       </select>
-      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap">
-        <input type="checkbox" id="filterMine" onchange="renderList()"> Meus processos
-      </label>
       <div style="margin-left:auto">
         <button class="btn btn-primary" onclick="openCreateModal()">+ Novo Processo</button>
       </div>
@@ -396,7 +393,7 @@ function renderCharts(processes, topSuppliers) {
 
   const priorities = ['Low','Medium','High','Urgent'];
   const priorityColors = ['#475569','#3b82f6','#f59e0b','#f87171'];
-  const priorityCounts = priorities.map(pr => processes.filter(p => p.priority === pr).length);
+  const priorityCounts = priorities.map(pr => processes.filter(p => p.priority === pr && p.status !== 'Closed' && p.status !== 'Cancelled').length);
 
   // Monthly trend — last 6 months
   const now = new Date();
@@ -590,10 +587,10 @@ function renderUserStats() {
   const avgByUser = {};
   for (const p of allProcesses) {
     if (p.status !== 'Closed' || !p.closed_at || !p.assigned_to) continue;
-    const days = (new Date(p.closed_at) - new Date(p.created_at)) / 86400000;
-    if (days < 0 || days > 730) continue;
+    const hours = (new Date(p.closed_at) - new Date(p.created_at)) / 3600000;
+    if (hours < 0 || hours > 730 * 24) continue;
     if (!avgByUser[p.assigned_to]) avgByUser[p.assigned_to] = [];
-    avgByUser[p.assigned_to].push(days);
+    avgByUser[p.assigned_to].push(hours);
   }
 
   section.style.display = '';
@@ -633,7 +630,7 @@ function renderUserStats() {
     subDiv.style.cssText = "font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:4px";
     if (closedVals.length) {
       const avg = closedVals.reduce((a, b) => a + b, 0) / closedVals.length;
-      subDiv.textContent = 'média ' + Math.round(avg) + 'd · ' + closedVals.length + ' fechados';
+      subDiv.textContent = 'média ' + Math.round(avg) + 'h · ' + closedVals.length + ' fechados';
     } else {
       subDiv.textContent = 'sem histórico';
     }
@@ -657,6 +654,76 @@ function setFilterPriority(val) {
 
 // ── Process list ──
 const PRIORITY_ORDER = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
+let closedExpanded = false;
+
+function buildProcessRow(p) {
+  const row = document.createElement('div');
+  row.className = 'process-row';
+  row.addEventListener('click', () => goToProcess(p.id));
+  const col = document.createElement('div');
+  const pn = document.createElement('div');
+  pn.className = 'process-name';
+  pn.textContent = p.project_name || '';
+  const pc = document.createElement('div');
+  pc.className = 'process-client';
+  pc.textContent = p.client_name || '';
+  col.appendChild(pn);
+  col.appendChild(pc);
+  // Priority — hidden for closed processes
+  const pri = document.createElement('span');
+  if (p.status === 'Closed' || !p.priority) {
+    pri.style.cssText = 'font-size:12px;color:var(--muted)';
+    pri.textContent = '\u2014';
+  } else {
+    pri.className = 'priority-' + p.priority.toLowerCase();
+    pri.style.cssText = "font-family:'DM Mono',monospace;font-size:12px";
+    pri.textContent = p.priority;
+  }
+  const st = document.createElement('span');
+  applyStatusBadge(st, p.status, p.status_color);
+  st.textContent = p.status || 'Active';
+  const dl = document.createElement('span');
+  dl.className = 'deadline-chip ' + deadlineClass(p.deadline);
+  dl.textContent = p.deadline ? fmtDate(p.deadline) : '\u2014';
+  let assigneeEl;
+  if (p.assignee) {
+    assigneeEl = document.createElement('span');
+    assigneeEl.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px";
+    assigneeEl.textContent = p.assignee.name || '';
+  } else {
+    assigneeEl = document.createElement('span');
+    assigneeEl.style.cssText = 'font-size:11px;color:var(--muted)';
+    assigneeEl.textContent = '\u2014';
+  }
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:6px';
+  actions.addEventListener('click', (e) => e.stopPropagation());
+  const b1 = document.createElement('button');
+  b1.type = 'button';
+  b1.className = 'btn btn-ghost btn-sm';
+  b1.textContent = 'Editar';
+  b1.addEventListener('click', () => openCreateModal(p.id));
+  const b2 = document.createElement('button');
+  b2.type = 'button';
+  b2.className = 'btn btn-ghost btn-sm';
+  b2.textContent = 'Clone';
+  b2.addEventListener('click', () => openCloneModal(p.id));
+  const b3 = document.createElement('button');
+  b3.type = 'button';
+  b3.className = 'btn btn-danger btn-sm';
+  b3.textContent = '\u00d7';
+  b3.addEventListener('click', () => confirmDelete(p.id));
+  actions.appendChild(b1);
+  actions.appendChild(b2);
+  actions.appendChild(b3);
+  row.appendChild(col);
+  row.appendChild(pri);
+  row.appendChild(st);
+  row.appendChild(dl);
+  row.appendChild(assigneeEl);
+  row.appendChild(actions);
+  return row;
+}
 
 function renderList() {
   const q  = document.getElementById('searchInput').value.toLowerCase().trim();
@@ -667,15 +734,19 @@ function renderList() {
   if (q)  list = list.filter(p => p.client_name?.toLowerCase().includes(q) || p.project_name?.toLowerCase().includes(q));
   if (fs) list = list.filter(p => p.status === fs);
   if (fp) list = list.filter(p => p.priority === fp);
-  if (document.getElementById('filterMine')?.checked) list = list.filter(p => p.assigned_to === currentUser.id);
   const fa = document.getElementById('filterAssignee')?.value || '';
   if (fa) list = list.filter(p => p.assigned_to === fa);
 
-  list.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || new Date(a.deadline||'9999') - new Date(b.deadline||'9999'));
+  const activePart = list.filter(p => p.status !== 'Closed' && p.status !== 'Cancelled');
+  const closedPart = list.filter(p => p.status === 'Closed' || p.status === 'Cancelled');
+
+  activePart.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2) || new Date(a.deadline||'9999') - new Date(b.deadline||'9999'));
+  closedPart.sort((a, b) => new Date(b.closed_at || b.created_at) - new Date(a.closed_at || a.created_at));
 
   const el = document.getElementById('processList');
   el.replaceChildren();
-  if (!list.length) {
+
+  if (!activePart.length && !closedPart.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
     empty.appendChild(document.createTextNode('Sem processos encontrados.'));
@@ -684,71 +755,42 @@ function renderList() {
     el.appendChild(empty);
     return;
   }
+
   const listWrap = document.createElement('div');
   listWrap.className = 'process-list';
-  for (const p of list) {
-    const row = document.createElement('div');
-    row.className = 'process-row';
-    row.addEventListener('click', () => goToProcess(p.id));
-    const col = document.createElement('div');
-    const pn = document.createElement('div');
-    pn.className = 'process-name';
-    pn.textContent = p.project_name || '';
-    const pc = document.createElement('div');
-    pc.className = 'process-client';
-    pc.textContent = p.client_name || '';
-    col.appendChild(pn);
-    col.appendChild(pc);
-    const pri = document.createElement('span');
-    pri.className = 'priority-' + (p.priority || 'medium').toLowerCase();
-    pri.style.cssText = "font-family:'DM Mono',monospace;font-size:12px";
-    pri.textContent = p.priority || 'Medium';
-    const st = document.createElement('span');
-    applyStatusBadge(st, p.status, p.status_color);
-    st.textContent = p.status || 'Active';
-    const dl = document.createElement('span');
-    dl.className = 'deadline-chip ' + deadlineClass(p.deadline);
-    dl.textContent = p.deadline ? fmtDate(p.deadline) : '\u2014';
-    let assigneeEl;
-    if (p.assignee) {
-      assigneeEl = document.createElement('span');
-      assigneeEl.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px";
-      assigneeEl.textContent = p.assignee.name || '';
-    } else {
-      assigneeEl = document.createElement('span');
-      assigneeEl.style.cssText = 'font-size:11px;color:var(--muted)';
-      assigneeEl.textContent = '\u2014';
-    }
-    const actions = document.createElement('div');
-    actions.style.cssText = 'display:flex;gap:6px';
-    actions.addEventListener('click', (e) => e.stopPropagation());
-    const b1 = document.createElement('button');
-    b1.type = 'button';
-    b1.className = 'btn btn-ghost btn-sm';
-    b1.textContent = 'Editar';
-    b1.addEventListener('click', () => openCreateModal(p.id));
-    const b2 = document.createElement('button');
-    b2.type = 'button';
-    b2.className = 'btn btn-ghost btn-sm';
-    b2.textContent = 'Clone';
-    b2.addEventListener('click', () => openCloneModal(p.id));
-    const b3 = document.createElement('button');
-    b3.type = 'button';
-    b3.className = 'btn btn-danger btn-sm';
-    b3.textContent = '\u00d7';
-    b3.addEventListener('click', () => confirmDelete(p.id));
-    actions.appendChild(b1);
-    actions.appendChild(b2);
-    actions.appendChild(b3);
-    row.appendChild(col);
-    row.appendChild(pri);
-    row.appendChild(st);
-    row.appendChild(dl);
-    row.appendChild(assigneeEl);
-    row.appendChild(actions);
-    listWrap.appendChild(row);
-  }
+  for (const p of activePart) listWrap.appendChild(buildProcessRow(p));
   el.appendChild(listWrap);
+
+  // Closed section
+  if (closedPart.length) {
+    const closedSection = document.createElement('div');
+    closedSection.style.cssText = 'margin-top:12px';
+
+    const toggleRow = document.createElement('div');
+    toggleRow.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 6px;cursor:pointer;color:var(--muted);border-top:1px solid var(--border);user-select:none';
+    toggleRow.addEventListener('click', () => {
+      closedExpanded = !closedExpanded;
+      arrow.textContent = closedExpanded ? '▼' : '▶';
+      closedList.style.display = closedExpanded ? '' : 'none';
+    });
+    const arrow = document.createElement('span');
+    arrow.style.cssText = 'font-size:10px';
+    arrow.textContent = closedExpanded ? '▼' : '▶';
+    const label = document.createElement('span');
+    label.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase";
+    label.textContent = 'Fechados / Cancelados (' + closedPart.length + ')';
+    toggleRow.appendChild(arrow);
+    toggleRow.appendChild(label);
+
+    const closedList = document.createElement('div');
+    closedList.className = 'process-list';
+    closedList.style.cssText = 'margin-top:6px;opacity:.7;' + (closedExpanded ? '' : 'display:none');
+    for (const p of closedPart) closedList.appendChild(buildProcessRow(p));
+
+    closedSection.appendChild(toggleRow);
+    closedSection.appendChild(closedList);
+    el.appendChild(closedSection);
+  }
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -814,9 +856,9 @@ function openCreateModal(id = null) {
     <div class="form-grid-2">
       <div><label>Deadline</label><input type="date" id="f_deadline" value="${p?.deadline||''}"></div>
       <div><label>Prioridade</label>
-        <select id="f_priority">
-          ${['Low','Medium','High','Urgent'].map(v => `<option ${(p?.priority||'Medium')===v?'selected':''}>${v}</option>`).join('')}
-        </select>
+        ${(p?.status === 'Closed' || p?.status === 'Cancelled')
+          ? `<input type="hidden" id="f_priority" value=""><div style="padding:10px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:14px">\u2014</div>`
+          : `<select id="f_priority">${['Low','Medium','High','Urgent'].map(v => `<option ${(p?.priority||'Medium')===v?'selected':''}>${v}</option>`).join('')}</select>`}
       </div>
     </div>
     ${p ? `<div class="form-row"><label>Estado</label>
@@ -881,7 +923,7 @@ async function saveProcess() {
     client_name:  document.getElementById('f_client').value.trim(),
     project_name: document.getElementById('f_project').value.trim(),
     deadline:     document.getElementById('f_deadline').value || null,
-    priority:     document.getElementById('f_priority').value,
+    priority:     document.getElementById('f_priority').value || null,
     notes:        document.getElementById('f_notes').value.trim(),
     categories:   pendingProcessCategories,
   };
@@ -898,9 +940,12 @@ async function saveProcess() {
     }
   }
   fields.assigned_to = document.getElementById('f_assigned').value || null;
-  if (fields.status === 'Closed') {
-    const prev = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
-    if (!prev || prev.status !== 'Closed') fields.closed_at = new Date().toISOString();
+  if (fields.status === 'Closed' || fields.status === 'Cancelled') {
+    if (fields.status === 'Closed') {
+      const prev = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
+      if (!prev || prev.status !== 'Closed') fields.closed_at = new Date().toISOString();
+    }
+    fields.priority = null; // terminal states have no priority
   }
 
   // Auto-status: no assignee → waiting; newly assigned → active
