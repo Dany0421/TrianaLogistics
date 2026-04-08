@@ -1541,6 +1541,9 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
 }
 
 function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems) {
+  const hasServices = serviceItems.length > 0;
+  const numCols = suppliers.length + (hasServices ? 1 : 0);
+
   const suppCoverage = {};
   for (const s of suppliers) suppCoverage[s.id] = equipItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
   const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
@@ -1559,8 +1562,6 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   }, 0);
 
   const serviceTotal = serviceItems.reduce((sum, bi) => sum + ((bi.service_price || 0) * (bi.quantity || 1)), 0);
-
-  const numCols = suppliers.length + (serviceItems.length ? 1 : 0);
 
   let html = `
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px">
@@ -1588,54 +1589,52 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       <thead><tr>
         <th>Item BOM</th>
         ${suppliers.map(s => `<th>${esc(s.name)}</th>`).join('')}
-        ${serviceItems.length ? '<th style="color:var(--warn)">Triana</th>' : ''}
+        ${hasServices ? '<th style="color:var(--warn)">Triana</th>' : ''}
       </tr></thead>
       <tbody>`;
 
   let lastCat = null;
-  for (const bi of equipItems) {
+  for (const bi of bomItems) {
     if (bi.category && bi.category !== lastCat) {
       html += `<tr class="comp-cat-row"><td colspan="${1 + numCols}">${esc(bi.category)}</td></tr>`;
       lastCat = bi.category;
     }
-    let lowestPrice = Infinity;
-    for (const s of suppliers) {
-      const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
-      if (p != null && p < lowestPrice) lowestPrice = p;
-    }
-    const selectedSuppId = selLookup[bi.id];
-    html += `<tr>
-      <td>
-        <div style="font-size:13px">${esc(bi.description)}</div>
-        ${bi.part_number ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
-      </td>
-      ${suppliers.map(s => {
-        const m = matchLookup[bi.id]?.[s.id];
-        const price = m?.quotation_items?.price;
-        const currency = m?.quotation_items?.currency || '';
-        const isSel = selectedSuppId === s.id;
-        const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
-        if (price != null) {
-          const cls = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
-          return `<td><span class="${cls}">${fmtPrice(price)}<span style="font-size:9px;opacity:.7;margin-left:3px">${esc(currency)}</span></span></td>`;
-        }
-        return `<td><span class="comp-cell comp-cell-none">—</span></td>`;
-      }).join('')}
-      ${serviceItems.length ? '<td></td>' : ''}
-    </tr>`;
-  }
 
-  if (serviceItems.length) {
-    html += `<tr class="comp-cat-row"><td colspan="${1 + numCols}" style="color:var(--warn)">Serviços Triana</td></tr>`;
-    for (const bi of serviceItems) {
+    if (bi.is_service) {
       const svcTotal = (bi.service_price || 0) * (bi.quantity || 1);
       html += `<tr>
         <td>
-          <div style="font-size:13px">${esc(bi.description)}</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">Qty: ${bi.quantity || 1}</div>
+          <div style="font-size:13px;color:var(--warn)">${esc(bi.description)}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--warn);opacity:.6">Qty: ${bi.quantity || 1}</div>
         </td>
         ${suppliers.map(() => '<td></td>').join('')}
         <td><span class="comp-cell" style="color:var(--warn)">${svcTotal > 0 ? fmtPrice(svcTotal) : '—'}<span style="font-size:9px;opacity:.7;margin-left:3px">MZN</span></span></td>
+      </tr>`;
+    } else {
+      let lowestPrice = Infinity;
+      for (const s of suppliers) {
+        const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
+        if (p != null && p < lowestPrice) lowestPrice = p;
+      }
+      const selectedSuppId = selLookup[bi.id];
+      html += `<tr>
+        <td>
+          <div style="font-size:13px">${esc(bi.description)}</div>
+          ${bi.part_number ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
+        </td>
+        ${suppliers.map(s => {
+          const m = matchLookup[bi.id]?.[s.id];
+          const price = m?.quotation_items?.price;
+          const currency = m?.quotation_items?.currency || '';
+          const isSel = selectedSuppId === s.id;
+          const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
+          if (price != null) {
+            const cls = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
+            return `<td><span class="${cls}">${fmtPrice(price)}<span style="font-size:9px;opacity:.7;margin-left:3px">${esc(currency)}</span></span></td>`;
+          }
+          return `<td><span class="comp-cell comp-cell-none">—</span></td>`;
+        }).join('')}
+        ${hasServices ? '<td></td>' : ''}
       </tr>`;
     }
   }
@@ -1644,7 +1643,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
     <tfoot><tr>
       <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total Equipamento</td>
       ${suppliers.map(s => `<td>${colTotals[s.id] > 0 ? fmtPrice(colTotals[s.id]) : '<span style="color:#334">—</span>'}</td>`).join('')}
-      ${serviceItems.length ? `<td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--warn);font-weight:600">${serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'}</td>` : ''}
+      ${hasServices ? `<td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--warn);font-weight:600">${serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'}</td>` : ''}
     </tr></tfoot>
     </table></div>`;
 
