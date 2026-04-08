@@ -330,7 +330,7 @@ function openBomValidationModal(fileName) {
           <th style="width:8%">Unid.</th>
           <th style="width:9%">Categoria</th>
           <th style="width:5%" title="Serviço Triana">Serv.</th>
-          <th style="width:7%"></th>
+          <th style="width:10%"></th>
         </tr></thead>
         <tbody id="bomValTbody"></tbody>
       </table>
@@ -464,14 +464,40 @@ function renderBomValTable() {
     tdSvc.appendChild(chkSvc);
     tr.appendChild(tdSvc);
 
-    const tdDel = document.createElement('td');
+    const tdActions = document.createElement('td');
+    tdActions.style.cssText = 'display:flex;gap:3px;align-items:center';
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.className = 'btn btn-ghost btn-sm';
+    upBtn.textContent = '▲';
+    upBtn.title = 'Mover para cima';
+    upBtn.style.padding = '3px 6px';
+    upBtn.disabled = i === 0;
+    if (i === 0) upBtn.style.opacity = '0.25';
+    upBtn.onclick = () => { [pendingBomItems[i-1], pendingBomItems[i]] = [pendingBomItems[i], pendingBomItems[i-1]]; renderBomValTable(); };
+
+    const downBtn = document.createElement('button');
+    downBtn.type = 'button';
+    downBtn.className = 'btn btn-ghost btn-sm';
+    downBtn.textContent = '▼';
+    downBtn.title = 'Mover para baixo';
+    downBtn.style.padding = '3px 6px';
+    downBtn.disabled = i === pendingBomItems.length - 1;
+    if (i === pendingBomItems.length - 1) downBtn.style.opacity = '0.25';
+    downBtn.onclick = () => { [pendingBomItems[i], pendingBomItems[i+1]] = [pendingBomItems[i+1], pendingBomItems[i]]; renderBomValTable(); };
+
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'btn btn-danger btn-sm';
     delBtn.textContent = '\u00d7';
+    delBtn.style.padding = '3px 6px';
     delBtn.onclick = () => { pendingBomItems.splice(i, 1); renderBomValTable(); };
-    tdDel.appendChild(delBtn);
-    tr.appendChild(tdDel);
+
+    tdActions.appendChild(upBtn);
+    tdActions.appendChild(downBtn);
+    tdActions.appendChild(delBtn);
+    tr.appendChild(tdActions);
 
     tbody.appendChild(tr);
   });
@@ -491,8 +517,9 @@ async function confirmBom() {
     }
     const version = await API.createBomVersion(processId, bomFileName, bomFilePath, versionNumber);
 
-    const itemsToSave = pendingBomItems.map(({ _diffStatus, _oldId, _oldQty, ...item }) => ({
+    const itemsToSave = pendingBomItems.map(({ _diffStatus, _oldId, _oldQty, ...item }, idx) => ({
       ...item,
+      sort_order: idx,
       process_id: processId,
       bom_version_id: version.id,
     }));
