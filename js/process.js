@@ -330,7 +330,7 @@ function openBomValidationModal(fileName) {
           <th style="width:8%">Unid.</th>
           <th style="width:9%">Categoria</th>
           <th style="width:5%" title="Serviço Triana">Serv.</th>
-          <th style="width:7%"></th>
+          <th style="width:10%"></th>
         </tr></thead>
         <tbody id="bomValTbody"></tbody>
       </table>
@@ -464,14 +464,40 @@ function renderBomValTable() {
     tdSvc.appendChild(chkSvc);
     tr.appendChild(tdSvc);
 
-    const tdDel = document.createElement('td');
+    const tdActions = document.createElement('td');
+    tdActions.style.cssText = 'display:flex;gap:3px;align-items:center';
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.className = 'btn btn-ghost btn-sm';
+    upBtn.textContent = '▲';
+    upBtn.title = 'Mover para cima';
+    upBtn.style.padding = '3px 6px';
+    upBtn.disabled = i === 0;
+    if (i === 0) upBtn.style.opacity = '0.25';
+    upBtn.onclick = () => { [pendingBomItems[i-1], pendingBomItems[i]] = [pendingBomItems[i], pendingBomItems[i-1]]; renderBomValTable(); };
+
+    const downBtn = document.createElement('button');
+    downBtn.type = 'button';
+    downBtn.className = 'btn btn-ghost btn-sm';
+    downBtn.textContent = '▼';
+    downBtn.title = 'Mover para baixo';
+    downBtn.style.padding = '3px 6px';
+    downBtn.disabled = i === pendingBomItems.length - 1;
+    if (i === pendingBomItems.length - 1) downBtn.style.opacity = '0.25';
+    downBtn.onclick = () => { [pendingBomItems[i], pendingBomItems[i+1]] = [pendingBomItems[i+1], pendingBomItems[i]]; renderBomValTable(); };
+
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'btn btn-danger btn-sm';
     delBtn.textContent = '\u00d7';
+    delBtn.style.padding = '3px 6px';
     delBtn.onclick = () => { pendingBomItems.splice(i, 1); renderBomValTable(); };
-    tdDel.appendChild(delBtn);
-    tr.appendChild(tdDel);
+
+    tdActions.appendChild(upBtn);
+    tdActions.appendChild(downBtn);
+    tdActions.appendChild(delBtn);
+    tr.appendChild(tdActions);
 
     tbody.appendChild(tr);
   });
@@ -491,8 +517,9 @@ async function confirmBom() {
     }
     const version = await API.createBomVersion(processId, bomFileName, bomFilePath, versionNumber);
 
-    const itemsToSave = pendingBomItems.map(({ _diffStatus, _oldId, _oldQty, ...item }) => ({
+    const itemsToSave = pendingBomItems.map(({ _diffStatus, _oldId, _oldQty, ...item }, idx) => ({
       ...item,
+      sort_order: idx,
       process_id: processId,
       bom_version_id: version.id,
     }));
@@ -1428,12 +1455,25 @@ function renderMatchingTab() {
     el.appendChild(d);
     return;
   }
-  if (!suppliers.length) {
+
+  const equipItems = bomItems.filter(bi => !bi.is_service);
+  const serviceItems = bomItems.filter(bi => bi.is_service);
+
+  const needsSuppliers = equipItems.length > 0;
+  const hasSuppliers = suppliers.length > 0;
+
+  // If no suppliers and no services, nothing to show
+  if (!hasSuppliers && !serviceItems.length) {
     const d = document.createElement('div');
     d.className = 'empty-state';
     d.textContent = 'Adiciona fornecedores primeiro.';
     el.appendChild(d);
     return;
+  }
+
+  // If no suppliers but has services, force comparação view
+  if (!hasSuppliers && serviceItems.length) {
+    matchingView = 'comparacao';
   }
 
   // Build lookups (shared by both views)
@@ -1445,38 +1485,40 @@ function renderMatchingTab() {
   const selLookup = {};
   for (const o of selectedOffers) selLookup[o.bom_item_id] = o.supplier_id;
 
-  const covered = bomItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length;
-  const pct = bomItems.length ? Math.round(covered / bomItems.length * 100) : 0;
+  const covered = equipItems.length ? equipItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length : 0;
+  const pct = equipItems.length ? Math.round(covered / equipItems.length * 100) : 100;
   const pctColor = pct === 100 ? 'var(--accent)' : pct > 50 ? '#4fc3f7' : 'var(--danger)';
 
-  // ── Toggle bar ──
+  // ── Toggle bar (only show if matching view makes sense) ──
   const toggleBar = document.createElement('div');
   toggleBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:16px';
 
-  ['matching', 'comparacao'].forEach(v => {
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-sm' + (matchingView === v ? ' btn-primary' : ' btn-ghost');
-    btn.textContent = v === 'matching' ? 'Matching' : 'Comparação';
-    btn.addEventListener('click', () => switchMatchingView(v));
-    toggleBar.appendChild(btn);
-  });
+  if (needsSuppliers && hasSuppliers) {
+    ['matching', 'comparacao'].forEach(v => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm' + (matchingView === v ? ' btn-primary' : ' btn-ghost');
+      btn.textContent = v === 'matching' ? 'Matching' : 'Comparação';
+      btn.addEventListener('click', () => switchMatchingView(v));
+      toggleBar.appendChild(btn);
+    });
+  }
   el.appendChild(toggleBar);
 
-  if (matchingView === 'matching') {
-    _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered);
+  if (matchingView === 'matching' && hasSuppliers) {
+    _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems);
   } else {
-    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered);
+    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems);
   }
 }
 
-function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered) {
+function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems) {
   const pctColor2 = pctColor;
   let html = `
     <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;flex-wrap:wrap">
       <div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
         <div style="font-size:28px;font-weight:700;color:${pctColor2}">${pct}%</div>
-        <div style="color:var(--muted);font-size:12px">${covered}/${bomItems.length} itens</div>
+        <div style="color:var(--muted);font-size:12px">${covered}/${equipItems.length} itens</div>
       </div>
       <div style="flex:1">
         <div class="coverage-bar"><div class="coverage-bar-fill" style="width:${pct}%"></div></div>
@@ -1494,7 +1536,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered)
       <tbody>`;
 
   let lastCat = null;
-  for (const bi of bomItems) {
+  for (const bi of equipItems) {
     if (bi.category && bi.category !== lastCat) {
       html += `<tr class="match-cat-row"><td colspan="${3+suppliers.length}">${esc(bi.category)}</td></tr>`;
       lastCat = bi.category;
@@ -1537,14 +1579,17 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered)
   el.appendChild(document.createRange().createContextualFragment(html));
 }
 
-function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered) {
+function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems) {
+  const hasServices = serviceItems.length > 0;
+  const numCols = suppliers.length + (hasServices ? 1 : 0);
+
   const suppCoverage = {};
-  for (const s of suppliers) suppCoverage[s.id] = bomItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
+  for (const s of suppliers) suppCoverage[s.id] = equipItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
   const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
 
   const colTotals = {};
   for (const s of suppliers) {
-    colTotals[s.id] = bomItems.reduce((sum, bi) => {
+    colTotals[s.id] = equipItems.reduce((sum, bi) => {
       const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
       return sum + (p != null ? p : 0);
     }, 0);
@@ -1555,12 +1600,14 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
     return sum + (p || 0);
   }, 0);
 
+  const serviceTotal = serviceItems.reduce((sum, bi) => sum + ((bi.service_price || 0) * (bi.quantity || 1)), 0);
+
   let html = `
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px">
       <div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
         <div style="font-size:24px;font-weight:700;color:${pctColor}">${pct}%</div>
-        <div style="color:var(--muted);font-size:12px">${covered}/${bomItems.length} itens</div>
+        <div style="color:var(--muted);font-size:12px">${covered}/${equipItems.length} itens</div>
       </div>
       ${topSupp ? `<div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">MAIS COBERTURA</div>
@@ -1571,51 +1618,71 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">TOTAL SELECIONADO</div>
         <div style="font-size:15px;font-weight:600;color:var(--accent)">${fmtPrice(totalSelected)}</div>
       </div>` : ''}
+      ${serviceTotal > 0 ? `<div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">SERVIÇOS TRIANA</div>
+        <div style="font-size:15px;font-weight:600;color:var(--warn)">${fmtPrice(serviceTotal)}</div>
+      </div>` : ''}
     </div>
     <div class="comp-wrap">
     <table class="comp-table">
       <thead><tr>
         <th>Item BOM</th>
         ${suppliers.map(s => `<th>${esc(s.name)}</th>`).join('')}
+        ${hasServices ? '<th style="color:var(--warn)">Triana</th>' : ''}
       </tr></thead>
       <tbody>`;
 
   let lastCat = null;
   for (const bi of bomItems) {
     if (bi.category && bi.category !== lastCat) {
-      html += `<tr class="comp-cat-row"><td colspan="${1 + suppliers.length}">${esc(bi.category)}</td></tr>`;
+      html += `<tr class="comp-cat-row"><td colspan="${1 + numCols}">${esc(bi.category)}</td></tr>`;
       lastCat = bi.category;
     }
-    let lowestPrice = Infinity;
-    for (const s of suppliers) {
-      const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
-      if (p != null && p < lowestPrice) lowestPrice = p;
+
+    if (bi.is_service) {
+      const svcTotal = (bi.service_price || 0) * (bi.quantity || 1);
+      html += `<tr>
+        <td>
+          <div style="font-size:13px;color:var(--warn)">${esc(bi.description)}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--warn);opacity:.6">Qty: ${bi.quantity || 1}</div>
+        </td>
+        ${suppliers.map(() => '<td></td>').join('')}
+        <td><span class="comp-cell" style="color:var(--warn)">${svcTotal > 0 ? fmtPrice(svcTotal) : '—'}<span style="font-size:9px;opacity:.7;margin-left:3px">MZN</span></span></td>
+      </tr>`;
+    } else {
+      let lowestPrice = Infinity;
+      for (const s of suppliers) {
+        const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
+        if (p != null && p < lowestPrice) lowestPrice = p;
+      }
+      const selectedSuppId = selLookup[bi.id];
+      html += `<tr>
+        <td>
+          <div style="font-size:13px">${esc(bi.description)}</div>
+          ${bi.part_number ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
+        </td>
+        ${suppliers.map(s => {
+          const m = matchLookup[bi.id]?.[s.id];
+          const price = m?.quotation_items?.price;
+          const currency = m?.quotation_items?.currency || '';
+          const isSel = selectedSuppId === s.id;
+          const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
+          if (price != null) {
+            const cls = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
+            return `<td><span class="${cls}">${fmtPrice(price)}<span style="font-size:9px;opacity:.7;margin-left:3px">${esc(currency)}</span></span></td>`;
+          }
+          return `<td><span class="comp-cell comp-cell-none">—</span></td>`;
+        }).join('')}
+        ${hasServices ? '<td></td>' : ''}
+      </tr>`;
     }
-    const selectedSuppId = selLookup[bi.id];
-    html += `<tr>
-      <td>
-        <div style="font-size:13px">${esc(bi.description)}</div>
-        ${bi.part_number ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
-      </td>
-      ${suppliers.map(s => {
-        const m = matchLookup[bi.id]?.[s.id];
-        const price = m?.quotation_items?.price;
-        const currency = m?.quotation_items?.currency || '';
-        const isSel = selectedSuppId === s.id;
-        const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
-        if (price != null) {
-          const cls = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
-          return `<td><span class="${cls}">${fmtPrice(price)}<span style="font-size:9px;opacity:.7;margin-left:3px">${esc(currency)}</span></span></td>`;
-        }
-        return `<td><span class="comp-cell comp-cell-none">—</span></td>`;
-      }).join('')}
-    </tr>`;
   }
 
   html += `</tbody>
     <tfoot><tr>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total Equipamento</td>
       ${suppliers.map(s => `<td>${colTotals[s.id] > 0 ? fmtPrice(colTotals[s.id]) : '<span style="color:#334">—</span>'}</td>`).join('')}
+      ${hasServices ? `<td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--warn);font-weight:600">${serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'}</td>` : ''}
     </tr></tfoot>
     </table></div>`;
 
@@ -1729,6 +1796,7 @@ async function runAutoMatch() {
 
   const newMatches = [];
   for (const bi of bomItems) {
+    if (bi.is_service) continue;
     const biWords = bi.description.toLowerCase().split(/\W+/).filter(w => w.length > 2);
     if (!biWords.length) continue;
     for (const s of suppliersWithItems) {
@@ -2146,12 +2214,12 @@ function buildSupSheet(wb, supplier) {
 
 function fillMain(ws, suppliers, sheetNames, dataStarts, orderedItems, serviceRowsBySheet = {}) {
   const allTechRows = [];
-  const allSvcSheets = Object.keys(serviceRowsBySheet).filter(s => (serviceRowsBySheet[s] || []).some(sv => sv.value > 0));
+  const allSvcSheets = Object.keys(serviceRowsBySheet).filter(s => (serviceRowsBySheet[s] || []).some(sv => sv.unitPrice > 0));
   const multiSheet = allSvcSheets.length > 1;
   for (const [sheetName, svcRows] of Object.entries(serviceRowsBySheet)) {
     const sheetSuffix = multiSheet ? ` — ${sheetName}` : '';
     for (const svc of svcRows) {
-      if (svc.value > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, value: svc.value });
+      if (svc.unitPrice > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, qty: svc.qty, unitPrice: svc.unitPrice });
     }
   }
   const hasTechs = allTechRows.length > 0;
@@ -2194,13 +2262,8 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, orderedItems, serviceRo
     for(const t of allTechRows){
       for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
       sc2(ws.getCell(row,2),{value:t.label,font:dF,alignment:{horizontal:'left',vertical:'middle'}});
-      if(t.isDiversos){
-        sc2(ws.getCell(row,3),{value:1,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-        sc2(ws.getCell(row,trCol),{value:t.value,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      } else {
-        sc2(ws.getCell(row,3),{value:t.hours,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-        sc2(ws.getCell(row,trCol),{value:t.rate*t.count,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      }
+      sc2(ws.getCell(row,3),{value:t.qty||1,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
+      sc2(ws.getCell(row,trCol),{value:t.unitPrice,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
       sc2(ws.getCell(row,tc),{value:{formula:`+${trL}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
       row++;
     }
@@ -2247,20 +2310,22 @@ async function generateExcel() {
 
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
     const indexInSupplier = supplierCounters[suppId]++;
-    supplierItems[suppId].push({ part: bi.part_number || '', model: bi.description, qty: String(bi.quantity), price: String(qi.price) });
-    orderedItems.push({ part: bi.part_number || '', model: bi.description, qty: bi.quantity, suppId, indexInSupplier });
+    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: String(qi.quantity || bi.quantity), price: String(qi.price) });
+    orderedItems.push({ part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: qi.quantity || bi.quantity, suppId, indexInSupplier });
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
-  if (!activeSuppliers.length) { showToast('Sem itens com preço no Matching.', true); return; }
 
   const serviceRowsBySheet = {};
   for (const bi of bomItems) {
     if (!bi.is_service) continue;
     const sheet = bi.sheet_name || 'Sheet1';
     if (!serviceRowsBySheet[sheet]) serviceRowsBySheet[sheet] = [];
-    serviceRowsBySheet[sheet].push({ label: bi.description, value: (bi.service_price || 0) * (bi.quantity || 1) });
+    serviceRowsBySheet[sheet].push({ label: bi.description, qty: bi.quantity || 1, unitPrice: bi.service_price || 0 });
   }
+
+  const hasServices = Object.values(serviceRowsBySheet).some(arr => arr.some(s => s.unitPrice > 0));
+  if (!activeSuppliers.length && !hasServices) { showToast('Sem itens com preço no Matching nem serviços.', true); return; }
 
   try {
     const wb = new ExcelJS.Workbook();
@@ -2281,7 +2346,7 @@ async function generateExcel() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Planilha_${(process.project_name||'Processo').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}.xlsx`;
+    a.download = `Planilha_Financeira_${(process.project_name||'Processo').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}_${(process.client_name||'').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}.xlsx`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('Excel gerado!');
