@@ -1239,10 +1239,10 @@ function openQuotationValModal(fileName, rawPdfText) {
       <table class="bom-validate-table">
         <thead><tr>
           <th style="width:12%">Part #</th>
-          <th style="width:42%">Descrição</th>
+          <th style="width:46%">Descrição</th>
           <th style="width:8%">Qty</th>
           <th style="width:14%">Preço Unit.</th>
-          <th style="width:10%">Moeda</th>
+          <th style="width:6%">Moeda</th>
           <th style="width:14%"></th>
         </tr></thead>
         <tbody id="quotValTbody"></tbody>
