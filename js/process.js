@@ -1266,10 +1266,10 @@ function openQuotationValModal(fileName, rawPdfText) {
       <table class="bom-validate-table">
         <thead><tr>
           <th style="width:12%">Part #</th>
-          <th style="width:46%">Descrição</th>
+          <th style="width:48%">Descrição</th>
           <th style="width:8%">Qty</th>
           <th style="width:14%">Preço Unit.</th>
-          <th style="width:6%">Moeda</th>
+          <th style="width:4%">Moeda</th>
           <th style="width:14%"></th>
         </tr></thead>
         <tbody id="quotValTbody"></tbody>
@@ -1789,33 +1789,55 @@ async function selectOffer(bomItemId, supplierId, quotItemId) {
   }
 }
 
+function _matchTokenize(str) {
+  const STOP = new Set(['de','da','do','dos','das','em','no','na','nos','nas','os','as','um','uma','por','com','para','ou','ao','que','e']);
+  return (str || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
+    .replace(/(\d+\/\d+)/g, ' $1 ')                  // preserve fractions as single token (1/4, 3/8)
+    .split(/[^a-z0-9\/]+/)                             // split on non-alphanumeric (keep /)
+    .map(t => t.replace(/^\/+|\/+$/g, ''))             // trim stray slashes from edges
+    .filter(t => t.length >= 2 && !STOP.has(t));       // drop stop words and short tokens
+}
+
 async function runAutoMatch() {
   if (!bomItems.length) { showToast('Carrega o BOM primeiro.', true); return; }
   const suppliersWithItems = suppliers.filter(s => (quotationMap[s.id]||[]).length > 0);
   if (!suppliersWithItems.length) { showToast('Nenhum fornecedor com cotação carregada.', true); return; }
 
+  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
   const newMatches = [];
+
   for (const bi of bomItems) {
     if (bi.is_service) continue;
-    const biWords = bi.description.toLowerCase().split(/\W+/).filter(w => w.length > 2);
-    if (!biWords.length) continue;
+    const biTokens = _matchTokenize(bi.description);
+    if (!biTokens.length) continue;
+    const biSpecTokens = biTokens.filter(t => /\d/.test(t)); // numeric specs (sizes, fractions, model codes)
+
     for (const s of suppliersWithItems) {
       if (matches.find(m => m.bom_item_id === bi.id && m.supplier_id === s.id)) continue; // already matched
       let bestItem = null, bestScore = 0;
+
       for (const qi of quotationMap[s.id]) {
-        const qWords = qi.raw_description.toLowerCase().split(/\W+/);
-        const hits = biWords.filter(w => qWords.some(qw => qw === w || (w.length > 3 && qw.includes(w)))).length;
-        const score = hits / biWords.length;
+        // 1. Part number exact match — highest priority, skip word matching
+        if (bi.part_number && qi.raw_part_number && norm(bi.part_number) === norm(qi.raw_part_number)) {
+          bestItem = qi; bestScore = 1.0; break;
+        }
+        // 2. Word-based match
+        const qTokens = _matchTokenize(qi.raw_description);
+        // Spec gate: BOM numeric specs (sizes, fractions) must appear in quotation
+        if (biSpecTokens.length > 0 && !biSpecTokens.some(bs => qTokens.includes(bs))) continue;
+        const hits = biTokens.filter(bt => qTokens.includes(bt)).length;
+        const score = hits / Math.max(biTokens.length, qTokens.length); // symmetric score
         if (score > bestScore) { bestScore = score; bestItem = qi; }
       }
-      if (bestItem && bestScore >= 0.4) {
+
+      if (bestItem && bestScore >= 0.5) {
         newMatches.push({ process_id: processId, bom_item_id: bi.id, supplier_id: s.id, quotation_item_id: bestItem.id, match_type: 'auto', confidence: Math.round(bestScore*100)/100 });
       }
     }
   }
 
   if (!newMatches.length) { showToast('Nenhum match automático encontrado.'); return; }
-
   try {
     await Promise.all(newMatches.map(m => API.saveMatch(m)));
     await loadMatchData();
