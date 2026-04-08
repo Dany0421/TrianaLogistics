@@ -1,0 +1,420 @@
+// ── Global State ──
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_BOM_TYPES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+];
+const ALLOWED_QUOT_TYPES = [
+  ...ALLOWED_BOM_TYPES,
+  'application/pdf',
+];
+
+let processId = null;
+let process   = null;
+let bomItems  = [];
+let suppliers = [];
+let bomVersions = [];
+let pendingBomItems = []; // items waiting for validation before saving
+let pendingDiff = null;   // diff result when uploading a BOM revision
+let pendingBomFile = null;  // File object held between handleBomUpload and confirmBom
+let pendingQuotFile = null; // File object held between handleQuotationUpload and confirmQuotation
+let quotationFilesMap = {}; // supplierId → latest quotation_files row
+let quotationMap = {};    // supplierId → items[]
+let matches = [];
+let selectedOffers = [];
+let pendingQuotItems = [];
+let currentQuotSuppId = null;
+let matchingView = 'matching'; // 'matching' | 'comparacao'
+let supplierHistory = {}; // normalised name → { email, email_cc }
+let globalSuppliersList = [];
+let priceAnomalies = {};   // modal: itemIndex → { type, median, ratio }
+let savedAnomalyMap = {};  // supplier cards: qi.id → { type, median, ratio }
+let pendingProcessCategories = [];
+
+// ── Init ──
+window.addEventListener('load', async () => {
+  if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+  await requireAuth('index.html');
+  const trTop = document.getElementById('topbarRight');
+  trTop.replaceChildren();
+  if (hasRole('admin')) {
+    const aAdm = document.createElement('a');
+    aAdm.href = 'admin.html';
+    aAdm.className = 'btn btn-ghost btn-sm';
+    aAdm.style.marginRight = '4px';
+    aAdm.style.borderColor = 'rgba(16,185,129,.3)';
+    aAdm.style.color = '#34d399';
+    aAdm.textContent = 'Admin';
+    trTop.appendChild(aAdm);
+  }
+  mountUserChip(trTop);
+  renderTabs();
+
+  const params = new URLSearchParams(location.search);
+  processId = params.get('id');
+  if (!processId || !UUID_RE.test(processId)) { window.location.href = 'dashboard.html'; return; }
+
+  await loadAll();
+
+  // If new process, prompt BOM upload
+  if (params.get('new') === '1') {
+    showToast('Processo criado! Carrega o BOM agora.');
+    document.getElementById('bomFileInput').click();
+  }
+});
+
+async function loadAll() {
+  try {
+    [process, bomVersions, suppliers] = await Promise.all([
+      API.getProcess(processId),
+      API.getBomVersions(processId),
+      API.getSuppliers(processId),
+    ]);
+    renderHeader();
+    loadDurationEstimate();
+    if (bomVersions.length) {
+      bomItems = await API.getBomItems(processId, bomVersions[0].id);
+      renderBomTable(bomItems);
+      const v = bomVersions[0];
+      document.getElementById('bomVersionLabel').textContent = `BOM v${v.version_number} — ${v.original_name||''} (${bomItems.length} itens)`;
+      // Show "Nova Revisão" button + "Ver ficheiro" if BOM already exists
+      const bomBtn = document.querySelector('#tab-bom .section-header > div');
+      if (bomBtn) {
+        bomBtn.replaceChildren();
+        const finp = document.createElement('input');
+        finp.type = 'file';
+        finp.id = 'bomFileInput';
+        finp.accept = '.xlsx,.xls';
+        finp.style.display = 'none';
+        finp.addEventListener('change', function() { handleBomUpload(this); });
+        bomBtn.appendChild(finp);
+        if (v.file_path) {
+          const bView = document.createElement('button');
+          bView.type = 'button';
+          bView.className = 'btn btn-ghost btn-sm';
+          bView.textContent = '\u{1F4C4} Ver ficheiro';
+          bView.addEventListener('click', () => viewBomFile(v.file_path));
+          bomBtn.appendChild(bView);
+        }
+        if (bomVersions.length >= 2) {
+          const bHist = document.createElement('button');
+          bHist.type = 'button';
+          bHist.className = 'btn btn-ghost btn-sm';
+          bHist.textContent = '\u{1F4CB} Histórico';
+          bHist.addEventListener('click', () => openBomHistoryModal());
+          bomBtn.appendChild(bHist);
+        }
+        const bEdit = document.createElement('button');
+        bEdit.type = 'button';
+        bEdit.className = 'btn btn-ghost btn-sm';
+        bEdit.textContent = '\u270F Editar BOM';
+        bEdit.addEventListener('click', () => openManualBomEntry());
+        bomBtn.appendChild(bEdit);
+        const bRev = document.createElement('button');
+        bRev.type = 'button';
+        bRev.className = 'btn btn-ghost btn-sm';
+        bRev.style.borderColor = '#ff8800';
+        bRev.style.color = '#ff8800';
+        bRev.textContent = '\u{1F4C2} Nova Revisão (v' + (v.version_number + 1) + ')';
+        bRev.addEventListener('click', () => document.getElementById('bomFileInput').click());
+        bomBtn.appendChild(bRev);
+      }
+    }
+    if (!hasRole('commercial')) {
+      const supplierIds = suppliers.map(s => s.id);
+      const [allQFlat, mtch, selOfrs, qFiles] = await Promise.all([
+        API.getQuotationItemsForSuppliers(supplierIds),
+        API.getMatches(processId),
+        API.getSelectedOffers(processId),
+        API.getQuotationFiles(supplierIds),
+      ]);
+      // Group quotation items by supplier
+      quotationMap = {};
+      for (const qi of allQFlat) {
+        if (!quotationMap[qi.supplier_id]) quotationMap[qi.supplier_id] = [];
+        quotationMap[qi.supplier_id].push(qi);
+      }
+      matches = mtch;
+      selectedOffers = selOfrs;
+      quotationFilesMap = {};
+      for (const f of qFiles) {
+        if (!quotationFilesMap[f.supplier_id]) quotationFilesMap[f.supplier_id] = f;
+      }
+      renderSuppliers();
+      renderInstallTab();
+      // Matching tab is rendered lazily on first switch
+    }
+    // Load supplier history for auto-fill (best-effort)
+    try {
+      const known = await API.getKnownSuppliers();
+      supplierHistory = {};
+      for (const s of known) supplierHistory[s.name.trim().toLowerCase()] = s;
+    } catch(_) {}
+    // Load global suppliers for suggestions (best-effort)
+    try {
+      globalSuppliersList = await API.getGlobalSuppliers();
+    } catch(_) {}
+    renderSupplierSuggestions();
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+async function loadMatchData() {
+  [matches, selectedOffers] = await Promise.all([
+    API.getMatches(processId),
+    API.getSelectedOffers(processId),
+  ]);
+}
+
+// ── Header ──
+function renderHeader() {
+  document.getElementById('procTitle').textContent   = process.project_name;
+  document.getElementById('procClient').textContent  = process.client_name;
+  const assigneeName = process.assignee?.name;
+  const meta = document.getElementById('procMeta');
+  meta.replaceChildren();
+  const stBadge = document.createElement('span');
+  applyStatusBadge(stBadge, process.status, process.status_color);
+  stBadge.textContent = process.status || '';
+  meta.appendChild(stBadge);
+  const pri = document.createElement('span');
+  pri.className = 'priority-' + (process.priority || 'medium').toLowerCase();
+  pri.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:12px";
+  pri.textContent = process.priority || '';
+  meta.appendChild(pri);
+  if (process.deadline) {
+    const dl = document.createElement('span');
+    dl.className = 'deadline-chip ' + deadlineClass(process.deadline);
+    dl.textContent = '\u{1F4C5} ' + fmtDate(process.deadline);
+    meta.appendChild(dl);
+  }
+  if (assigneeName) {
+    const as = document.createElement('span');
+    as.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px";
+    as.textContent = assigneeName;
+    meta.appendChild(as);
+  }
+  const edBtn = document.createElement('button');
+  edBtn.type = 'button';
+  edBtn.className = 'btn btn-ghost btn-sm';
+  edBtn.textContent = 'Editar';
+  edBtn.addEventListener('click', () => openEditModal());
+  meta.appendChild(edBtn);
+  document.title = `${process.project_name} — Procurement`;
+}
+
+// ── Tabs ──
+function renderTabs() {
+  const isCommercial = hasRole('commercial');
+  const tabs = isCommercial
+    ? [['bom', 'BOM']]
+    : [['bom', 'BOM'], ['suppliers', 'Fornecedores'], ['matching', 'Matching'], ['install', 'Instalação']];
+  const tabBar = document.getElementById('tabBar');
+  tabBar.replaceChildren();
+  tabs.forEach(([id, label], i) => {
+    const d = document.createElement('div');
+    d.className = 'tab' + (i === 0 ? ' active' : '');
+    d.dataset.tab = id;
+    d.textContent = label;
+    d.addEventListener('click', () => switchTab(id));
+    tabBar.appendChild(d);
+  });
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'matching') renderMatchingTab();
+}
+
+// ── File path security helper (used by bom + suppliers) ──
+function _isValidFilePath(p) {
+  return typeof p === 'string' && p.length < 500 && !p.includes('..') && (p.startsWith('bom/') || p.startsWith('quotations/'));
+}
+
+// ── Duration Estimate Banner ──
+async function loadDurationEstimate() {
+  const banner = document.getElementById('durationBanner');
+  if (!banner) return;
+  const cats = process.categories || [];
+  if (!cats.length) { banner.style.display = 'none'; return; }
+  const key = 'dur_closed_' + processId;
+  if (sessionStorage.getItem(key)) { banner.style.display = 'none'; return; }
+  try {
+    const est = await API.getDurationEstimates(cats);
+    if (!est || est.sample_count < 2) { banner.style.display = 'none'; return; }
+    banner.style.display = '';
+    const d = document.createElement('div');
+    d.className = 'duration-banner';
+    const icon = document.createElement('span');
+    icon.className = 'dur-icon';
+    icon.textContent = '⏱';
+    const body = document.createElement('div');
+    body.className = 'dur-body';
+    const main = document.createElement('div');
+    main.className = 'dur-main';
+    main.textContent = `Estimativa: ~${est.avg_days} dias`;
+    const sub = document.createElement('div');
+    sub.className = 'dur-sub';
+    sub.textContent = `mín ${est.min_days} — máx ${est.max_days}  ·  baseado em ${est.sample_count} processo${est.sample_count !== 1 ? 's' : ''} similar${est.sample_count !== 1 ? 'es' : ''}`;
+    body.appendChild(main);
+    body.appendChild(sub);
+    const close = document.createElement('button');
+    close.className = 'dur-close';
+    close.title = 'Fechar';
+    close.textContent = '×';
+    close.onclick = () => { sessionStorage.setItem(key, '1'); banner.style.display = 'none'; };
+    d.appendChild(icon);
+    d.appendChild(body);
+    d.appendChild(close);
+    while (banner.firstChild) banner.removeChild(banner.firstChild);
+    banner.appendChild(d);
+  } catch(_) { banner.style.display = 'none'; }
+}
+
+// ── Edit process modal ──
+function openEditModal() {
+  const p = process;
+  pendingProcessCategories = [...(p.categories || [])];
+  showModal(`
+    <div class="modal-tag">Editar Processo</div>
+    <div class="form-grid-2">
+      <div><label>Cliente</label><input id="ep_client" value=""></div>
+      <div><label>Projeto</label><input id="ep_project" value=""></div>
+    </div>
+    <div class="form-grid-2">
+      <div><label>Deadline</label><input type="date" id="ep_deadline" value="${p.deadline||''}"></div>
+      <div><label>Prioridade</label>
+        <select id="ep_priority">
+          ${['Low','Medium','High','Urgent'].map(v=>`<option ${p.priority===v?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row"><label>Estado</label>
+      <select id="ep_status">
+        ${STANDARD_STATUSES.map(v=>`<option ${p.status===v?'selected':''}>${v}</option>`).join('')}
+        ${!STANDARD_STATUSES.includes(p.status) ? `<option value="${esc(p.status)}" selected>${esc(p.status)}</option>` : ''}
+        <option value="__custom__">+ Criar estado...</option>
+      </select>
+      <div id="ep_custom_row" style="display:${!STANDARD_STATUSES.includes(p.status)?'flex':'none'};gap:8px;margin-top:6px;align-items:center">
+        <input type="text" id="ep_custom_name" placeholder="Nome do estado" style="flex:1" value="${!STANDARD_STATUSES.includes(p.status)?esc(p.status):''}">
+        <input type="color" id="ep_custom_color" value="${p.status_color||'#3b82f6'}" style="width:40px;height:36px;padding:2px;cursor:pointer">
+      </div>
+    </div>
+    <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto — opcional)</span></label><div class="tag-input-box" id="ep_catBox"></div></div>
+    <div class="form-row"><label>Notas</label><textarea id="ep_notes"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditProcess()">Guardar</button>
+    </div>
+  `);
+  const _ep = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+  _ep('ep_client', p.client_name || '');
+  _ep('ep_project', p.project_name || '');
+  _ep('ep_notes', p.notes || '');
+  document.getElementById('ep_status').addEventListener('change', function() {
+    document.getElementById('ep_custom_row').style.display = this.value === '__custom__' ? 'flex' : 'none';
+  });
+}
+
+async function saveEditProcess() {
+  const fields = {
+    client_name:  document.getElementById('ep_client').value.trim(),
+    project_name: document.getElementById('ep_project').value.trim(),
+    deadline:     document.getElementById('ep_deadline').value || null,
+    priority:     document.getElementById('ep_priority').value,
+    notes:        document.getElementById('ep_notes').value.trim(),
+    categories:   pendingProcessCategories,
+  };
+  const epStatusVal = document.getElementById('ep_status').value;
+  if (epStatusVal === '__custom__' || !STANDARD_STATUSES.includes(epStatusVal)) {
+    fields.status = epStatusVal === '__custom__'
+      ? (document.getElementById('ep_custom_name').value.trim() || 'Custom').slice(0, 100)
+      : epStatusVal;
+    fields.status_color = document.getElementById('ep_custom_color').value;
+  } else {
+    fields.status = epStatusVal;
+    fields.status_color = null;
+  }
+  if (fields.status === 'Closed' && process.status !== 'Closed') fields.closed_at = new Date().toISOString();
+  if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto são obrigatórios.', true); return; }
+  if (fields.client_name.length > 200 || fields.project_name.length > 200) { showToast('Nome demasiado longo (máx 200 caracteres).', true); return; }
+  if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (máx 5000 caracteres).', true); return; }
+  try {
+    process = await API.updateProcess(processId, fields);
+    renderHeader();
+    closeModal();
+    loadDurationEstimate();
+    showToast('Processo atualizado.');
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+// ── Modal helpers ──
+function showModal(html) {
+  const root = document.getElementById('modalRoot');
+  root.replaceChildren();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  const box = document.createElement('div');
+  box.className = 'modal-box';
+  box.appendChild(document.createRange().createContextualFragment(html));
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+}
+function showModalLg(html) {
+  const root = document.getElementById('modalRoot');
+  root.replaceChildren();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  const box = document.createElement('div');
+  box.className = 'modal-box-lg';
+  box.appendChild(document.createRange().createContextualFragment(html));
+  overlay.appendChild(box);
+  root.appendChild(overlay);
+}
+function closeModal() { document.getElementById('modalRoot').replaceChildren(); }
+
+// ── Helpers ──
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('pt-PT'); }
+function formatResponseTime(hours) { if (!hours || hours <= 0) return '—'; return hours < 24 ? Math.round(hours) + 'h' : (hours / 24).toFixed(1) + ' dias'; }
+function fmtPrice(p) { if (p==null) return '—'; return new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2}).format(p); }
+function deadlineClass(d) { if (!d) return ''; const diff = (new Date(d)-new Date())/86400000; return diff < 0 ? 'overdue' : diff < 5 ? 'soon' : ''; }
+const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'];
+function statusBadgeClass(s) {
+  const map = { 'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting','Partial responses':'badge-partial','Ready for Excel':'badge-ready','Closed':'badge-closed','Cancelled':'badge-cancelled' };
+  return map[s] || 'badge-active';
+}
+function applyStatusBadge(el, status, color) {
+  if (color) {
+    const r = parseInt(color.slice(1,3),16), g = parseInt(color.slice(3,5),16), b = parseInt(color.slice(5,7),16);
+    el.className = 'badge';
+    el.style.background = `rgba(${r},${g},${b},.1)`;
+    el.style.color = color;
+    el.style.borderColor = `rgba(${r},${g},${b},.3)`;
+    el.style.border = `1px solid rgba(${r},${g},${b},.3)`;
+  } else {
+    el.className = 'badge ' + statusBadgeClass(status);
+    el.style.background = '';
+    el.style.color = '';
+    el.style.border = '';
+  }
+}
+function suppStatusClass(s) {
+  if (['Replied complete'].includes(s)) return 'badge-ready';
+  if (['Replied partial'].includes(s)) return 'badge-partial';
+  if (['Follow-up needed'].includes(s)) return 'badge-warn' ;
+  if (['No stock','Not available','Ignored / no response'].includes(s)) return 'badge-blocked';
+  return 'badge-waiting';
+}
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--danger)' : 'var(--text)';
+  el.style.borderLeftColor = isError ? 'var(--danger)' : 'var(--accent)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3200);
+}
