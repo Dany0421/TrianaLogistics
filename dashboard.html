@@ -124,7 +124,7 @@
         <div class="chart-wrap"><canvas id="chartPriority"></canvas></div>
       </div>
       <div class="chart-card chart-card-wide">
-        <div class="chart-title">Processos criados (últimos 6 meses)</div>
+        <div class="chart-title">Processos criados (últimos 3 meses, por quinzena)</div>
         <div class="chart-wrap"><canvas id="chartTrend"></canvas></div>
       </div>
       <div class="chart-card">
@@ -398,14 +398,48 @@ function renderCharts(processes, topSuppliers) {
   const priorityColors = ['#475569','#3b82f6','#f59e0b','#f87171'];
   const priorityCounts = priorities.map(pr => processes.filter(p => p.priority === pr).length);
 
-  // Monthly trend — last 6 months
+  // Trend — últimos 3 meses, buckets de 2 semanas (2ª-feira 00:00 → domingo 23:59:59, local)
   const now = new Date();
-  const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-    return { label: d.toLocaleString('pt-PT', { month: 'short', year: '2-digit' }), year: d.getFullYear(), month: d.getMonth() };
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - 3);
+
+  function mondayOfWeekContaining(d) {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    const dow = x.getDay();
+    const toMon = dow === 0 ? -6 : 1 - dow;
+    x.setDate(x.getDate() + toMon);
+    return x;
+  }
+  function addDays(d, n) {
+    const x = new Date(d.getTime());
+    x.setDate(x.getDate() + n);
+    return x;
+  }
+
+  const mon = mondayOfWeekContaining(cutoff);
+
+  const trendPeriods = [];
+  while (mon.getTime() <= now.getTime()) {
+    const endExclusive = addDays(mon, 14);
+    trendPeriods.push({ start: new Date(mon.getTime()), endExclusive });
+    mon = endExclusive;
+  }
+
+  const fmtDay = (d) => d.toLocaleString('pt-PT', { day: 'numeric', month: 'short' });
+  const trendBuckets = trendPeriods.map((period) => {
+    const lastSunday = addDays(period.start, 13);
+    lastSunday.setHours(23, 59, 59, 999);
+    return {
+      label: `${fmtDay(period.start)} – ${fmtDay(lastSunday)}`,
+      period,
+    };
   });
-  const trendCounts = months.map(m =>
-    processes.filter(p => { const d = new Date(p.created_at); return d.getFullYear() === m.year && d.getMonth() === m.month; }).length
+  const trendCounts = trendBuckets.map(({ period }) =>
+    processes.filter((p) => {
+      const t = new Date(p.created_at).getTime();
+      if (t < cutoff.getTime() || t > now.getTime()) return false;
+      return t >= period.start.getTime() && t < period.endExclusive.getTime();
+    }).length
   );
 
   function destroyChart(id) { if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; } }
@@ -433,12 +467,12 @@ function renderCharts(processes, topSuppliers) {
     },
   });
 
-  // Chart 3 — Line: tendência mensal
+  // Chart 3 — Line: tendência por quinzena (segunda–domingo)
   destroyChart('trend');
   _charts.trend = new Chart(document.getElementById('chartTrend'), {
     type: 'line',
     data: {
-      labels: months.map(m => m.label),
+      labels: trendBuckets.map((b) => b.label),
       datasets: [{
         data: trendCounts,
         borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.08)',
@@ -448,7 +482,10 @@ function renderCharts(processes, topSuppliers) {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
-      scales: { x: { grid: { display: false } }, y: { ticks: { stepSize: 1 }, grid: { color: '#1a2235' }, beginAtZero: true } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+        y: { ticks: { stepSize: 1 }, grid: { color: '#1a2235' }, beginAtZero: true },
+      },
     },
   });
 
