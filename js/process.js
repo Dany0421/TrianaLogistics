@@ -1428,7 +1428,15 @@ function renderMatchingTab() {
     el.appendChild(d);
     return;
   }
-  if (!suppliers.length) {
+
+  const equipItems = bomItems.filter(bi => !bi.is_service);
+  const serviceItems = bomItems.filter(bi => bi.is_service);
+
+  const needsSuppliers = equipItems.length > 0;
+  const hasSuppliers = suppliers.length > 0;
+
+  // If no suppliers and no services, nothing to show
+  if (!hasSuppliers && !serviceItems.length) {
     const d = document.createElement('div');
     d.className = 'empty-state';
     d.textContent = 'Adiciona fornecedores primeiro.';
@@ -1436,8 +1444,10 @@ function renderMatchingTab() {
     return;
   }
 
-  const equipItems = bomItems.filter(bi => !bi.is_service);
-  const serviceItems = bomItems.filter(bi => bi.is_service);
+  // If no suppliers but has services, force comparação view
+  if (!hasSuppliers && serviceItems.length) {
+    matchingView = 'comparacao';
+  }
 
   // Build lookups (shared by both views)
   const matchLookup = {};
@@ -1448,24 +1458,26 @@ function renderMatchingTab() {
   const selLookup = {};
   for (const o of selectedOffers) selLookup[o.bom_item_id] = o.supplier_id;
 
-  const covered = equipItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length;
-  const pct = equipItems.length ? Math.round(covered / equipItems.length * 100) : 0;
+  const covered = equipItems.length ? equipItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length : 0;
+  const pct = equipItems.length ? Math.round(covered / equipItems.length * 100) : 100;
   const pctColor = pct === 100 ? 'var(--accent)' : pct > 50 ? '#4fc3f7' : 'var(--danger)';
 
-  // ── Toggle bar ──
+  // ── Toggle bar (only show if matching view makes sense) ──
   const toggleBar = document.createElement('div');
   toggleBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:16px';
 
-  ['matching', 'comparacao'].forEach(v => {
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-sm' + (matchingView === v ? ' btn-primary' : ' btn-ghost');
-    btn.textContent = v === 'matching' ? 'Matching' : 'Comparação';
-    btn.addEventListener('click', () => switchMatchingView(v));
-    toggleBar.appendChild(btn);
-  });
+  if (needsSuppliers && hasSuppliers) {
+    ['matching', 'comparacao'].forEach(v => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm' + (matchingView === v ? ' btn-primary' : ' btn-ghost');
+      btn.textContent = v === 'matching' ? 'Matching' : 'Comparação';
+      btn.addEventListener('click', () => switchMatchingView(v));
+      toggleBar.appendChild(btn);
+    });
+  }
   el.appendChild(toggleBar);
 
-  if (matchingView === 'matching') {
+  if (matchingView === 'matching' && hasSuppliers) {
     _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems);
   } else {
     _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems);
