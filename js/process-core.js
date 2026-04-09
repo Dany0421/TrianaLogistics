@@ -31,6 +31,7 @@ let globalSuppliersList = [];
 let priceAnomalies = {};   // modal: itemIndex → { type, median, ratio }
 let savedAnomalyMap = {};  // supplier cards: qi.id → { type, median, ratio }
 let pendingProcessCategories = [];
+let rejectedAutoMatch = []; // persisted rejections: never auto-recreate these matches
 
 // ── Init ──
 window.addEventListener('load', async () => {
@@ -123,11 +124,12 @@ async function loadAll() {
     }
     if (!hasRole('commercial')) {
       const supplierIds = suppliers.map(s => s.id);
-      const [allQFlat, mtch, selOfrs, qFiles] = await Promise.all([
+      const [allQFlat, mtch, selOfrs, qFiles, rejAuto] = await Promise.all([
         API.getQuotationItemsForSuppliers(supplierIds),
         API.getMatches(processId),
         API.getSelectedOffers(processId),
         API.getQuotationFiles(supplierIds),
+        API.getRejectedAutoMatch(processId),
       ]);
       // Group quotation items by supplier
       quotationMap = {};
@@ -137,6 +139,7 @@ async function loadAll() {
       }
       matches = mtch;
       selectedOffers = selOfrs;
+      rejectedAutoMatch = rejAuto;
       quotationFilesMap = {};
       for (const f of qFiles) {
         if (!quotationFilesMap[f.supplier_id]) quotationFilesMap[f.supplier_id] = f;
@@ -160,9 +163,10 @@ async function loadAll() {
 }
 
 async function loadMatchData() {
-  [matches, selectedOffers] = await Promise.all([
+  [matches, selectedOffers, rejectedAutoMatch] = await Promise.all([
     API.getMatches(processId),
     API.getSelectedOffers(processId),
+    API.getRejectedAutoMatch(processId),
   ]);
 }
 
@@ -381,7 +385,23 @@ function closeModal() { document.getElementById('modalRoot').replaceChildren(); 
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('pt-PT'); }
 function formatResponseTime(hours) { if (!hours || hours <= 0) return '—'; return hours < 24 ? Math.round(hours) + 'h' : (hours / 24).toFixed(1) + ' dias'; }
-function fmtPrice(p) { if (p==null) return '—'; return new Intl.NumberFormat('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2}).format(p); }
+function fmtPrice(p) {
+  if (p == null || p === '') return '—';
+  let n;
+  if (typeof p === 'number') {
+    n = p;
+  } else {
+    const t = String(p).trim().replace(/\s/g, '');
+    if (/,\d+$/.test(t) && t.lastIndexOf(',') > t.lastIndexOf('.'))
+      n = parseFloat(t.replace(/\./g, '').replace(',', '.'));
+    else if (/\.\d+$/.test(t) && t.lastIndexOf('.') > t.lastIndexOf(','))
+      n = parseFloat(t.replace(/,/g, ''));
+    else
+      n = parseFloat(t.replace(/[,.]/g, ''));
+  }
+  if (isNaN(n)) return '—';
+  return new Intl.NumberFormat('pt-PT', {minimumFractionDigits:2, maximumFractionDigits:2}).format(n);
+}
 function deadlineClass(d) { if (!d) return ''; const diff = (new Date(d)-new Date())/86400000; return diff < 0 ? 'overdue' : diff < 5 ? 'soon' : ''; }
 const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'];
 function statusBadgeClass(s) {
