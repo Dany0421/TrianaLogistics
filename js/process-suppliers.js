@@ -192,23 +192,40 @@ function toggleSupplier(i) {
 // ── RFQ ──
 function openRFQModal(supplierIdx) {
   const s = suppliers[supplierIdx];
-  // Group items by category for display
-  let lastCat = null;
-  const itemRows = bomItems.map((bi, idx) => {
-    let catHeader = '';
-    if (bi.category && bi.category !== lastCat) {
-      catHeader = `<div style="background:var(--surface2);padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)">${esc(bi.category)}</div>`;
-      lastCat = bi.category;
-    }
-    return `${catHeader}<label style="display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s" onmouseover="this.style.background='rgba(59,130,246,.05)'" onmouseout="this.style.background=''">
-      <input type="checkbox" class="rfq-item-cb" value="${idx}" checked style="margin-top:3px;width:auto">
-      <div>
-        <div style="font-size:13px;color:var(--text);line-height:1.4">${esc(bi.description)}</div>
-        ${bi.part_number ? `<div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">${esc(bi.part_number)}</div>` : ''}
-      </div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px">× ${bi.quantity} ${bi.unit||''}</div>
-    </label>`;
-  }).join('');
+
+  // Split items: no price for this supplier (needs quoting) vs already priced
+  const semPreco = [], comPreco = [];
+  bomItems.forEach((bi, idx) => {
+    const hasPrice = matches.some(m => m.bom_item_id === bi.id && m.supplier_id === s.id && m.quotation_items?.price > 0);
+    (hasPrice ? comPreco : semPreco).push({ bi, idx });
+  });
+
+  const renderGroup = (group, dimmed) => {
+    let lastCat = null;
+    return group.map(({ bi, idx }) => {
+      let catHeader = '';
+      if (bi.category && bi.category !== lastCat) {
+        catHeader = `<div style="background:var(--surface2);padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)">${esc(bi.category)}</div>`;
+        lastCat = bi.category;
+      }
+      const rowStyle = `display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s${dimmed ? ';opacity:.45' : ''}`;
+      return `${catHeader}<label style="${rowStyle}" onmouseover="this.style.background='rgba(59,130,246,.05)'" onmouseout="this.style.background=''">
+        <input type="checkbox" class="rfq-item-cb" value="${idx}" checked style="margin-top:3px;width:auto">
+        <div>
+          <div style="font-size:13px;color:var(--text);line-height:1.4">${esc(bi.description)}</div>
+          ${bi.part_number ? `<div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">${esc(bi.part_number)}</div>` : ''}
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px">× ${bi.quantity} ${bi.unit||''}</div>
+      </label>`;
+    }).join('');
+  };
+
+  const sectionHeader = (label, color) =>
+    `<div style="padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${color};letter-spacing:.8px;text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1">${label}</div>`;
+
+  let itemRows = '';
+  if (semPreco.length) itemRows += sectionHeader(`Sem preço — a pedir (${semPreco.length})`, 'var(--accent)') + renderGroup(semPreco, false);
+  if (comPreco.length) itemRows += sectionHeader(`Já com preço (${comPreco.length})`, 'var(--muted)') + renderGroup(comPreco, true);
 
   showModalLg(`
     <div class="modal-tag">Pedido de Cotação — RFQ</div>
@@ -414,8 +431,8 @@ function openSupplierModal(idx = null, prefill = {}) {
   `);
   const _sf = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
   _sf('sf_name', s?.name || prefill.name || '');
-  _sf('sf_email', s?.email || prefill.email || '');
-  _sf('sf_email_cc', s?.email_cc || prefill.email_cc || '');
+  _sf('sf_email', s?.email || gs?.email || prefill.email || '');
+  _sf('sf_email_cc', s?.email_cc || gs?.email_cc || prefill.email_cc || '');
   _sf('sf_notes', s?.notes || '');
   renderTagBox('sfCatBox', pendingSupplierCategories, 'cat');
   renderTagBox('sfBrandBox', pendingSupplierBrands, 'brand');
@@ -523,6 +540,7 @@ function openManualQuotEntry(supplierId) {
   currentQuotSuppId = supplierId;
   const existing = quotationMap[supplierId] || [];
   pendingQuotItems = existing.map(qi => ({
+    id: qi.id,
     raw_part_number: qi.raw_part_number,
     raw_description: qi.raw_description,
     quantity: qi.quantity,
@@ -531,6 +549,18 @@ function openManualQuotEntry(supplierId) {
   }));
   pendingQuotFile = null;
   openQuotationValModal(existing.length ? 'Editar Cotação' : 'Entrada Manual');
+}
+
+// Carry over DB ids from existing items to newly parsed items by part_number or description match
+function _carryIds(existing, newItems) {
+  return newItems.map(ni => {
+    const m = existing.find(e =>
+      (ni.raw_part_number && e.raw_part_number &&
+       ni.raw_part_number.trim() === e.raw_part_number.trim()) ||
+      ni.raw_description.trim().toLowerCase() === e.raw_description.trim().toLowerCase()
+    );
+    return m ? { ...ni, id: m.id } : ni;
+  });
 }
 
 function _askReplaceOrAppend(existingItems, newItems, onReplace, onAppend) {
@@ -586,6 +616,7 @@ async function handleQuotationUpload(input) {
     const newItems = detected ? items.map(i => ({...i})) : [];
     if (!detected) showToast('Formato não detetado — adiciona itens manualmente.', true);
     const existing = (quotationMap[currentQuotSuppId] || []).map(qi => ({
+      id: qi.id,
       raw_part_number: qi.raw_part_number || null,
       raw_description: qi.raw_description,
       quantity: qi.quantity,
@@ -594,7 +625,7 @@ async function handleQuotationUpload(input) {
     }));
     if (existing.length && newItems.length) {
       _askReplaceOrAppend(existing, newItems,
-        () => { pendingQuotItems = newItems; openQuotationValModal(file.name); },
+        () => { pendingQuotItems = _carryIds(existing, newItems); openQuotationValModal(file.name); },
         () => { pendingQuotItems = [...existing, ...newItems]; openQuotationValModal(file.name); }
       );
     } else {
@@ -722,9 +753,10 @@ function renderQuotValTable() {
     // Preço + anomaly badge
     const tdPrice = document.createElement('td');
     const inPrice = document.createElement('input');
-    inPrice.type = 'number'; inPrice.step = '0.01'; inPrice.value = item.price; inPrice.style.width = '80px';
+    inPrice.type = 'text'; inPrice.value = item.price || ''; inPrice.style.width = '80px';
+    inPrice.oninput = function() { this.value = this.value.replace(/\s/g, ''); };
     inPrice.onchange = function() {
-      pendingQuotItems[i].price = parseFloat(this.value) || 0;
+      pendingQuotItems[i].price = parseNum(this.value) || 0;
       // recheck anomaly for this row on price change
       checkPriceAnomalies(pendingQuotItems).then(a => { priceAnomalies = a; renderQuotValTable(); });
     };
@@ -774,8 +806,14 @@ async function confirmQuotation() {
   const valid = pendingQuotItems.filter(i => i.raw_description.trim() && i.price > 0);
   if (!valid.length) { showToast('Adiciona pelo menos um item com preço.', true); return; }
   try {
-    await API.deleteQuotationItems(currentQuotSuppId);
-    await API.saveQuotationItems(valid.map(i => ({ ...i, supplier_id: currentQuotSuppId })));
+    const existingQ = quotationMap[currentQuotSuppId] || [];
+    const existingIds = new Set(existingQ.map(e => e.id).filter(Boolean));
+    const keepIds = new Set(valid.filter(i => i.id).map(i => i.id));
+    const idsToDelete = [...existingIds].filter(id => !keepIds.has(id));
+    await API.updateQuotationItems(
+      valid.map(i => ({ ...i, supplier_id: currentQuotSuppId })),
+      idsToDelete
+    );
     quotationMap[currentQuotSuppId] = await API.getQuotationItems(currentQuotSuppId);
 
     if (pendingQuotFile) {
@@ -788,12 +826,16 @@ async function confirmQuotation() {
     }
 
     // Populate savedAnomalyMap for supplier card display
+    // Match by ID (existing items) or by description (new items) — NOT by index (order may differ after upsert)
     const savedItems = quotationMap[currentQuotSuppId] || [];
     const anomalyCount = Object.keys(priceAnomalies).length;
     if (anomalyCount) {
+      const savedByDesc = {};
+      savedItems.forEach(s => { if (s.raw_description) savedByDesc[s.raw_description.trim().toLowerCase()] = s; });
       valid.forEach((item, idx) => {
-        const saved = savedItems[idx];
-        if (saved?.id && priceAnomalies[idx]) savedAnomalyMap[saved.id] = priceAnomalies[idx];
+        if (!priceAnomalies[idx]) return;
+        const savedId = item.id || savedByDesc[item.raw_description?.trim().toLowerCase()]?.id;
+        if (savedId) savedAnomalyMap[savedId] = priceAnomalies[idx];
       });
     }
 
@@ -873,6 +915,7 @@ async function handlePdfQuotation(file) {
     });
     if (!newPdfItems.length) showToast('Nenhum item detetado no PDF — adiciona manualmente.', true);
     const existingPdf = (quotationMap[currentQuotSuppId] || []).map(qi => ({
+      id: qi.id,
       raw_part_number: qi.raw_part_number || null,
       raw_description: qi.raw_description,
       quantity: qi.quantity,
@@ -881,7 +924,7 @@ async function handlePdfQuotation(file) {
     }));
     if (existingPdf.length && newPdfItems.length) {
       _askReplaceOrAppend(existingPdf, newPdfItems,
-        () => { pendingQuotItems = newPdfItems; openQuotationValModal(file.name, rawText); },
+        () => { pendingQuotItems = _carryIds(existingPdf, newPdfItems); openQuotationValModal(file.name, rawText); },
         () => { pendingQuotItems = [...existingPdf, ...newPdfItems]; openQuotationValModal(file.name, rawText); }
       );
     } else {

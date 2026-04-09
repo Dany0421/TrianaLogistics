@@ -139,6 +139,7 @@ async function generateExcel() {
   const supplierItems = {};       // supplierId → items array for buildSupSheet
   const supplierCounters = {};    // supplierId → how many items added so far (= indexInSupplier)
   const orderedItems = [];        // flat list in BOM order: { part, model, qty, supplierId, indexInSupplier }
+  const skippedItems = [];        // descriptions of BOM items with no price found
 
   for (const bi of bomItems) {
     const confirmed = selLookup[bi.id];
@@ -157,7 +158,7 @@ async function generateExcel() {
       }
     }
 
-    if (!suppId || !qi) continue;
+    if (!suppId || !qi) { skippedItems.push(bi.description || bi.part_number || '?'); continue; }
 
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
     const indexInSupplier = supplierCounters[suppId]++;
@@ -177,6 +178,13 @@ async function generateExcel() {
 
   const hasServices = Object.values(serviceRowsBySheet).some(arr => arr.some(s => s.unitPrice > 0));
   if (!activeSuppliers.length && !hasServices) { showToast('Sem itens com preço no Matching nem serviços.', true); return; }
+  if (skippedItems.length) {
+    const noun = skippedItems.length === 1 ? 'item sem preço' : 'itens sem preço';
+    console.warn('[Excel] Itens ignorados por falta de preço:', skippedItems);
+    showToast(`${skippedItems.length} ${noun} não incluído(s) no Excel — faz matching primeiro.`, true);
+    // Give user a moment to see the warning before download begins
+    await new Promise(r => setTimeout(r, 1200));
+  }
 
   try {
     const wb = new ExcelJS.Workbook();

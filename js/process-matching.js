@@ -120,8 +120,9 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
         const price = m?.quotation_items?.price;
         const isLowest = price != null && price === lowestPrice && lowestPrice < Infinity;
         if (m) {
+          const currency = m.quotation_items?.currency || '';
           return `<td><div class="match-cell${isSel?' match-selected':''}${isLowest&&!isSel?' match-lowest':''}" onclick="openMatchModal('${bi.id}','${s.id}')">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">${fmtPrice(price)}</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">${fmtPrice(price)}<span style="font-size:9px;opacity:.6;margin-left:2px">${esc(currency)}</span></div>
             ${isSel?`<div style="font-size:9px;color:var(--accent);letter-spacing:1px">SELECIONADO</div>`:''}
             ${isLowest&&!isSel?`<div style="font-size:9px;color:#4fc3f7;letter-spacing:1px">MAIS BAIXO</div>`:''}
           </div></td>`;
@@ -136,7 +137,13 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     </tr>`;
   }
 
-  html += '</tbody></table></div>';
+  html += `</tbody>
+    <tfoot><tr>
+      <td></td><td></td>
+      ${suppliers.map(s=>`<td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;padding:8px 10px;white-space:nowrap;border-top:1px solid var(--border)">${esc(s.name)}</td>`).join('')}
+      <td></td>
+    </tr></tfoot>
+    </table></div>`;
   el.appendChild(document.createRange().createContextualFragment(html));
 }
 
@@ -240,11 +247,18 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   }
 
   html += `</tbody>
-    <tfoot><tr>
+    <tfoot>
+    <tr>
       <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total Equipamento</td>
       ${suppliers.map(s => `<td>${colTotals[s.id] > 0 ? fmtPrice(colTotals[s.id]) : '<span style="color:#334">—</span>'}</td>`).join('')}
       ${hasServices ? `<td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--warn);font-weight:600">${serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'}</td>` : ''}
-    </tr></tfoot>
+    </tr>
+    <tr>
+      <td></td>
+      ${suppliers.map(s => `<td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;padding:6px 12px;white-space:nowrap">${esc(s.name)}</td>`).join('')}
+      ${hasServices ? '<td style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--warn);letter-spacing:.6px;text-transform:uppercase;text-align:center;padding:6px 12px">Triana</td>' : ''}
+    </tr>
+    </tfoot>
     </table></div>`;
 
   el.appendChild(document.createRange().createContextualFragment(html));
@@ -308,6 +322,9 @@ async function linkItem(bomItemId, supplierId, quotItemId) {
     const saved = await API.saveMatch({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId, match_type: 'manual' });
     const idx = matches.findIndex(m => m.bom_item_id === bomItemId && m.supplier_id === supplierId);
     if (idx >= 0) matches[idx] = { ...matches[idx], ...saved, quotation_items: qi };
+    // Manual link clears any prior auto-match rejection for this pair
+    rejectedAutoMatch = rejectedAutoMatch.filter(r => !(r.bom_item_id === bomItemId && r.supplier_id === supplierId));
+    await API.removeRejectedAutoMatch(processId, bomItemId, supplierId);
   } catch(e) {
     await loadMatchData(); renderMatchingTab();
     showToast('Erro: ' + e.message, true);
@@ -317,15 +334,19 @@ async function linkItem(bomItemId, supplierId, quotItemId) {
 async function unlinkItem(bomItemId, supplierId, matchId) {
   if (!UUID_RE.test(bomItemId) || !UUID_RE.test(supplierId) || !UUID_RE.test(matchId)) return;
   try {
+    const match = matches.find(m => m.id === matchId);
+    const quotItemId = match?.quotation_item_id;
     const wasSelected = !!selectedOffers.find(o => o.bom_item_id === bomItemId && o.supplier_id === supplierId);
     // Optimistic update
     matches = matches.filter(m => m.id !== matchId);
     if (wasSelected) selectedOffers = selectedOffers.filter(o => !(o.bom_item_id === bomItemId && o.supplier_id === supplierId));
+    if (quotItemId) rejectedAutoMatch.push({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId });
     closeModal();
     renderMatchingTab();
     // Persist
     await API.deleteMatch(matchId);
     if (wasSelected) await API.deleteSelectedOffer(processId, bomItemId);
+    if (quotItemId) await API.addRejectedAutoMatch(processId, bomItemId, supplierId, quotItemId);
   } catch(e) {
     await loadMatchData(); renderMatchingTab();
     showToast('Erro: ' + e.message, true);
@@ -367,6 +388,8 @@ async function runAutoMatch() {
   if (!suppliersWithItems.length) { showToast('Nenhum fornecedor com cotação carregada.', true); return; }
 
   const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+  // Build rejected set: "bomItemId:supplierId:quotItemId"
+  const rejectedSet = new Set(rejectedAutoMatch.map(r => `${r.bom_item_id}:${r.supplier_id}:${r.quotation_item_id}`));
   const newMatches = [];
 
   for (const bi of bomItems) {
@@ -393,17 +416,69 @@ async function runAutoMatch() {
         if (score > bestScore) { bestScore = score; bestItem = qi; }
       }
 
-      if (bestItem && bestScore >= 0.5) {
+      if (bestItem && bestScore >= 0.5 && !rejectedSet.has(`${bi.id}:${s.id}:${bestItem.id}`)) {
         newMatches.push({ process_id: processId, bom_item_id: bi.id, supplier_id: s.id, quotation_item_id: bestItem.id, match_type: 'auto', confidence: Math.round(bestScore*100)/100 });
+      }
+    }
+  }
+
+  // Phase 2: propagate matches across BOM items with identical descriptions
+  // Build combined lookup: existing matches + newly found in phase 1
+  const allMatchLookup = {};
+  for (const m of matches) {
+    if (!allMatchLookup[m.bom_item_id]) allMatchLookup[m.bom_item_id] = {};
+    allMatchLookup[m.bom_item_id][m.supplier_id] = m.quotation_item_id;
+  }
+  for (const m of newMatches) {
+    if (!allMatchLookup[m.bom_item_id]) allMatchLookup[m.bom_item_id] = {};
+    allMatchLookup[m.bom_item_id][m.supplier_id] = m.quotation_item_id;
+  }
+
+  // Group non-service BOM items by exact trimmed description
+  const descGroups = {};
+  for (const bi of bomItems) {
+    if (bi.is_service) continue;
+    const key = (bi.description || '').trim();
+    if (!key) continue;
+    if (!descGroups[key]) descGroups[key] = [];
+    descGroups[key].push(bi);
+  }
+
+  let propagated = 0;
+  for (const group of Object.values(descGroups)) {
+    if (group.length < 2) continue;
+    // Collect all supplier IDs that have any match in this group
+    const suppIds = new Set();
+    for (const bi of group) {
+      if (allMatchLookup[bi.id]) for (const sid of Object.keys(allMatchLookup[bi.id])) suppIds.add(sid);
+    }
+    for (const suppId of suppIds) {
+      const source = group.find(bi => allMatchLookup[bi.id]?.[suppId]);
+      if (!source) continue;
+      const quotItemId = allMatchLookup[source.id][suppId];
+      for (const bi of group) {
+        if (allMatchLookup[bi.id]?.[suppId]) continue; // already matched
+        if (rejectedSet.has(`${bi.id}:${suppId}:${quotItemId}`)) continue;
+        newMatches.push({ process_id: processId, bom_item_id: bi.id, supplier_id: suppId, quotation_item_id: quotItemId, match_type: 'auto', confidence: 1.0 });
+        if (!allMatchLookup[bi.id]) allMatchLookup[bi.id] = {};
+        allMatchLookup[bi.id][suppId] = quotItemId;
+        propagated++;
       }
     }
   }
 
   if (!newMatches.length) { showToast('Nenhum match automático encontrado.'); return; }
   try {
-    await Promise.all(newMatches.map(m => API.saveMatch(m)));
+    await API.saveMatches(newMatches);
     await loadMatchData();
     renderMatchingTab();
-    showToast(`${newMatches.length} match(es) automático(s) criado(s).`);
-  } catch(e) { showToast('Erro: ' + e.message, true); }
+    const msg = propagated > 0
+      ? `${newMatches.length} match(es) criado(s) — ${propagated} propagado(s) de itens repetidos.`
+      : `${newMatches.length} match(es) automático(s) criado(s).`;
+    showToast(msg);
+  } catch(e) {
+    // Sync state with DB even on error — partial saves may have occurred
+    await loadMatchData(); renderMatchingTab();
+    showToast('Erro: ' + e.message, true);
+  }
 }
