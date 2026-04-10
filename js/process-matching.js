@@ -48,6 +48,11 @@ function renderMatchingTab() {
   const el = document.getElementById('matchingContent');
   if (!el) return;
   const scrollState = _captureMatchingScroll(el);
+  const scheduleRestoreScroll = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => _restoreMatchingScroll(scrollState));
+    });
+  };
   el.replaceChildren();
 
   if (!bomItems.length) {
@@ -55,6 +60,7 @@ function renderMatchingTab() {
     d.className = 'empty-state';
     d.textContent = 'Carrega o BOM primeiro.';
     el.appendChild(d);
+    scheduleRestoreScroll();
     return;
   }
 
@@ -70,6 +76,7 @@ function renderMatchingTab() {
     d.className = 'empty-state';
     d.textContent = 'Adiciona fornecedores primeiro.';
     el.appendChild(d);
+    scheduleRestoreScroll();
     return;
   }
 
@@ -112,9 +119,7 @@ function renderMatchingTab() {
     _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems);
   }
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => _restoreMatchingScroll(scrollState));
-  });
+  scheduleRestoreScroll();
 }
 
 function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems) {
