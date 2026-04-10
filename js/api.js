@@ -167,6 +167,26 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async updateQuotationItems(items, idsToDelete) {
+    // Delete only items explicitly removed
+    if (idsToDelete.length > 0) {
+      const { error } = await supabase.from('quotation_items').delete().in('id', idsToDelete);
+      if (error) throw _sanitizeError(error);
+    }
+    // Update items that already exist in DB (have an id)
+    const toUpsert = items.filter(i => i.id);
+    if (toUpsert.length > 0) {
+      const { error } = await supabase.from('quotation_items').upsert(toUpsert, { onConflict: 'id' });
+      if (error) throw _sanitizeError(error);
+    }
+    // Insert truly new items (no id yet)
+    const toInsert = items.filter(i => !i.id).map(({ id, ...rest }) => rest);
+    if (toInsert.length > 0) {
+      const { error } = await supabase.from('quotation_items').insert(toInsert);
+      if (error) throw _sanitizeError(error);
+    }
+  },
+
   // ── Item Matches ──
   async getMatches(processId) {
     const { data, error } = await supabase
@@ -187,8 +207,39 @@ const API = {
     return data;
   },
 
+  async saveMatches(matches) {
+    // Batch upsert — one roundtrip instead of N
+    if (!matches.length) return [];
+    const { data, error } = await supabase
+      .from('item_matches')
+      .upsert(matches, { onConflict: 'bom_item_id,supplier_id' })
+      .select();
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
   async deleteMatch(id) {
     const { error } = await supabase.from('item_matches').delete().eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
+  async getRejectedAutoMatch(processId) {
+    const { data, error } = await supabase.from('rejected_automatch').select('*').eq('process_id', processId);
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async addRejectedAutoMatch(processId, bomItemId, supplierId, quotItemId) {
+    const { error } = await supabase.from('rejected_automatch')
+      .upsert({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId },
+               { onConflict: 'process_id,bom_item_id,supplier_id,quotation_item_id', ignoreDuplicates: true });
+    if (error) throw _sanitizeError(error);
+  },
+
+  async removeRejectedAutoMatch(processId, bomItemId, supplierId) {
+    // When user manually links a pair, clear all prior rejections for it
+    const { error } = await supabase.from('rejected_automatch')
+      .delete().eq('process_id', processId).eq('bom_item_id', bomItemId).eq('supplier_id', supplierId);
     if (error) throw _sanitizeError(error);
   },
 
@@ -228,8 +279,9 @@ const API = {
     if (dateFrom) q = q.gte('created_at', dateFrom);
     if (dateTo)   q = q.lte('created_at', dateTo);
     if (processSearch.trim()) {
-      const t = processSearch.trim();
-      q = q.or(`new_data->>project_name.ilike.%${t}%,new_data->>client_name.ilike.%${t}%,old_data->>project_name.ilike.%${t}%,old_data->>client_name.ilike.%${t}%`);
+      // Strip chars that could be used to inject additional Supabase filter predicates
+      const t = processSearch.trim().replace(/[,()%]/g, '');
+      if (t) q = q.or(`new_data->>project_name.ilike.%${t}%,new_data->>client_name.ilike.%${t}%,old_data->>project_name.ilike.%${t}%,old_data->>client_name.ilike.%${t}%`);
     }
 
     const { data, error } = await q;
@@ -356,6 +408,11 @@ const API = {
   // ── File upload ──
   async uploadFile(bucket, path, file) {
     if (path.includes('..')) throw new Error('Caminho inválido.');
+    // Verify file magic bytes — reject anything that isn't Excel (ZIP) or PDF
+    const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    const isZip = header[0] === 0x50 && header[1] === 0x4B; // PK\x03\x04 — XLSX/ZIP
+    const isPdf = header[0] === 0x25 && header[1] === 0x50 && header[2] === 0x44 && header[3] === 0x46; // %PDF
+    if (!isZip && !isPdf) throw new Error('Tipo de ficheiro inválido. Usa .xlsx, .xls ou .pdf.');
     const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
     if (error) throw _sanitizeError(error);
     return data;
