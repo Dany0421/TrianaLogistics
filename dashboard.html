@@ -633,14 +633,32 @@ function renderUserStats() {
   section.style.display = '';
   while (section.firstChild) section.removeChild(section.firstChild);
 
-  const lbl = document.createElement('div');
-  lbl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:20px 0 10px";
-  lbl.textContent = 'Carga por Responsável';
-  section.appendChild(lbl);
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-top:20px';
+
+  const toggleRow = document.createElement('div');
+  toggleRow.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 6px;cursor:pointer;color:var(--muted);border-top:1px solid var(--border);user-select:none';
+
+  const arrow = document.createElement('span');
+  arrow.style.cssText = 'font-size:10px';
+  arrow.textContent = userStatsExpanded ? '▼' : '▶';
+
+  const label = document.createElement('span');
+  label.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase";
+  label.textContent = 'Carga por Responsável (' + procUsers.length + ')';
 
   const grid = document.createElement('div');
   grid.className = 'stats-grid';
-  grid.style.marginBottom = '0';
+  grid.style.cssText = 'margin-bottom:0;margin-top:6px;' + (userStatsExpanded ? '' : 'display:none');
+
+  toggleRow.addEventListener('click', () => {
+    userStatsExpanded = !userStatsExpanded;
+    arrow.textContent = userStatsExpanded ? '▼' : '▶';
+    grid.style.display = userStatsExpanded ? '' : 'none';
+  });
+
+  toggleRow.appendChild(arrow);
+  toggleRow.appendChild(label);
 
   for (const u of procUsers) {
     const open = openByUser[u.id] || 0;
@@ -677,7 +695,10 @@ function renderUserStats() {
     card.appendChild(subDiv);
     grid.appendChild(card);
   }
-  section.appendChild(grid);
+
+  wrap.appendChild(toggleRow);
+  wrap.appendChild(grid);
+  section.appendChild(wrap);
 }
 
 function setFilter(val) {
@@ -692,6 +713,7 @@ function setFilterPriority(val) {
 // ── Process list ──
 const PRIORITY_ORDER = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
 let closedExpanded = false;
+let userStatsExpanded = false;
 
 function buildProcessRow(p) {
   const row = document.createElement('div');
