@@ -1,0 +1,935 @@
+// ── Supplier modal local state ──
+let editingSupplierIdx = null;
+let pendingSupplierCategories = [];
+let pendingSupplierBrands = [];
+
+// ── Price Anomaly Detection ──
+async function checkPriceAnomalies(items) {
+  const partNums = items.map(i => i.raw_part_number).filter(Boolean);
+  const descs = items.filter(i => !i.raw_part_number).map(i => i.raw_description);
+  let history = [];
+  try { history = await API.getPriceHistoryBatch(partNums, descs); } catch(_) { return {}; }
+  const histMap = {};
+  history.forEach(h => {
+    const key = h.raw_part_number
+      ? h.raw_part_number.trim().toLowerCase() + ':' + (h.currency||'MZN')
+      : h.raw_description.trim().toLowerCase().slice(0,40) + ':' + (h.currency||'MZN');
+    if (!histMap[key]) histMap[key] = [];
+    histMap[key].push(Number(h.price));
+  });
+  function median(arr) {
+    const s = [...arr].sort((a,b) => a-b);
+    const m = Math.floor(s.length/2);
+    return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+  }
+  const anomalies = {};
+  items.forEach((item, idx) => {
+    const k = item.raw_part_number
+      ? item.raw_part_number.trim().toLowerCase() + ':' + (item.currency||'MZN')
+      : item.raw_description.trim().toLowerCase().slice(0,40) + ':' + (item.currency||'MZN');
+    const hist = histMap[k];
+    if (!hist || hist.length < 3) return;
+    const med = median(hist);
+    if (!med || med <= 0) return;
+    const price = Number(item.price);
+    if (price > med * 3) anomalies[idx] = { type:'high', median:med, ratio:(price/med).toFixed(1) };
+    else if (price < med / 3) anomalies[idx] = { type:'low', median:med, ratio:(med/price).toFixed(1) };
+  });
+  return anomalies;
+}
+
+// ── Supplier Suggestions ──
+function renderSupplierSuggestions() {
+  const banner = document.getElementById('suggBanner');
+  if (!banner) return;
+  while (banner.firstChild) banner.removeChild(banner.firstChild);
+
+  const bomCats = [...new Set(bomItems.map(b => b.category).filter(Boolean))];
+  if (!bomCats.length || !globalSuppliersList.length) return;
+
+  const addedNames = new Set(suppliers.map(s => s.name.trim().toLowerCase()));
+  const bomCatsLower = new Set(bomCats.map(c => c.toLowerCase()));
+
+  const suggestions = globalSuppliersList.filter(gs => {
+    if (addedNames.has(gs.name.trim().toLowerCase())) return false;
+    return (gs.categories || []).some(c => bomCatsLower.has(c.toLowerCase()));
+  });
+
+  if (!suggestions.length) return;
+
+  const header = document.createElement('div');
+  header.className = 'sugg-banner-header';
+  const title = document.createElement('span');
+  title.textContent = 'Fornecedores sugeridos — categorias do BOM';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn btn-ghost btn-sm';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = () => { while (banner.firstChild) banner.removeChild(banner.firstChild); };
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+
+  const cards = document.createElement('div');
+  cards.className = 'sugg-cards';
+
+  suggestions.forEach(gs => {
+    const matchedCats = (gs.categories || []).filter(c => bomCatsLower.has(c.toLowerCase()));
+    const card = document.createElement('div');
+    card.className = 'sugg-card';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'sugg-card-name';
+    nameEl.textContent = gs.name;
+    card.appendChild(nameEl);
+
+    if (matchedCats.length) {
+      const catsEl = document.createElement('div');
+      catsEl.className = 'sugg-card-cats';
+      matchedCats.forEach(c => {
+        const chip = document.createElement('span');
+        chip.className = 'sugg-cat-chip';
+        chip.textContent = c;
+        catsEl.appendChild(chip);
+      });
+      card.appendChild(catsEl);
+    }
+
+    if (gs.avg_response_hours > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'resp-time-badge';
+      badge.textContent = '~' + formatResponseTime(gs.avg_response_hours);
+      card.appendChild(badge);
+    }
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-ghost btn-sm';
+    addBtn.textContent = '+ Adicionar';
+    addBtn.style.marginTop = '2px';
+    addBtn.onclick = () => openSupplierModal(null, { name: gs.name, email: gs.email || '', email_cc: gs.email_cc || '', categories: [...(gs.categories || [])] });
+    card.appendChild(addBtn);
+
+    cards.appendChild(card);
+  });
+
+  banner.className = 'sugg-banner';
+  banner.appendChild(header);
+  banner.appendChild(cards);
+}
+
+// ── Render Suppliers ──
+function renderSuppliers() {
+  document.getElementById('suppCount').textContent = `${suppliers.length} fornecedor${suppliers.length !== 1 ? 'es' : ''}`;
+  const el = document.getElementById('suppliersContent');
+  el.replaceChildren();
+  if (!suppliers.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.appendChild(document.createTextNode('Sem fornecedores.'));
+    empty.appendChild(document.createElement('br'));
+    empty.appendChild(document.createTextNode('Adiciona o primeiro fornecedor.'));
+    el.appendChild(empty);
+    return;
+  }
+  const suppHtml = suppliers.map((s, i) => {
+    const qItems = quotationMap[s.id] || [];
+    const qCount = qItems.length;
+    const gs = supplierHistory[s.name?.trim().toLowerCase()];
+    const avgBadge = gs?.avg_response_hours > 0 ? `<span class="resp-time-badge">~${formatResponseTime(gs.avg_response_hours)}</span>` : '';
+    return `
+    <div class="supplier-card">
+      <div class="supplier-card-header" onclick="toggleSupplier(${i})">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--accent)">${esc(s.name)}</span>
+          <span class="badge ${suppStatusClass(s.status)}">${s.status}</span>
+          ${s.is_foreign ? '<span class="badge" style="background:#3a2a00;color:#ffaa00;border:1px solid #5a4a00">ESTRANGEIRO</span>' : ''}
+          <span class="quot-badge ${qCount?'has-items':''}">${qCount ? `${qCount} itens cotação` : 'sem cotação'}</span>
+          ${qItems.some(qi=>savedAnomalyMap[qi.id]) ? '<span class="anomaly-high" title="Preços fora do histórico detectados">&#9888; outlier</span>' : ''}
+          ${avgBadge}
+        </div>
+        <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+          ${s.email ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openRFQModal(${i})">✉ RFQ</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openManualQuotEntry('${s.id}')">✏ Manual</button>
+          <button class="btn btn-ghost btn-sm" onclick="uploadQuotation('${s.id}')">📎 Cotação</button>
+          <button class="btn btn-ghost btn-sm" onclick="openSupplierModal(${i})">Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteSupplier('${s.id}')">×</button>
+        </div>
+      </div>
+      <div class="supplier-card-body" id="suppBody-${i}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;margin-bottom:${qCount?'12px':'0'}">
+          <div><span style="color:var(--muted);font-size:11px">EMAIL</span><br>${esc(s.email||'—')}${s.email_cc?`<br><span style="font-size:11px;color:var(--muted)">CC: ${esc(s.email_cc)}</span>`:''}</div>
+          <div><span style="color:var(--muted);font-size:11px">ÚLTIMO CONTACTO</span><br>${s.last_contact_at ? fmtDate(s.last_contact_at) : '—'}</div>
+          <div><span style="color:var(--muted);font-size:11px">FOLLOW-UP</span><br>${s.next_followup_at ? fmtDate(s.next_followup_at) : '—'}</div>
+          <div><span style="color:var(--muted);font-size:11px">NOTAS</span><br>${esc(s.notes||'—')}</div>
+        </div>
+        ${qCount ? `
+        <div style="border-top:1px solid var(--border);padding-top:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px">COTAÇÃO — ${qCount} ITENS</div>
+            ${quotationFilesMap[s.id] ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewQuotFile('${quotationFilesMap[s.id].file_path}')">📄 Ver original</button>` : ''}
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            ${qItems.slice(0,6).map(qi=>{
+              const anom = savedAnomalyMap[qi.id];
+              const priceColor = anom ? (anom.type==='high'?'#fb923c':'#818cf8') : '#fff';
+              const priceTitle = anom ? (anom.type==='high'?`${anom.ratio}× acima da mediana histórica`:`${anom.ratio}× abaixo da mediana histórica`) : '';
+              return `<tr>
+              <td style="padding:2px 0;color:var(--text)">${esc(qi.raw_description.length>55?qi.raw_description.substring(0,55)+'\u2026':qi.raw_description)}</td>
+              <td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:${priceColor};white-space:nowrap" title="${esc(priceTitle)}">${fmtPrice(qi.price)} ${qi.currency}${anom?` <span style="font-size:9px">&#9888;</span>`:''}</td>
+            </tr>`;}).join('')}
+            ${qCount>6?`<tr><td colspan="2" style="color:var(--muted);padding-top:4px">…e mais ${qCount-6} itens</td></tr>`:''}
+          </table>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  el.appendChild(document.createRange().createContextualFragment(suppHtml));
+}
+
+function toggleSupplier(i) {
+  const el = document.getElementById('suppBody-' + i);
+  el.classList.toggle('open');
+}
+
+// ── RFQ ──
+function openRFQModal(supplierIdx) {
+  const s = suppliers[supplierIdx];
+
+  // Split items: no price for this supplier (needs quoting) vs already priced
+  const semPreco = [], comPreco = [];
+  bomItems.forEach((bi, idx) => {
+    const hasPrice = matches.some(m => m.bom_item_id === bi.id && m.supplier_id === s.id && m.quotation_items?.price > 0);
+    (hasPrice ? comPreco : semPreco).push({ bi, idx });
+  });
+
+  const renderGroup = (group, dimmed) => {
+    let lastCat = null;
+    return group.map(({ bi, idx }) => {
+      let catHeader = '';
+      if (bi.category && bi.category !== lastCat) {
+        catHeader = `<div style="background:var(--surface2);padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)">${esc(bi.category)}</div>`;
+        lastCat = bi.category;
+      }
+      const rowStyle = `display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s${dimmed ? ';opacity:.45' : ''}`;
+      return `${catHeader}<label style="${rowStyle}" onmouseover="this.style.background='rgba(59,130,246,.05)'" onmouseout="this.style.background=''">
+        <input type="checkbox" class="rfq-item-cb" value="${idx}" checked style="margin-top:3px;width:auto">
+        <div>
+          <div style="font-size:13px;color:var(--text);line-height:1.4">${esc(bi.description)}</div>
+          ${bi.part_number ? `<div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">${esc(bi.part_number)}</div>` : ''}
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px">× ${bi.quantity} ${bi.unit||''}</div>
+      </label>`;
+    }).join('');
+  };
+
+  const sectionHeader = (label, color) =>
+    `<div style="padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${color};letter-spacing:.8px;text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1">${label}</div>`;
+
+  let itemRows = '';
+  if (semPreco.length) itemRows += sectionHeader(`Sem preço — a pedir (${semPreco.length})`, 'var(--accent)') + renderGroup(semPreco, false);
+  if (comPreco.length) itemRows += sectionHeader(`Já com preço (${comPreco.length})`, 'var(--muted)') + renderGroup(comPreco, true);
+
+  showModalLg(`
+    <div class="modal-tag">Pedido de Cotação — RFQ</div>
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
+      <div class="modal-title" style="margin-bottom:0">${esc(s.name)}</div>
+      <div style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">${esc(s.email)}</div>
+    </div>
+    ${!bomItems.length
+      ? `<div style="color:var(--muted);font-size:13px;margin:20px 0">Carrega o BOM primeiro.</div>`
+      : `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase">Seleciona os itens a pedir</div>
+          <label style="cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;text-transform:none;letter-spacing:0;font-weight:400;margin-bottom:0">
+            <input type="checkbox" id="rfq_all" onchange="toggleAllRFQ(this.checked)" checked style="width:auto"> Selecionar tudo
+          </label>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:420px;overflow-y:auto;margin-bottom:16px">
+          ${itemRows}
+        </div>`}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      ${bomItems.length ? `<button class="btn btn-primary" onclick="sendRFQ(${supplierIdx})">✉ Gerar Email</button>` : ''}
+    </div>
+  `);
+}
+
+function toggleAllRFQ(checked) {
+  document.querySelectorAll('.rfq-item-cb').forEach(cb => cb.checked = checked);
+}
+
+function buildRFQHtml(selected, supplierName) {
+  const td = 'style="border:1px solid #cbd5e1;padding:7px 10px"';
+  const tdC = 'style="border:1px solid #cbd5e1;padding:7px 10px;text-align:center"';
+  const tdMono = 'style="border:1px solid #cbd5e1;padding:7px 10px;font-family:monospace;font-size:12px"';
+
+  let rows = '';
+  let lastCat = undefined;
+  for (const bi of selected) {
+    if (bi.category !== lastCat) {
+      if (bi.category) {
+        rows += '<tr style="background:#e8f0fe"><td colspan="4" style="border:1px solid #cbd5e1;padding:5px 10px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#1e40af">' + esc(bi.category) + '</td></tr>';
+      }
+      lastCat = bi.category;
+    }
+    rows += '<tr>';
+    rows += '<td ' + tdMono + '>' + esc(bi.part_number || '-') + '</td>';
+    rows += '<td ' + td + '>' + esc(bi.description || '-') + '</td>';
+    rows += '<td ' + tdC + '>' + (bi.quantity || 1) + '</td>';
+    rows += '<td ' + td + '>' + esc(bi.unit || 'Unidade') + '</td>';
+    rows += '</tr>';
+  }
+
+  return '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6">'
+    + '<p>Boa tarde, Prezados,</p>'
+    + '<p>Espero que este e-mail os encontre bem.</p>'
+    + '<p>Queria solicitar uma cota&ccedil;&atilde;o para o equipamento abaixo:</p>'
+    + '<table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;width:100%;max-width:720px">'
+    + '<thead><tr style="background:#f0f4f8">'
+    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Artigo</th>'
+    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Descri&ccedil;&atilde;o</th>'
+    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;font-weight:600">Qtd.</th>'
+    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Unidade</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '</table>'
+    + '</div>';
+}
+
+async function sendRFQ(supplierIdx) {
+  const s = suppliers[supplierIdx];
+  const selected = [...document.querySelectorAll('.rfq-item-cb:checked')]
+    .map(cb => bomItems[parseInt(cb.value)])
+    .filter(Boolean);
+  if (!selected.length) { showToast('Seleciona pelo menos um item.', true); return; }
+
+  const subject = 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
+  const html = buildRFQHtml(selected, s.name);
+
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })
+    ]);
+  } catch (e) {
+    showToast('Nao foi possivel copiar automaticamente.', true);
+    return;
+  }
+
+  const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
+  const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
+  window.location.href = mailto;
+  closeModal();
+  showToast('Email copiado — cola no body do email (Ctrl+V)');
+}
+
+function autoFillSupplierEmail(name) {
+  const known = supplierHistory[name.trim().toLowerCase()];
+  if (!known) return;
+  const eEl = document.getElementById('sf_email');
+  const ccEl = document.getElementById('sf_email_cc');
+  if (eEl && !eEl.value) eEl.value = known.email || '';
+  if (ccEl && !ccEl.value) ccEl.value = known.email_cc || '';
+}
+
+// ── Tag Box (shared for suppliers and process categories) ──
+function renderTagBox(boxId, arr, type) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  while (box.firstChild) box.removeChild(box.firstChild);
+  arr.forEach((c, i) => {
+    const span = document.createElement('span');
+    span.className = 'tag-chip';
+    span.textContent = c;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '\u00d7';
+    btn.onclick = () => removeSupplierTag(type, i);
+    span.appendChild(btn);
+    box.appendChild(span);
+  });
+  const inp = document.createElement('input');
+  inp.id = 'tagInput_' + type;
+  inp.className = 'tag-input-field';
+  inp.placeholder = 'Adicionar, Enter para confirmar...';
+  inp.onkeydown = function(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const val = this.value.trim().replace(/,/g, '');
+      if (!val) return;
+      if (type === 'cat') { if (!pendingSupplierCategories.includes(val)) pendingSupplierCategories.push(val); }
+      else if (type === 'pcat') { if (!pendingProcessCategories.includes(val)) pendingProcessCategories.push(val); }
+      else { if (!pendingSupplierBrands.includes(val)) pendingSupplierBrands.push(val); }
+      renderTagBox(boxId, type === 'cat' ? pendingSupplierCategories : type === 'pcat' ? pendingProcessCategories : pendingSupplierBrands, type);
+      document.getElementById('tagInput_' + type)?.focus();
+    }
+  };
+  box.appendChild(inp);
+}
+
+function removeSupplierTag(type, idx) {
+  if (type === 'cat') pendingSupplierCategories.splice(idx, 1);
+  else if (type === 'pcat') pendingProcessCategories.splice(idx, 1);
+  else pendingSupplierBrands.splice(idx, 1);
+  const boxId = type === 'cat' ? 'sfCatBox' : type === 'pcat' ? 'ep_catBox' : 'sfBrandBox';
+  const arr = type === 'cat' ? pendingSupplierCategories : type === 'pcat' ? pendingProcessCategories : pendingSupplierBrands;
+  renderTagBox(boxId, arr, type);
+}
+
+// ── Supplier Modal ──
+function openSupplierModal(idx = null, prefill = {}) {
+  editingSupplierIdx = idx;
+  const s = idx !== null ? suppliers[idx] : null;
+  const gs = s ? globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase()) : null;
+  pendingSupplierCategories = gs ? [...(gs.categories || [])] : (prefill.categories || []);
+  pendingSupplierBrands = gs ? [...(gs.brands || [])] : [];
+  showModal(`
+    <div class="modal-tag">${s ? 'Editar Fornecedor' : 'Novo Fornecedor'}</div>
+    <div class="modal-title">${s ? esc(s.name) : 'Adicionar Fornecedor'}</div>
+    <datalist id="supplierNameList">${Object.values(supplierHistory).map(sh=>`<option value="${esc(sh.name)}">`).join('')}</datalist>
+    <div class="form-grid-2">
+      <div><label>Nome</label><input id="sf_name" value="" placeholder="Ex: Tech Solutions" list="supplierNameList" oninput="autoFillSupplierEmail(this.value)"></div>
+      <div><label>Email Principal</label><input id="sf_email" value="" placeholder="email@fornecedor.com"></div>
+    </div>
+    <div class="form-grid-2">
+      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" value="" placeholder="cc@fornecedor.com"></div>
+      <div></div>
+    </div>
+    <div class="form-grid-2">
+      <div><label>Estado</label>
+        <select id="sf_status">
+          ${['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'].map(v=>`<option ${(s?.status||'Not contacted')===v?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding-top:20px">
+        <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
+          <input type="checkbox" id="sf_foreign" ${s?.is_foreign?'checked':''} onchange="toggleForeignBox(this.checked)" style="width:auto">
+          <span style="font-size:13px;color:var(--text)">Fornecedor Estrangeiro</span>
+        </label>
+      </div>
+    </div>
+    <div id="sf_foreignBox" class="${s?.is_foreign?'foreign-box show':'foreign-box'}">
+      <div><label>Câmbio (MZN)</label><input type="number" step="0.01" id="sf_cambio" value="${s?.cambio||''}" placeholder="63.5"></div>
+      <div><label>Transporte</label><input type="number" step="0.01" id="sf_transport" value="${s?.transport||''}" placeholder="1500.00"></div>
+      <div><label>Direitos (%)</label><input type="number" step="0.1" id="sf_direitos" value="${s?.direitos||''}" placeholder="7.5"></div>
+    </div>
+    <div class="form-grid-2">
+      <div><label>Último Contacto</label><input type="date" id="sf_last" value="${s?.last_contact_at||''}"></div>
+      <div><label>Próximo Follow-up</label><input type="date" id="sf_followup" value="${s?.next_followup_at||''}"></div>
+    </div>
+    <div class="form-row"><label>Notas</label><textarea id="sf_notes"></textarea></div>
+    <div class="form-grid-2">
+      <div>
+        <label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipos de equipamento — opcional)</span></label>
+        <div class="tag-input-box" id="sfCatBox"></div>
+      </div>
+      <div>
+        <label>Marcas <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label>
+        <div class="tag-input-box" id="sfBrandBox"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveSupplier()">Guardar</button>
+    </div>
+  `);
+  const _sf = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+  _sf('sf_name', s?.name || prefill.name || '');
+  _sf('sf_email', s?.email || gs?.email || prefill.email || '');
+  _sf('sf_email_cc', s?.email_cc || gs?.email_cc || prefill.email_cc || '');
+  _sf('sf_notes', s?.notes || '');
+  renderTagBox('sfCatBox', pendingSupplierCategories, 'cat');
+  renderTagBox('sfBrandBox', pendingSupplierBrands, 'brand');
+  if (document.getElementById('ep_catBox')) renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
+}
+
+function toggleForeignBox(val) {
+  document.getElementById('sf_foreignBox').className = val ? 'foreign-box show' : 'foreign-box';
+}
+
+async function saveSupplier() {
+  const fields = {
+    process_id:       processId,
+    name:             document.getElementById('sf_name').value.trim(),
+    email:            document.getElementById('sf_email').value.trim() || null,
+    status:           document.getElementById('sf_status').value,
+    is_foreign:       document.getElementById('sf_foreign').checked,
+    cambio:           parseFloat(document.getElementById('sf_cambio')?.value) || null,
+    transport:        parseFloat(document.getElementById('sf_transport')?.value) || null,
+    direitos:         parseFloat(document.getElementById('sf_direitos')?.value) || 0,
+    last_contact_at:  document.getElementById('sf_last').value || null,
+    next_followup_at: document.getElementById('sf_followup').value || null,
+    notes:            document.getElementById('sf_notes').value.trim() || null,
+    email_cc:         document.getElementById('sf_email_cc').value.trim() || null,
+  };
+  if (!fields.name) { showToast('Nome do fornecedor é obrigatório.', true); return; }
+  if (fields.name.length > 200) { showToast('Nome demasiado longo (máx 200 caracteres).', true); return; }
+  if (fields.email && (fields.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email))) { showToast('Email inválido.', true); return; }
+  if (fields.email_cc && (fields.email_cc.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email_cc))) { showToast('Email CC inválido.', true); return; }
+  if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (máx 5000 caracteres).', true); return; }
+
+  // Response time tracking
+  const prev = editingSupplierIdx !== null ? suppliers[editingSupplierIdx] : null;
+  const now = new Date().toISOString();
+  const repliedStatuses = ['Replied partial', 'Replied complete'];
+  if (fields.status === 'Request sent' && prev?.status !== 'Request sent') {
+    fields.contacted_at = now;
+  }
+  let shouldRecordResponse = false;
+  let responseHours = 0;
+  if (!repliedStatuses.includes(prev?.status) && repliedStatuses.includes(fields.status)) {
+    fields.replied_at = now;
+    if (prev?.contacted_at) {
+      responseHours = (new Date(now) - new Date(prev.contacted_at)) / 3600000;
+      if (responseHours > 0 && responseHours < 8760) shouldRecordResponse = true;
+    }
+  }
+
+  try {
+    if (editingSupplierIdx !== null) {
+      await API.updateSupplier(suppliers[editingSupplierIdx].id, fields);
+    } else {
+      await API.createSupplier(fields);
+    }
+    if (shouldRecordResponse) {
+      try { await API.recordSupplierResponse(fields.name, responseHours); } catch(_) {}
+    }
+    // Silently merge categories/brands into global supplier profile
+    try { await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.email_cc || '', pendingSupplierCategories, pendingSupplierBrands); globalSuppliersList = await API.getGlobalSuppliers(); } catch(_) {}
+    closeModal();
+    suppliers = await API.getSuppliers(processId);
+    renderSuppliers();
+    renderSupplierSuggestions();
+    showToast('Fornecedor guardado.');
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+function deleteSupplier(id) {
+  if (!UUID_RE.test(id)) return;
+  const s = suppliers.find(x => x.id === id);
+  showModal(`
+    <div class="modal-tag">Confirmar</div>
+    <div class="modal-title">Apagar Fornecedor</div>
+    <div style="color:var(--muted);font-size:14px;margin-bottom:24px">Apagar <strong style="color:#fff">${esc(s?.name||'')}</strong>? Esta ação não pode ser desfeita.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="doDeleteSupplier('${id}')">Apagar</button>
+    </div>
+  `);
+}
+
+async function doDeleteSupplier(id) {
+  if (!UUID_RE.test(id)) return;
+  try {
+    await API.deleteSupplier(id);
+    suppliers = suppliers.filter(s => s.id !== id);
+    closeModal();
+    renderSuppliers();
+    renderMatchingTab();
+    showToast('Fornecedor removido.');
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+// ── Quotation Upload ──
+function uploadQuotation(supplierId) {
+  if (!UUID_RE.test(supplierId)) return;
+  currentQuotSuppId = supplierId;
+  const input = document.getElementById('quotFileInput');
+  input.value = '';
+  input.click();
+}
+
+function openManualQuotEntry(supplierId) {
+  if (!UUID_RE.test(supplierId)) return;
+  currentQuotSuppId = supplierId;
+  const existing = quotationMap[supplierId] || [];
+  pendingQuotItems = existing.map(qi => ({
+    id: qi.id,
+    raw_part_number: qi.raw_part_number,
+    raw_description: qi.raw_description,
+    quantity: qi.quantity,
+    price: qi.price,
+    currency: qi.currency,
+  }));
+  pendingQuotFile = null;
+  openQuotationValModal(existing.length ? 'Editar Cotação' : 'Entrada Manual');
+}
+
+// Carry over DB ids from existing items to newly parsed items by part_number or description match
+function _carryIds(existing, newItems) {
+  return newItems.map(ni => {
+    const m = existing.find(e =>
+      (ni.raw_part_number && e.raw_part_number &&
+       ni.raw_part_number.trim() === e.raw_part_number.trim()) ||
+      ni.raw_description.trim().toLowerCase() === e.raw_description.trim().toLowerCase()
+    );
+    return m ? { ...ni, id: m.id } : ni;
+  });
+}
+
+function _askReplaceOrAppend(existingItems, newItems, onReplace, onAppend) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);border-radius:12px;padding:28px 32px;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.4)';
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:600;margin-bottom:8px';
+  title.textContent = 'Cotação já existente';
+  const body = document.createElement('div');
+  body.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.5';
+  body.textContent = `Este fornecedor já tem ${existingItems.length} item(ns) guardado(s). O que pretendes fazer com os ${newItems.length} item(ns) novos?`;
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:10px;justify-content:flex-end';
+  const btnCancel = document.createElement('button');
+  btnCancel.className = 'btn btn-ghost btn-sm';
+  btnCancel.textContent = 'Cancelar';
+  const btnAppend = document.createElement('button');
+  btnAppend.className = 'btn btn-secondary btn-sm';
+  btnAppend.textContent = 'Adicionar aos existentes';
+  const btnReplace = document.createElement('button');
+  btnReplace.className = 'btn btn-primary btn-sm';
+  btnReplace.textContent = 'Substituir tudo';
+  btnRow.appendChild(btnCancel);
+  btnRow.appendChild(btnAppend);
+  btnRow.appendChild(btnReplace);
+  box.appendChild(title);
+  box.appendChild(body);
+  box.appendChild(btnRow);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  const close = () => document.body.removeChild(overlay);
+  btnCancel.addEventListener('click', close);
+  btnReplace.addEventListener('click', () => { close(); onReplace(); });
+  btnAppend.addEventListener('click', () => { close(); onAppend(); });
+}
+
+async function handleQuotationUpload(input) {
+  if (!input.files.length || !currentQuotSuppId) return;
+  const file = input.files[0];
+
+  if (file.size > MAX_UPLOAD_SIZE) { showToast(`Ficheiro demasiado grande (máx ${MAX_UPLOAD_SIZE / 1024 / 1024}MB).`, true); return; }
+  if (!ALLOWED_QUOT_TYPES.includes(file.type) && !file.name.match(/\.(xlsx?|pdf)$/i)) { showToast('Tipo de ficheiro não permitido. Usa .xlsx, .xls ou .pdf.', true); return; }
+
+  pendingQuotFile = file;
+  if (file.name.toLowerCase().endsWith('.pdf')) {
+    await handlePdfQuotation(file);
+  } else {
+    const buf = await file.arrayBuffer();
+    const { items, detected } = parseQuotationExcel(buf);
+    const newItems = detected ? items.map(i => ({...i})) : [];
+    if (!detected) showToast('Formato não detetado — adiciona itens manualmente.', true);
+    const existing = (quotationMap[currentQuotSuppId] || []).map(qi => ({
+      id: qi.id,
+      raw_part_number: qi.raw_part_number || null,
+      raw_description: qi.raw_description,
+      quantity: qi.quantity,
+      price: qi.price,
+      currency: qi.currency,
+    }));
+    if (existing.length && newItems.length) {
+      _askReplaceOrAppend(existing, newItems,
+        () => { pendingQuotItems = _carryIds(existing, newItems); openQuotationValModal(file.name); },
+        () => { pendingQuotItems = [...existing, ...newItems]; openQuotationValModal(file.name); }
+      );
+    } else {
+      pendingQuotItems = newItems;
+      openQuotationValModal(file.name);
+    }
+  }
+}
+
+function parseQuotationExcel(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  const priceKw = ['preço','preco','price','valor','unit','unitár','unitár','custo'];
+  const descKw  = ['descri','artigo','produto','item','designa','material','equipment'];
+  const qtyKw   = ['qty','quant','quantidade','qnt'];
+  const partKw  = ['part','ref','código','codigo','code','p/n'];
+
+  let headerRow = -1, colDesc = -1, colQty = -1, colPrice = -1, colPart = -1;
+
+  for (let i = 0; i < Math.min(rows.length, 25); i++) {
+    const cells = rows[i].map(c => String(c||'').toLowerCase().trim());
+    let price=-1, desc=-1, qty=-1, part=-1;
+    for (let j = 0; j < cells.length; j++) {
+      const c = cells[j];
+      if (price===-1 && priceKw.some(k=>c.includes(k))) price=j;
+      if (desc ===-1 && descKw .some(k=>c.includes(k))) desc=j;
+      if (qty  ===-1 && qtyKw  .some(k=>c.includes(k))) qty=j;
+      if (part ===-1 && partKw .some(k=>c.includes(k))) part=j;
+    }
+    if (price !== -1 && desc !== -1) {
+      headerRow=i; colPrice=price; colDesc=desc; colQty=qty; colPart=part; break;
+    }
+  }
+
+  if (headerRow === -1) return { items: [], detected: false };
+
+  const items = [];
+  for (let i = headerRow+1; i < rows.length; i++) {
+    const row = rows[i];
+    const desc  = String(row[colDesc]||'').trim();
+    const rawP  = String(row[colPrice]||'').replace(/[^\d.,]/g,'').replace(',','.');
+    const price = parseFloat(rawP);
+    const qty   = colQty!==-1 ? parseFloat(String(row[colQty]||'').replace(',','.')) : 1;
+    const part  = colPart!==-1 ? String(row[colPart]||'').trim() : null;
+    if (!desc || isNaN(price) || price <= 0) continue;
+    items.push({
+      raw_part_number: part||null,
+      raw_description: desc,
+      quantity: isNaN(qty)||qty<=0 ? 1 : qty,
+      price,
+      currency: 'MZN',
+    });
+  }
+  return { items, detected: true };
+}
+
+function openQuotationValModal(fileName, rawPdfText) {
+  const s = suppliers.find(x => x.id === currentQuotSuppId);
+  showModalLg(`
+    <div class="modal-tag">Cotação — ${esc(s?.name||'')}</div>
+    <div class="modal-title">${esc(fileName)}</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">${pendingQuotItems.length} linha(s) detetada(s). Revê e confirma antes de guardar.</div>
+    <div style="max-height:380px;overflow-y:auto;margin-bottom:12px">
+      <table class="bom-validate-table">
+        <thead><tr>
+          <th style="width:12%">Part #</th>
+          <th style="width:48%">Descrição</th>
+          <th style="width:8%">Qty</th>
+          <th style="width:14%">Preço Unit.</th>
+          <th style="width:4%">Moeda</th>
+          <th style="width:14%"></th>
+        </tr></thead>
+        <tbody id="quotValTbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="addQuotRow()">+ Linha</button>
+      ${rawPdfText ? `<button class="btn btn-ghost btn-sm" onclick="document.getElementById('quotRaw').style.display=document.getElementById('quotRaw').style.display==='none'?'block':'none'">Ver texto extraído</button>` : ''}
+    </div>
+    ${rawPdfText ? `<div id="quotRaw" style="display:none;margin-bottom:12px"><textarea id="quotRawTa" style="width:100%;min-height:100px;max-height:180px;background:#0a0a0a;border:1px solid var(--border);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:10px;resize:none;border-radius:4px" readonly></textarea></div>` : ''}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmQuotation()">Guardar Cotação</button>
+    </div>
+  `);
+  const _qrt = document.getElementById('quotRawTa');
+  if (_qrt && rawPdfText) _qrt.value = rawPdfText;
+  priceAnomalies = {};
+  renderQuotValTable();
+  checkPriceAnomalies(pendingQuotItems).then(a => {
+    if (Object.keys(a).length) { priceAnomalies = a; renderQuotValTable(); }
+  });
+}
+
+function renderQuotValTable() {
+  const tbody = document.getElementById('quotValTbody');
+  if (!tbody) return;
+  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  pendingQuotItems.forEach((item, i) => {
+    const tr = document.createElement('tr');
+
+    // Part #
+    const tdPart = document.createElement('td');
+    const inPart = document.createElement('input');
+    inPart.type = 'text'; inPart.value = item.raw_part_number || ''; inPart.style.width = '100%';
+    inPart.onchange = function() { pendingQuotItems[i].raw_part_number = this.value || null; };
+    tdPart.appendChild(inPart);
+
+    // Descrição
+    const tdDesc = document.createElement('td');
+    const inDesc = document.createElement('input');
+    inDesc.type = 'text'; inDesc.value = item.raw_description; inDesc.style.width = '100%';
+    inDesc.onchange = function() { pendingQuotItems[i].raw_description = this.value; };
+    tdDesc.appendChild(inDesc);
+
+    // Qty
+    const tdQty = document.createElement('td');
+    const inQty = document.createElement('input');
+    inQty.type = 'number'; inQty.value = item.quantity; inQty.style.width = '55px';
+    inQty.onchange = function() { pendingQuotItems[i].quantity = parseFloat(this.value) || 1; };
+    tdQty.appendChild(inQty);
+
+    // Preço + anomaly badge
+    const tdPrice = document.createElement('td');
+    const inPrice = document.createElement('input');
+    inPrice.type = 'text'; inPrice.value = item.price || ''; inPrice.style.width = '80px';
+    inPrice.oninput = function() { this.value = this.value.replace(/\s/g, ''); };
+    inPrice.onchange = function() {
+      pendingQuotItems[i].price = parseNum(this.value) || 0;
+      // recheck anomaly for this row on price change
+      checkPriceAnomalies(pendingQuotItems).then(a => { priceAnomalies = a; renderQuotValTable(); });
+    };
+    tdPrice.appendChild(inPrice);
+    const a = priceAnomalies[i];
+    if (a) {
+      const badge = document.createElement('span');
+      badge.className = a.type === 'high' ? 'anomaly-high' : 'anomaly-low';
+      badge.textContent = a.type === 'high'
+        ? '\u26a0 ' + a.ratio + '\u00d7 acima (\u00f8' + fmtPrice(a.median) + ')'
+        : '\u26a0 ' + a.ratio + '\u00d7 abaixo (\u00f8' + fmtPrice(a.median) + ')';
+      tdPrice.appendChild(badge);
+    }
+
+    // Moeda
+    const tdCur = document.createElement('td');
+    const sel = document.createElement('select');
+    sel.style.width = '66px';
+    ['MZN','USD','EUR','ZAR'].forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      if ((item.currency || 'MZN') === c) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.onchange = function() { pendingQuotItems[i].currency = this.value; };
+    tdCur.appendChild(sel);
+
+    // Delete
+    const tdDel = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '\u00d7';
+    delBtn.onclick = () => { pendingQuotItems.splice(i, 1); renderQuotValTable(); };
+    tdDel.appendChild(delBtn);
+
+    tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty);
+    tr.appendChild(tdPrice); tr.appendChild(tdCur); tr.appendChild(tdDel);
+    tbody.appendChild(tr);
+  });
+}
+
+function addQuotRow() {
+  pendingQuotItems.push({ raw_part_number: null, raw_description: '', quantity: 1, price: 0, currency: 'MZN' });
+  renderQuotValTable();
+}
+
+async function confirmQuotation() {
+  const valid = pendingQuotItems.filter(i => i.raw_description.trim() && i.price > 0);
+  if (!valid.length) { showToast('Adiciona pelo menos um item com preço.', true); return; }
+  try {
+    const existingQ = quotationMap[currentQuotSuppId] || [];
+    const existingIds = new Set(existingQ.map(e => e.id).filter(Boolean));
+    const keepIds = new Set(valid.filter(i => i.id).map(i => i.id));
+    const idsToDelete = [...existingIds].filter(id => !keepIds.has(id));
+    await API.updateQuotationItems(
+      valid.map(i => ({ ...i, supplier_id: currentQuotSuppId })),
+      idsToDelete
+    );
+    quotationMap[currentQuotSuppId] = await API.getQuotationItems(currentQuotSuppId);
+
+    if (pendingQuotFile) {
+      const ext = pendingQuotFile.name.split('.').pop();
+      const filePath = `quotations/${currentQuotSuppId}/${Date.now()}.${ext}`;
+      await API.uploadFile('procurement-files', filePath, pendingQuotFile);
+      await API.saveQuotationFile(currentQuotSuppId, filePath, pendingQuotFile.name);
+      quotationFilesMap[currentQuotSuppId] = { file_path: filePath, original_name: pendingQuotFile.name };
+      pendingQuotFile = null;
+    }
+
+    // Populate savedAnomalyMap for supplier card display
+    // Match by ID (existing items) or by description (new items) — NOT by index (order may differ after upsert)
+    const savedItems = quotationMap[currentQuotSuppId] || [];
+    const anomalyCount = Object.keys(priceAnomalies).length;
+    if (anomalyCount) {
+      const savedByDesc = {};
+      savedItems.forEach(s => { if (s.raw_description) savedByDesc[s.raw_description.trim().toLowerCase()] = s; });
+      valid.forEach((item, idx) => {
+        if (!priceAnomalies[idx]) return;
+        const savedId = item.id || savedByDesc[item.raw_description?.trim().toLowerCase()]?.id;
+        if (savedId) savedAnomalyMap[savedId] = priceAnomalies[idx];
+      });
+    }
+
+    closeModal();
+    if (anomalyCount) {
+      const el = document.getElementById('toast');
+      el.textContent = `Cotação guardada. ${anomalyCount} item(ns) com preço fora do histórico — verifica os valores.`;
+      el.style.color = '#fb923c';
+      el.style.borderLeftColor = '#fb923c';
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 4500);
+    } else {
+      showToast(`${valid.length} itens de cotação guardados.`);
+    }
+    renderSuppliers();
+    renderMatchingTab();
+  } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+// ── File View (Quotation) ──
+async function viewQuotFile(filePath) {
+  if (!_isValidFilePath(filePath)) { showToast('Caminho de ficheiro inválido.', true); return; }
+  try {
+    const url = await API.getSignedUrl('procurement-files', filePath);
+    window.open(url, '_blank');
+  } catch(e) { showToast('Erro ao abrir ficheiro.', true); }
+}
+
+// ── PDF Quotation (ported from planilha-generator) ──
+async function extractPdfText(ab){
+  const pdf=await pdfjsLib.getDocument({data:ab}).promise;let ft='';
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);const content=await page.getTextContent();
+    const lm=new Map();
+    for(const item of content.items){if(!item.str.trim())continue;const y=Math.round(item.transform[5]/3)*3;if(!lm.has(y))lm.set(y,[]);lm.get(y).push({x:item.transform[4],w:item.width||0,text:item.str});}
+    const sy=[...lm.keys()].sort((a,b)=>b-a);
+    for(const y of sy){const cells=lm.get(y).sort((a,b)=>a.x-b.x);let line='',pr=null;for(const cell of cells){if(pr!==null){const g=cell.x-pr;line+=g>8?'\t':(g>0.5?' ':'');}line+=cell.text;pr=cell.x+(cell.w||cell.text.length*5);}if(line.trim())ft+=line+'\n';}
+    ft+='\n';
+  }
+  return ft;
+}
+function parseNum(s){const t=s.trim().replace(/\s/g,'');if(/,\d+$/.test(t)&&t.lastIndexOf(',')>t.lastIndexOf('.'))return parseFloat(t.replace(/\./g,'').replace(',','.'));if(/\.\d+$/.test(t)&&t.lastIndexOf('.')>t.lastIndexOf(','))return parseFloat(t.replace(/,/g,''));return parseFloat(t.replace(/[,.]/g,''));}
+function parsePdf(text){
+  const SKIP=/^(total|subtotal|grand total|vat|iva|tax|date|page|invoice|quotation|quote|ref|description|qty|quantity|unit price|unit|price|amount|s\.?no\.?|nr\.?|from|to|tel|email|www|http)/i;
+  const items=[];
+  for(const raw of text.split('\n')){
+    const line=raw.trim();if(line.length<4)continue;if(SKIP.test(line))continue;if(!/[a-zA-Z]/.test(line))continue;if(!/\d/.test(line))continue;
+    const cols=line.split('\t').map(c=>c.trim()).filter(c=>c.length>0);if(cols.length<2)continue;
+    const UR=/\b(UN|MT|M|PC|KG|L|UNID|PÇ|PCS|CX|RL|ROL|ML|CM|G|T|HR|H)\b/i;
+    let qty='1',qci=-1,price='';const nc=[];
+    for(let i=0;i<cols.length;i++){const c=cols[i];if(c.includes('%'))continue;const m=c.match(/^([\d.,]+(?:\s[\d.,]+)*)\s*([A-Za-z].*)?$/);if(!m)continue;const np=m[1].trim();const sf=(m[2]||'').trim();const v=parseNum(np);if(isNaN(v)||v<=0)continue;if(sf&&UR.test(sf.split(/\s/)[0])){if(qci===-1){qty=String(Math.round(v));qci=i;}}else{nc.push({i,c,v});}}
+    if(!nc.length)continue;const pe=nc[nc.length-1];price=String(pe.v);
+    if(qci===-1){for(const n of nc){if(n.i===pe.i)continue;const r=Math.round(n.v);if(r>=1&&r<=9999){qty=String(r);qci=n.i;break;}}}
+    const ei=new Set([qci,...nc.map(n=>n.i)]);
+    const dc=cols.filter((c,i)=>{if(ei.has(i))return false;if(c.includes('%'))return false;if(UR.test(c.trim())&&!/[a-zA-Z]{4,}/.test(c))return false;return true;});
+    if(!dc.length)continue;
+    let part='',model=dc.join(' ');const fd=dc[0];
+    const lr=!/\s/.test(fd)&&fd.length>=4&&((/\d/.test(fd)&&/[A-Za-z]/.test(fd))||/^\d{5,}$/.test(fd));
+    if(lr&&dc.length>1){part=fd;model=dc.slice(1).join(' ').trim();if(model.length<2){model=dc.join(' ');part='';}}
+    if(!model||model.length<2)continue;
+    items.push({part,model,qty,price});
+  }
+  return items;
+}
+async function handlePdfQuotation(file) {
+  if (!window.pdfjsLib) { showToast('PDF.js não carregou.', true); return; }
+  try {
+    const buf = await file.arrayBuffer();
+    const rawText = await extractPdfText(buf);
+    const parsed = parsePdf(rawText);
+    // PDF price = total; convert to unit price
+    const newPdfItems = parsed.map(item => {
+      const qty = parseFloat(item.qty) || 1;
+      const total = parseFloat(item.price) || 0;
+      const unitPrice = total > 0 ? Math.round((total / qty) * 100) / 100 : 0;
+      return { raw_part_number: item.part || null, raw_description: item.model, quantity: qty, price: unitPrice, currency: 'MZN' };
+    });
+    if (!newPdfItems.length) showToast('Nenhum item detetado no PDF — adiciona manualmente.', true);
+    const existingPdf = (quotationMap[currentQuotSuppId] || []).map(qi => ({
+      id: qi.id,
+      raw_part_number: qi.raw_part_number || null,
+      raw_description: qi.raw_description,
+      quantity: qi.quantity,
+      price: qi.price,
+      currency: qi.currency,
+    }));
+    if (existingPdf.length && newPdfItems.length) {
+      _askReplaceOrAppend(existingPdf, newPdfItems,
+        () => { pendingQuotItems = _carryIds(existingPdf, newPdfItems); openQuotationValModal(file.name, rawText); },
+        () => { pendingQuotItems = [...existingPdf, ...newPdfItems]; openQuotationValModal(file.name, rawText); }
+      );
+    } else {
+      pendingQuotItems = newPdfItems;
+      openQuotationValModal(file.name, rawText);
+    }
+  } catch(e) { showToast('Erro ao ler PDF: ' + e.message, true); }
+}

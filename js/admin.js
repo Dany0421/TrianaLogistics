@@ -165,6 +165,62 @@ function describeEvent(log) {
   return `${action} em ${t}`;
 }
 
+// ── Collapse bulk operations into summary entries ──
+const COLLAPSIBLE = new Set(['bom_items', 'quotation_items', 'item_matches', 'selected_offers']);
+const COLLAPSE_MIN = 3;      // min entries to trigger collapse
+const COLLAPSE_WINDOW = 15;  // seconds
+
+function collapseEntries(entries) {
+  const summaryDesc = (t, action, count) => {
+    if (t === 'bom_items') {
+      if (action === 'INSERT') return `Carregou BOM: <strong>${count} itens</strong> adicionados`;
+      if (action === 'DELETE') return `Removeu <strong>${count} itens</strong> do BOM`;
+      return `Atualizou <strong>${count} itens</strong> do BOM`;
+    }
+    if (t === 'quotation_items') {
+      if (action === 'INSERT') return `Carregou cotação: <strong>${count} itens</strong> adicionados`;
+      if (action === 'DELETE') return `Removeu cotação anterior (<strong>${count} itens</strong>)`;
+      return `Atualizou <strong>${count} itens</strong> de cotação`;
+    }
+    if (t === 'item_matches') {
+      if (action === 'INSERT') return `Auto-match: <strong>${count} correspondências</strong> criadas`;
+      if (action === 'DELETE') return `Removeu <strong>${count} correspondências</strong>`;
+    }
+    if (t === 'selected_offers') {
+      if (action === 'INSERT') return `Selecionou ofertas para <strong>${count} itens</strong>`;
+      if (action === 'DELETE') return `Removeu ofertas de <strong>${count} itens</strong>`;
+    }
+    return `${action} em ${t}: <strong>${count} entradas</strong>`;
+  };
+
+  const result = [];
+  let i = 0;
+  while (i < entries.length) {
+    const e = entries[i];
+    if (!COLLAPSIBLE.has(e.table_name)) { result.push(e); i++; continue; }
+
+    // Collect matching consecutive entries within time window
+    const group = [e];
+    const t0 = new Date(e.created_at).getTime();
+    let j = i + 1;
+    while (j < entries.length) {
+      const nx = entries[j];
+      const dt = Math.abs(new Date(nx.created_at).getTime() - t0) / 1000;
+      if (nx.table_name === e.table_name && nx.action === e.action && nx.user_id === e.user_id && dt <= COLLAPSE_WINDOW) {
+        group.push(nx); j++;
+      } else break;
+    }
+
+    if (group.length >= COLLAPSE_MIN) {
+      result.push({ ...e, _summary: summaryDesc(e.table_name, e.action, group.length) });
+      i = j;
+    } else {
+      result.push(e); i++;
+    }
+  }
+  return result;
+}
+
 // ── Render ──
 function createLogEntryEl(log) {
   const wrap = document.createElement('div');
@@ -199,7 +255,7 @@ function createLogEntryEl(log) {
   bd.appendChild(badge);
   const desc = document.createElement('div');
   desc.className = 'log-desc';
-  desc.appendChild(document.createRange().createContextualFragment(describeEvent(log)));
+  desc.appendChild(document.createRange().createContextualFragment(log._summary || describeEvent(log)));
   wrap.appendChild(timeEl);
   wrap.appendChild(col2);
   wrap.appendChild(bd);
@@ -250,7 +306,7 @@ async function loadLog(append = false) {
   try {
     const entries = await API.getAuditLog({ limit: LOG_LIMIT, offset: logOffset, processSearch, userId, eventType, dateFrom, dateTo });
     allEntries = append ? [...allEntries, ...entries] : entries;
-    renderEntries(append ? entries : allEntries, append);
+    renderEntries(collapseEntries(append ? entries : allEntries), append);
     document.getElementById('logCount').textContent = allEntries.length > 0 ? `(${allEntries.length}${entries.length === LOG_LIMIT ? '+' : ''})` : '';
     document.getElementById('loadMoreWrap').style.display = entries.length === LOG_LIMIT ? '' : 'none';
     logOffset += entries.length;
