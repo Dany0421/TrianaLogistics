@@ -216,6 +216,7 @@ function openRFQModal(supplierIdx) {
 
   const semPreco = [], comPreco = [];
   bomItems.forEach((bi, idx) => {
+    if (bi.is_service) return;
     const hasPrice = matches.some(m => m.bom_item_id === bi.id);
     (hasPrice ? comPreco : semPreco).push({ bi, idx });
   });
