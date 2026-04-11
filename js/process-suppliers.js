@@ -121,67 +121,88 @@ function renderSuppliers() {
   const el = document.getElementById('suppliersContent');
   el.replaceChildren();
   if (!suppliers.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-state';
-    empty.appendChild(document.createTextNode('Sem fornecedores.'));
-    empty.appendChild(document.createElement('br'));
+    const empty = document.createElement('div'); empty.className = 'empty-state';
+    empty.appendChild(document.createTextNode('Sem fornecedores.')); empty.appendChild(document.createElement('br'));
     empty.appendChild(document.createTextNode('Adiciona o primeiro fornecedor.'));
-    el.appendChild(empty);
-    return;
+    el.appendChild(empty); return;
   }
-  const suppHtml = suppliers.map((s, i) => {
+
+  suppliers.forEach((s, i) => {
     const qItems = quotationMap[s.id] || [];
     const qCount = qItems.length;
     const gs = supplierHistory[s.name?.trim().toLowerCase()];
-    const avgBadge = gs?.avg_response_hours > 0 ? `<span class="resp-time-badge">~${formatResponseTime(gs.avg_response_hours)}</span>` : '';
-    return `
-    <div class="supplier-card">
-      <div class="supplier-card-header" onclick="toggleSupplier(${i})">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--accent)">${esc(s.name)}</span>
-          <span class="badge ${suppStatusClass(s.status)}">${s.status}</span>
-          ${s.is_foreign ? '<span class="badge" style="background:#3a2a00;color:#ffaa00;border:1px solid #5a4a00">ESTRANGEIRO</span>' : ''}
-          <span class="quot-badge ${qCount?'has-items':''}">${qCount ? `${qCount} itens cotação` : 'sem cotação'}</span>
-          ${qItems.some(qi=>savedAnomalyMap[qi.id]) ? '<span class="anomaly-high" title="Preços fora do histórico detectados">&#9888; outlier</span>' : ''}
-          ${avgBadge}
-        </div>
-        <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
-          ${s.email ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openRFQModal(${i})">✉ RFQ</button>` : ''}
-          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openManualQuotEntry('${s.id}')">✏ Manual</button>
-          <button class="btn btn-ghost btn-sm" onclick="uploadQuotation('${s.id}')">📎 Cotação</button>
-          <button class="btn btn-ghost btn-sm" onclick="openSupplierModal(${i})">Editar</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteSupplier('${s.id}')">×</button>
-        </div>
-      </div>
-      <div class="supplier-card-body" id="suppBody-${i}">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;margin-bottom:${qCount?'12px':'0'}">
-          <div><span style="color:var(--muted);font-size:11px">EMAIL</span><br>${esc(s.email||'—')}${s.email_cc?`<br><span style="font-size:11px;color:var(--muted)">CC: ${esc(s.email_cc)}</span>`:''}</div>
-          <div><span style="color:var(--muted);font-size:11px">ÚLTIMO CONTACTO</span><br>${s.last_contact_at ? fmtDate(s.last_contact_at) : '—'}</div>
-          <div><span style="color:var(--muted);font-size:11px">FOLLOW-UP</span><br>${s.next_followup_at ? fmtDate(s.next_followup_at) : '—'}</div>
-          <div><span style="color:var(--muted);font-size:11px">NOTAS</span><br>${esc(s.notes||'—')}</div>
-        </div>
-        ${qCount ? `
-        <div style="border-top:1px solid var(--border);padding-top:12px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px">COTAÇÃO — ${qCount} ITENS</div>
-            ${quotationFilesMap[s.id] ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewQuotFile('${quotationFilesMap[s.id].file_path}')">📄 Ver original</button>` : ''}
-          </div>
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            ${qItems.slice(0,6).map(qi=>{
-              const anom = savedAnomalyMap[qi.id];
-              const priceColor = anom ? (anom.type==='high'?'#fb923c':'#818cf8') : '#fff';
-              const priceTitle = anom ? (anom.type==='high'?`${anom.ratio}× acima da mediana histórica`:`${anom.ratio}× abaixo da mediana histórica`) : '';
-              return `<tr>
-              <td style="padding:2px 0;color:var(--text)">${esc(qi.raw_description.length>55?qi.raw_description.substring(0,55)+'\u2026':qi.raw_description)}</td>
-              <td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:${priceColor};white-space:nowrap" title="${esc(priceTitle)}">${fmtPrice(qi.price)} ${qi.currency}${anom?` <span style="font-size:9px">&#9888;</span>`:''}</td>
-            </tr>`;}).join('')}
-            ${qCount>6?`<tr><td colspan="2" style="color:var(--muted);padding-top:4px">…e mais ${qCount-6} itens</td></tr>`:''}
-          </table>
-        </div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-  el.appendChild(document.createRange().createContextualFragment(suppHtml));
+
+    const card = document.createElement('div'); card.className = 'supplier-card';
+
+    // Header
+    const header = document.createElement('div'); header.className = 'supplier-card-header';
+    header.addEventListener('click', () => toggleSupplier(i));
+
+    const leftDiv = document.createElement('div'); leftDiv.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+    const nameSpan = document.createElement('span'); nameSpan.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--accent)"; nameSpan.textContent = s.name; leftDiv.appendChild(nameSpan);
+    const statusBadge = document.createElement('span'); statusBadge.className = 'badge ' + suppStatusClass(s.status); statusBadge.textContent = s.status; leftDiv.appendChild(statusBadge);
+    if (s.is_foreign) { const fb = document.createElement('span'); fb.className = 'badge'; fb.style.cssText = 'background:#3a2a00;color:#ffaa00;border:1px solid #5a4a00'; fb.textContent = 'ESTRANGEIRO'; leftDiv.appendChild(fb); }
+    const quotBadge = document.createElement('span'); quotBadge.className = 'quot-badge' + (qCount ? ' has-items' : ''); quotBadge.textContent = qCount ? `${qCount} itens cotação` : 'sem cotação'; leftDiv.appendChild(quotBadge);
+    if (qItems.some(qi => savedAnomalyMap[qi.id])) { const an = document.createElement('span'); an.className = 'anomaly-high'; an.title = 'Preços fora do histórico detectados'; an.textContent = '⚠ outlier'; leftDiv.appendChild(an); }
+    if (gs?.avg_response_hours > 0) { const rb = document.createElement('span'); rb.className = 'resp-time-badge'; rb.textContent = '~' + formatResponseTime(gs.avg_response_hours); leftDiv.appendChild(rb); }
+    header.appendChild(leftDiv);
+
+    const rightDiv = document.createElement('div'); rightDiv.style.cssText = 'display:flex;gap:6px'; rightDiv.addEventListener('click', e => e.stopPropagation());
+    if (s.email) { const rfqBtn = document.createElement('button'); rfqBtn.className = 'btn btn-ghost btn-sm'; rfqBtn.textContent = '✉ RFQ'; rfqBtn.addEventListener('click', e => { e.stopPropagation(); openRFQModal(i); }); rightDiv.appendChild(rfqBtn); }
+    const manBtn = document.createElement('button'); manBtn.className = 'btn btn-ghost btn-sm'; manBtn.textContent = '✏ Manual'; manBtn.addEventListener('click', () => openManualQuotEntry(s.id)); rightDiv.appendChild(manBtn);
+    const quotBtn = document.createElement('button'); quotBtn.className = 'btn btn-ghost btn-sm'; quotBtn.textContent = '📎 Cotação'; quotBtn.addEventListener('click', () => uploadQuotation(s.id)); rightDiv.appendChild(quotBtn);
+    const editBtn = document.createElement('button'); editBtn.className = 'btn btn-ghost btn-sm'; editBtn.textContent = 'Editar'; editBtn.addEventListener('click', () => openSupplierModal(i)); rightDiv.appendChild(editBtn);
+    const delBtn = document.createElement('button'); delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '×'; delBtn.addEventListener('click', () => deleteSupplier(s.id)); rightDiv.appendChild(delBtn);
+    header.appendChild(rightDiv);
+    card.appendChild(header);
+
+    // Body
+    const body = document.createElement('div'); body.className = 'supplier-card-body'; body.id = 'suppBody-' + i;
+
+    const grid = document.createElement('div'); grid.style.cssText = `display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;margin-bottom:${qCount ? '12px' : '0'}`;
+
+    const mkInfo = (label, ...parts) => {
+      const d = document.createElement('div');
+      const lbl = document.createElement('span'); lbl.style.cssText = 'color:var(--muted);font-size:11px'; lbl.textContent = label; d.appendChild(lbl); d.appendChild(document.createElement('br'));
+      parts.forEach(p => d.appendChild(typeof p === 'string' ? document.createTextNode(p) : p));
+      return d;
+    };
+
+    const emailParts = [s.email || '—'];
+    if (s.email_cc) { const br = document.createElement('br'); const ccSpan = document.createElement('span'); ccSpan.style.cssText = 'font-size:11px;color:var(--muted)'; ccSpan.textContent = 'CC: ' + s.email_cc; emailParts.push(br, ccSpan); }
+    grid.appendChild(mkInfo('EMAIL', ...emailParts));
+    grid.appendChild(mkInfo('ÚLTIMO CONTACTO', s.last_contact_at ? fmtDate(s.last_contact_at) : '—'));
+    grid.appendChild(mkInfo('FOLLOW-UP', s.next_followup_at ? fmtDate(s.next_followup_at) : '—'));
+    grid.appendChild(mkInfo('NOTAS', s.notes || '—'));
+    body.appendChild(grid);
+
+    // Quotation preview
+    if (qCount) {
+      const quotSec = document.createElement('div'); quotSec.style.cssText = 'border-top:1px solid var(--border);padding-top:12px';
+      const quotHdr = document.createElement('div'); quotHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
+      const quotLbl = document.createElement('div'); quotLbl.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px"; quotLbl.textContent = `COTAÇÃO — ${qCount} ITENS`; quotHdr.appendChild(quotLbl);
+      if (quotationFilesMap[s.id]) { const vBtn = document.createElement('button'); vBtn.className = 'btn btn-ghost btn-sm'; vBtn.textContent = '📄 Ver original'; vBtn.addEventListener('click', e => { e.stopPropagation(); viewQuotFile(quotationFilesMap[s.id].file_path); }); quotHdr.appendChild(vBtn); }
+      quotSec.appendChild(quotHdr);
+      const qTable = document.createElement('table'); qTable.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px';
+      qItems.slice(0, 6).forEach(qi => {
+        const anom = savedAnomalyMap[qi.id];
+        const priceColor = anom ? (anom.type === 'high' ? '#fb923c' : '#818cf8') : '#fff';
+        const priceTitle = anom ? (anom.type === 'high' ? `${anom.ratio}× acima da mediana histórica` : `${anom.ratio}× abaixo da mediana histórica`) : '';
+        const tr = document.createElement('tr');
+        const tdDesc = document.createElement('td'); tdDesc.style.cssText = 'padding:2px 0;color:var(--text)';
+        const rawD = qi.raw_description; tdDesc.textContent = rawD.length > 55 ? rawD.substring(0, 55) + '…' : rawD;
+        const tdPrice = document.createElement('td'); tdPrice.style.cssText = `text-align:right;font-family:'IBM Plex Mono',monospace;color:${priceColor};white-space:nowrap`; if (priceTitle) tdPrice.title = priceTitle;
+        tdPrice.textContent = `${fmtPrice(qi.price)} ${qi.currency}`;
+        if (anom) { const w = document.createElement('span'); w.style.fontSize = '9px'; w.textContent = ' ⚠'; tdPrice.appendChild(w); }
+        tr.appendChild(tdDesc); tr.appendChild(tdPrice); qTable.appendChild(tr);
+      });
+      if (qCount > 6) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 2; td.style.cssText = 'color:var(--muted);padding-top:4px'; td.textContent = `…e mais ${qCount - 6} itens`; tr.appendChild(td); qTable.appendChild(tr); }
+      quotSec.appendChild(qTable); body.appendChild(quotSec);
+    }
+
+    card.appendChild(body);
+    el.appendChild(card);
+  });
 }
 
 function toggleSupplier(i) {
@@ -193,62 +214,67 @@ function toggleSupplier(i) {
 function openRFQModal(supplierIdx) {
   const s = suppliers[supplierIdx];
 
-  // Split items: no price for this supplier (needs quoting) vs already priced
   const semPreco = [], comPreco = [];
   bomItems.forEach((bi, idx) => {
     const hasPrice = matches.some(m => m.bom_item_id === bi.id && m.supplier_id === s.id && m.quotation_items?.price > 0);
     (hasPrice ? comPreco : semPreco).push({ bi, idx });
   });
 
-  const renderGroup = (group, dimmed) => {
-    let lastCat = null;
-    return group.map(({ bi, idx }) => {
-      let catHeader = '';
-      if (bi.category && bi.category !== lastCat) {
-        catHeader = `<div style="background:var(--surface2);padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)">${esc(bi.category)}</div>`;
-        lastCat = bi.category;
+  const el = document.createElement('div');
+
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Pedido de Cotação — RFQ'; el.appendChild(tag);
+
+  const titleRow = document.createElement('div'); titleRow.style.cssText = 'display:flex;align-items:baseline;gap:12px;margin-bottom:4px';
+  const title = document.createElement('div'); title.className = 'modal-title'; title.style.marginBottom = '0'; title.textContent = s.name; titleRow.appendChild(title);
+  const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace"; emailSpan.textContent = s.email; titleRow.appendChild(emailSpan);
+  el.appendChild(titleRow);
+
+  if (!bomItems.length) {
+    const msg = document.createElement('div'); msg.style.cssText = 'color:var(--muted);font-size:13px;margin:20px 0'; msg.textContent = 'Carrega o BOM primeiro.'; el.appendChild(msg);
+  } else {
+    const listHdr = document.createElement('div'); listHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px';
+    const listLbl = document.createElement('div'); listLbl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase"; listLbl.textContent = 'Seleciona os itens a pedir'; listHdr.appendChild(listLbl);
+    const allLbl = document.createElement('label'); allLbl.style.cssText = 'cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;font-family:JetBrains Mono,monospace;font-weight:400;margin-bottom:0';
+    const allCb = document.createElement('input'); allCb.type = 'checkbox'; allCb.id = 'rfq_all'; allCb.checked = true; allCb.style.width = 'auto';
+    allCb.addEventListener('change', () => toggleAllRFQ(allCb.checked));
+    allLbl.appendChild(allCb); allLbl.appendChild(document.createTextNode(' Selecionar tudo')); listHdr.appendChild(allLbl);
+    el.appendChild(listHdr);
+
+    const listContainer = document.createElement('div'); listContainer.style.cssText = 'border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:420px;overflow-y:auto;margin-bottom:16px';
+
+    const buildSecHdr = (label, color) => {
+      const h = document.createElement('div'); h.style.cssText = `padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${color};letter-spacing:.8px;text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1`; h.textContent = label; return h;
+    };
+    const buildGroup = (group, dimmed) => {
+      const frag = document.createDocumentFragment(); let lastCat = null;
+      for (const { bi, idx } of group) {
+        if (bi.category && bi.category !== lastCat) {
+          const catDiv = document.createElement('div'); catDiv.style.cssText = "background:var(--surface2);padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)"; catDiv.textContent = bi.category; frag.appendChild(catDiv); lastCat = bi.category;
+        }
+        const lbl = document.createElement('label'); lbl.style.cssText = `display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s${dimmed ? ';opacity:.45' : ''}`;
+        lbl.addEventListener('mouseover', () => { lbl.style.background = 'rgba(59,130,246,.05)'; }); lbl.addEventListener('mouseout', () => { lbl.style.background = ''; });
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'rfq-item-cb'; cb.value = idx; cb.checked = true; cb.style.cssText = 'margin-top:3px;width:auto'; lbl.appendChild(cb);
+        const infoDiv = document.createElement('div');
+        const descEl = document.createElement('div'); descEl.style.cssText = 'font-size:13px;color:var(--text);line-height:1.4'; descEl.textContent = bi.description; infoDiv.appendChild(descEl);
+        if (bi.part_number) { const pnEl = document.createElement('div'); pnEl.style.cssText = "font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px"; pnEl.textContent = bi.part_number; infoDiv.appendChild(pnEl); }
+        lbl.appendChild(infoDiv);
+        const qtyEl = document.createElement('div'); qtyEl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px"; qtyEl.textContent = `× ${bi.quantity} ${bi.unit || ''}`; lbl.appendChild(qtyEl);
+        frag.appendChild(lbl);
       }
-      const rowStyle = `display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s${dimmed ? ';opacity:.45' : ''}`;
-      return `${catHeader}<label style="${rowStyle}" onmouseover="this.style.background='rgba(59,130,246,.05)'" onmouseout="this.style.background=''">
-        <input type="checkbox" class="rfq-item-cb" value="${idx}" checked style="margin-top:3px;width:auto">
-        <div>
-          <div style="font-size:13px;color:var(--text);line-height:1.4">${esc(bi.description)}</div>
-          ${bi.part_number ? `<div style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px">${esc(bi.part_number)}</div>` : ''}
-        </div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px">× ${bi.quantity} ${bi.unit||''}</div>
-      </label>`;
-    }).join('');
-  };
+      return frag;
+    };
 
-  const sectionHeader = (label, color) =>
-    `<div style="padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${color};letter-spacing:.8px;text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1">${label}</div>`;
+    if (semPreco.length) { listContainer.appendChild(buildSecHdr(`Sem preço — a pedir (${semPreco.length})`, 'var(--accent)')); listContainer.appendChild(buildGroup(semPreco, false)); }
+    if (comPreco.length) { listContainer.appendChild(buildSecHdr(`Já com preço (${comPreco.length})`, 'var(--muted)')); listContainer.appendChild(buildGroup(comPreco, true)); }
+    el.appendChild(listContainer);
+  }
 
-  let itemRows = '';
-  if (semPreco.length) itemRows += sectionHeader(`Sem preço — a pedir (${semPreco.length})`, 'var(--accent)') + renderGroup(semPreco, false);
-  if (comPreco.length) itemRows += sectionHeader(`Já com preço (${comPreco.length})`, 'var(--muted)') + renderGroup(comPreco, true);
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  if (bomItems.length) { const sendBtn = document.createElement('button'); sendBtn.className = 'btn btn-primary'; sendBtn.textContent = '✉ Gerar Email'; sendBtn.addEventListener('click', () => sendRFQ(supplierIdx)); actions.appendChild(sendBtn); }
+  el.appendChild(actions);
 
-  showModalLg(`
-    <div class="modal-tag">Pedido de Cotação — RFQ</div>
-    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
-      <div class="modal-title" style="margin-bottom:0">${esc(s.name)}</div>
-      <div style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">${esc(s.email)}</div>
-    </div>
-    ${!bomItems.length
-      ? `<div style="color:var(--muted);font-size:13px;margin:20px 0">Carrega o BOM primeiro.</div>`
-      : `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase">Seleciona os itens a pedir</div>
-          <label style="cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;text-transform:none;letter-spacing:0;font-weight:400;margin-bottom:0">
-            <input type="checkbox" id="rfq_all" onchange="toggleAllRFQ(this.checked)" checked style="width:auto"> Selecionar tudo
-          </label>
-        </div>
-        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:420px;overflow-y:auto;margin-bottom:16px">
-          ${itemRows}
-        </div>`}
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      ${bomItems.length ? `<button class="btn btn-primary" onclick="sendRFQ(${supplierIdx})">✉ Gerar Email</button>` : ''}
-    </div>
-  `);
+  showModalLg(el);
 }
 
 function toggleAllRFQ(checked) {
@@ -379,39 +405,38 @@ function openSupplierModal(idx = null, prefill = {}) {
   const gs = s ? globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase()) : null;
   pendingSupplierCategories = gs ? [...(gs.categories || [])] : (prefill.categories || []);
   pendingSupplierBrands = gs ? [...(gs.brands || [])] : [];
-  showModal(`
-    <div class="modal-tag">${s ? 'Editar Fornecedor' : 'Novo Fornecedor'}</div>
-    <div class="modal-title">${s ? esc(s.name) : 'Adicionar Fornecedor'}</div>
-    <datalist id="supplierNameList">${Object.values(supplierHistory).map(sh=>`<option value="${esc(sh.name)}">`).join('')}</datalist>
+
+  const el = document.createElement('div');
+  // Static skeleton — no user data
+  el.appendChild(document.createRange().createContextualFragment(`
+    <div class="modal-tag"></div>
+    <div class="modal-title"></div>
+    <datalist id="supplierNameList"></datalist>
     <div class="form-grid-2">
-      <div><label>Nome</label><input id="sf_name" value="" placeholder="Ex: Tech Solutions" list="supplierNameList" oninput="autoFillSupplierEmail(this.value)"></div>
-      <div><label>Email Principal</label><input id="sf_email" value="" placeholder="email@fornecedor.com"></div>
+      <div><label>Nome</label><input id="sf_name" placeholder="Ex: Tech Solutions" list="supplierNameList"></div>
+      <div><label>Email Principal</label><input id="sf_email" placeholder="email@fornecedor.com"></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" value="" placeholder="cc@fornecedor.com"></div>
+      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" placeholder="cc@fornecedor.com"></div>
       <div></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Estado</label>
-        <select id="sf_status">
-          ${['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'].map(v=>`<option ${(s?.status||'Not contacted')===v?'selected':''}>${v}</option>`).join('')}
-        </select>
-      </div>
+      <div><label>Estado</label><select id="sf_status"></select></div>
       <div style="display:flex;align-items:center;gap:10px;padding-top:20px">
         <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
-          <input type="checkbox" id="sf_foreign" ${s?.is_foreign?'checked':''} onchange="toggleForeignBox(this.checked)" style="width:auto">
+          <input type="checkbox" id="sf_foreign" style="width:auto">
           <span style="font-size:13px;color:var(--text)">Fornecedor Estrangeiro</span>
         </label>
       </div>
     </div>
-    <div id="sf_foreignBox" class="${s?.is_foreign?'foreign-box show':'foreign-box'}">
-      <div><label>Câmbio (MZN)</label><input type="number" step="0.01" id="sf_cambio" value="${s?.cambio||''}" placeholder="63.5"></div>
-      <div><label>Transporte</label><input type="number" step="0.01" id="sf_transport" value="${s?.transport||''}" placeholder="1500.00"></div>
-      <div><label>Direitos (%)</label><input type="number" step="0.1" id="sf_direitos" value="${s?.direitos||''}" placeholder="7.5"></div>
+    <div id="sf_foreignBox" class="foreign-box">
+      <div><label>Câmbio (MZN)</label><input type="number" step="0.01" id="sf_cambio" placeholder="63.5"></div>
+      <div><label>Transporte</label><input type="number" step="0.01" id="sf_transport" placeholder="1500.00"></div>
+      <div><label>Direitos (%)</label><input type="number" step="0.1" id="sf_direitos" placeholder="7.5"></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Último Contacto</label><input type="date" id="sf_last" value="${s?.last_contact_at||''}"></div>
-      <div><label>Próximo Follow-up</label><input type="date" id="sf_followup" value="${s?.next_followup_at||''}"></div>
+      <div><label>Último Contacto</label><input type="date" id="sf_last"></div>
+      <div><label>Próximo Follow-up</label><input type="date" id="sf_followup"></div>
     </div>
     <div class="form-row"><label>Notas</label><textarea id="sf_notes"></textarea></div>
     <div class="form-grid-2">
@@ -425,15 +450,46 @@ function openSupplierModal(idx = null, prefill = {}) {
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveSupplier()">Guardar</button>
+      <button class="btn btn-ghost" id="sf_cancel">Cancelar</button>
+      <button class="btn btn-primary" id="sf_save">Guardar</button>
     </div>
-  `);
-  const _sf = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+  `));
+
+  // Fill in user data (el.querySelector works on detached elements)
+  el.querySelector('.modal-tag').textContent = s ? 'Editar Fornecedor' : 'Novo Fornecedor';
+  el.querySelector('.modal-title').textContent = s ? s.name : 'Adicionar Fornecedor';
+
+  // Datalist — supplier names from history (user data → textContent only)
+  const datalist = el.querySelector('#supplierNameList');
+  Object.values(supplierHistory).forEach(sh => { const opt = document.createElement('option'); opt.value = sh.name; datalist.appendChild(opt); });
+
+  // Status options
+  const statusSel = el.querySelector('#sf_status');
+  const sfStatuses = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'];
+  sfStatuses.forEach(v => { const opt = document.createElement('option'); opt.value = v; opt.textContent = v; if ((s?.status || 'Not contacted') === v) opt.selected = true; statusSel.appendChild(opt); });
+
+  // Foreign checkbox
+  const foreignCb = el.querySelector('#sf_foreign');
+  if (s?.is_foreign) { foreignCb.checked = true; el.querySelector('#sf_foreignBox').className = 'foreign-box show'; }
+  foreignCb.addEventListener('change', function() { toggleForeignBox(this.checked); });
+
+  // Input values
+  const _sf = (id, v) => { const inp = el.querySelector('#' + id); if (inp) inp.value = v == null ? '' : String(v); };
   _sf('sf_name', s?.name || prefill.name || '');
   _sf('sf_email', s?.email || gs?.email || prefill.email || '');
   _sf('sf_email_cc', s?.email_cc || gs?.email_cc || prefill.email_cc || '');
   _sf('sf_notes', s?.notes || '');
+  _sf('sf_last', s?.last_contact_at || '');
+  _sf('sf_followup', s?.next_followup_at || '');
+  _sf('sf_cambio', s?.cambio || '');
+  _sf('sf_transport', s?.transport || '');
+  _sf('sf_direitos', s?.direitos || '');
+
+  el.querySelector('#sf_name').addEventListener('input', function() { autoFillSupplierEmail(this.value); });
+  el.querySelector('#sf_cancel').addEventListener('click', closeModal);
+  el.querySelector('#sf_save').addEventListener('click', saveSupplier);
+
+  showModal(el);
   renderTagBox('sfCatBox', pendingSupplierCategories, 'cat');
   renderTagBox('sfBrandBox', pendingSupplierBrands, 'brand');
   if (document.getElementById('ep_catBox')) renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
@@ -503,15 +559,19 @@ async function saveSupplier() {
 function deleteSupplier(id) {
   if (!UUID_RE.test(id)) return;
   const s = suppliers.find(x => x.id === id);
-  showModal(`
-    <div class="modal-tag">Confirmar</div>
-    <div class="modal-title">Apagar Fornecedor</div>
-    <div style="color:var(--muted);font-size:14px;margin-bottom:24px">Apagar <strong style="color:#fff">${esc(s?.name||'')}</strong>? Esta ação não pode ser desfeita.</div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-danger" onclick="doDeleteSupplier('${id}')">Apagar</button>
-    </div>
-  `);
+
+  const el = document.createElement('div');
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Confirmar'; el.appendChild(tag);
+  const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = 'Apagar Fornecedor'; el.appendChild(title);
+  const msg = document.createElement('div'); msg.style.cssText = 'color:var(--muted);font-size:14px;margin-bottom:24px';
+  msg.appendChild(document.createTextNode('Apagar '));
+  const strong = document.createElement('strong'); strong.style.color = '#fff'; strong.textContent = s?.name || ''; msg.appendChild(strong);
+  msg.appendChild(document.createTextNode('? Esta ação não pode ser desfeita.')); el.appendChild(msg);
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  const delBtn = document.createElement('button'); delBtn.className = 'btn btn-danger'; delBtn.textContent = 'Apagar'; delBtn.addEventListener('click', () => doDeleteSupplier(id)); actions.appendChild(delBtn);
+  el.appendChild(actions);
+  showModal(el);
 }
 
 async function doDeleteSupplier(id) {
@@ -686,35 +746,43 @@ function parseQuotationExcel(arrayBuffer) {
 
 function openQuotationValModal(fileName, rawPdfText) {
   const s = suppliers.find(x => x.id === currentQuotSuppId);
-  showModalLg(`
-    <div class="modal-tag">Cotação — ${esc(s?.name||'')}</div>
-    <div class="modal-title">${esc(fileName)}</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">${pendingQuotItems.length} linha(s) detetada(s). Revê e confirma antes de guardar.</div>
-    <div style="max-height:380px;overflow-y:auto;margin-bottom:12px">
-      <table class="bom-validate-table">
-        <thead><tr>
-          <th style="width:12%">Part #</th>
-          <th style="width:48%">Descrição</th>
-          <th style="width:8%">Qty</th>
-          <th style="width:14%">Preço Unit.</th>
-          <th style="width:4%">Moeda</th>
-          <th style="width:14%"></th>
-        </tr></thead>
-        <tbody id="quotValTbody"></tbody>
-      </table>
-    </div>
-    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="addQuotRow()">+ Linha</button>
-      ${rawPdfText ? `<button class="btn btn-ghost btn-sm" onclick="document.getElementById('quotRaw').style.display=document.getElementById('quotRaw').style.display==='none'?'block':'none'">Ver texto extraído</button>` : ''}
-    </div>
-    ${rawPdfText ? `<div id="quotRaw" style="display:none;margin-bottom:12px"><textarea id="quotRawTa" style="width:100%;min-height:100px;max-height:180px;background:#0a0a0a;border:1px solid var(--border);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:10px;resize:none;border-radius:4px" readonly></textarea></div>` : ''}
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmQuotation()">Guardar Cotação</button>
-    </div>
-  `);
-  const _qrt = document.getElementById('quotRawTa');
-  if (_qrt && rawPdfText) _qrt.value = rawPdfText;
+
+  const el = document.createElement('div');
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = `Cotação — ${s?.name || ''}`; el.appendChild(tag);
+  const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = fileName; el.appendChild(title);
+  const sub = document.createElement('div'); sub.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:12px'; sub.textContent = `${pendingQuotItems.length} linha(s) detetada(s). Revê e confirma antes de guardar.`; el.appendChild(sub);
+
+  // Table (static thead, dynamic tbody populated by renderQuotValTable)
+  const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
+  const table = document.createElement('table'); table.className = 'bom-validate-table';
+  table.insertAdjacentHTML('afterbegin', `<thead><tr>
+    <th style="width:10%">Part #</th><th style="width:52%">Descrição</th>
+    <th style="width:6%">Qty</th><th style="width:10%">Preço Unit.</th>
+    <th style="width:9%">Moeda</th><th style="width:13%"></th>
+  </tr></thead>`);
+  const tbody = document.createElement('tbody'); tbody.id = 'quotValTbody'; table.appendChild(tbody);
+  tableWrap.appendChild(table); el.appendChild(tableWrap);
+
+  const btnRow = document.createElement('div'); btnRow.style.cssText = 'margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap';
+  const addRowBtn = document.createElement('button'); addRowBtn.className = 'btn btn-ghost btn-sm'; addRowBtn.textContent = '+ Linha'; addRowBtn.addEventListener('click', addQuotRow); btnRow.appendChild(addRowBtn);
+  if (rawPdfText) {
+    const toggleBtn = document.createElement('button'); toggleBtn.className = 'btn btn-ghost btn-sm'; toggleBtn.textContent = 'Ver texto extraído';
+    toggleBtn.addEventListener('click', () => { const raw = document.getElementById('quotRaw'); raw.style.display = raw.style.display === 'none' ? 'block' : 'none'; }); btnRow.appendChild(toggleBtn);
+  }
+  el.appendChild(btnRow);
+
+  if (rawPdfText) {
+    const rawDiv = document.createElement('div'); rawDiv.id = 'quotRaw'; rawDiv.style.cssText = 'display:none;margin-bottom:12px';
+    const ta = document.createElement('textarea'); ta.id = 'quotRawTa'; ta.style.cssText = 'width:100%;min-height:100px;max-height:180px;background:#0a0a0a;border:1px solid var(--border);color:var(--muted);font-family:IBM Plex Mono,monospace;font-size:11px;padding:10px;resize:none;border-radius:4px'; ta.readOnly = true; ta.value = rawPdfText;
+    rawDiv.appendChild(ta); el.appendChild(rawDiv);
+  }
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-primary'; saveBtn.textContent = 'Guardar Cotação'; saveBtn.addEventListener('click', confirmQuotation); actions.appendChild(saveBtn);
+  el.appendChild(actions);
+
+  showModalLg(el);
   priceAnomalies = {};
   renderQuotValTable();
   checkPriceAnomalies(pendingQuotItems).then(a => {
@@ -746,7 +814,7 @@ function renderQuotValTable() {
     // Qty
     const tdQty = document.createElement('td');
     const inQty = document.createElement('input');
-    inQty.type = 'number'; inQty.value = item.quantity; inQty.style.width = '55px';
+    inQty.type = 'number'; inQty.value = item.quantity; inQty.style.width = '100%';
     inQty.onchange = function() { pendingQuotItems[i].quantity = parseFloat(this.value) || 1; };
     tdQty.appendChild(inQty);
 
@@ -774,7 +842,6 @@ function renderQuotValTable() {
     // Moeda
     const tdCur = document.createElement('td');
     const sel = document.createElement('select');
-    sel.style.width = '66px';
     ['MZN','USD','EUR','ZAR'].forEach(c => {
       const opt = document.createElement('option');
       opt.value = c; opt.textContent = c;
