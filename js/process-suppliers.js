@@ -216,7 +216,7 @@ function openRFQModal(supplierIdx) {
 
   const semPreco = [], comPreco = [];
   bomItems.forEach((bi, idx) => {
-    const hasPrice = matches.some(m => m.bom_item_id === bi.id && m.supplier_id === s.id && m.quotation_items?.price > 0);
+    const hasPrice = matches.some(m => m.bom_item_id === bi.id);
     (hasPrice ? comPreco : semPreco).push({ bi, idx });
   });
 

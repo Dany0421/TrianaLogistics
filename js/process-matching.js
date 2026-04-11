@@ -154,7 +154,12 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   autoBtn.textContent = '⚡ Auto-Match';
   autoBtn.addEventListener('click', runAutoMatch);
 
-  statsDiv.appendChild(covDiv); statsDiv.appendChild(barWrap); statsDiv.appendChild(autoBtn);
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'btn btn-ghost btn-sm';
+  exportBtn.textContent = '↓ Export Missing';
+  exportBtn.addEventListener('click', exportMissingItems);
+
+  statsDiv.appendChild(covDiv); statsDiv.appendChild(barWrap); statsDiv.appendChild(autoBtn); statsDiv.appendChild(exportBtn);
   el.appendChild(statsDiv);
 
   // Table
@@ -611,4 +616,77 @@ async function runAutoMatch() {
     await loadMatchData(); renderMatchingTab();
     showToast('Erro: ' + e.message, true);
   }
+}
+
+async function exportMissingItems() {
+  const missing = bomItems.filter(bi => !bi.is_service && (!matches.some(m => m.bom_item_id === bi.id)));
+  if (!missing.length) { showToast('Sem itens em falta — cobertura a 100%!'); return; }
+
+  const sheets = {};
+  for (const bi of missing) {
+    const sh = bi.sheet_name || 'Sheet1';
+    if (!sheets[sh]) sheets[sh] = [];
+    sheets[sh].push(bi);
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Triana Procurement';
+  wb.created = new Date();
+
+  const HDR_BG  = 'FF1E293B';
+  const HDR_FG  = 'FFFFFFFF';
+  const ROW_ALT = 'FFF8FAFC';
+  const ACCENT  = 'FF3B82F6';
+
+  const hFont   = { bold: true, size: 10, name: 'Calibri', color: { argb: HDR_FG } };
+  const hFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: HDR_BG } };
+  const hAlign  = { horizontal: 'center', vertical: 'middle' };
+  const dFont   = { size: 10, name: 'Calibri' };
+  const dAlignL = { horizontal: 'left',   vertical: 'middle', wrapText: true };
+  const dAlignC = { horizontal: 'center', vertical: 'middle' };
+
+  for (const [sheetName, items] of Object.entries(sheets)) {
+    const ws = wb.addWorksheet(sheetName.substring(0, 31), {
+      properties: { tabColor: { argb: ACCENT } },
+      views: [{ showGridLines: false }],
+    });
+
+    ws.columns = [{ width: 16 }, { width: 52 }, { width: 8 }, { width: 12 }, { width: 22 }];
+
+    ws.getRow(1).height = 14;
+    const labelCell = ws.getCell(1, 1);
+    labelCell.value = `Itens em falta — ${sheetName}  (${items.length} item${items.length !== 1 ? 's' : ''})`;
+    labelCell.font = { size: 8, name: 'Calibri', color: { argb: 'FF64748B' }, italic: true };
+    ws.mergeCells(1, 1, 1, 5);
+
+    ws.getRow(2).height = 22;
+    ['Part #', 'Descrição', 'Qty', 'Unidade', 'Categoria'].forEach((lbl, i) => {
+      sc2(ws.getCell(2, i + 1), { value: lbl, font: hFont, fill: hFill, alignment: hAlign });
+    });
+
+    items.forEach((bi, idx) => {
+      const r = 3 + idx;
+      ws.getRow(r).height = 18;
+      const altFill = idx % 2 === 1
+        ? { type: 'pattern', pattern: 'solid', fgColor: { argb: ROW_ALT } }
+        : undefined;
+      sc2(ws.getCell(r, 1), { value: bi.part_number || '—', font: dFont, fill: altFill, alignment: dAlignC });
+      sc2(ws.getCell(r, 2), { value: bi.description  || '',  font: dFont, fill: altFill, alignment: dAlignL });
+      sc2(ws.getCell(r, 3), { value: bi.quantity      ?? '',  font: dFont, fill: altFill, alignment: dAlignC });
+      sc2(ws.getCell(r, 4), { value: bi.unit          || '',  font: dFont, fill: altFill, alignment: dAlignC });
+      sc2(ws.getCell(r, 5), { value: bi.category      || '',  font: dFont, fill: altFill, alignment: dAlignL });
+    });
+  }
+
+  const buf  = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `missing_items_${processId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`${missing.length} item(s) exportado(s).`);
 }
