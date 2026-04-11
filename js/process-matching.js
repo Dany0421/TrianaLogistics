@@ -4,9 +4,55 @@ function switchMatchingView(v) {
   renderMatchingTab();
 }
 
+/** Scroll positions to restore after re-render (inner table wrappers + ancestors + window). */
+function _captureMatchingScroll(matchingRoot) {
+  const matchScroll = document.getElementById('matchTableScroll');
+  const compScroll = document.getElementById('compTableScroll');
+  const ancestors = [];
+  let p = matchingRoot.parentElement;
+  while (p && p !== document.documentElement) {
+    ancestors.push({ el: p, left: p.scrollLeft, top: p.scrollTop });
+    p = p.parentElement;
+  }
+  return {
+    match: matchScroll ? { left: matchScroll.scrollLeft, top: matchScroll.scrollTop } : null,
+    comp: compScroll ? { left: compScroll.scrollLeft, top: compScroll.scrollTop } : null,
+    ancestors,
+    winX: window.scrollX,
+    winY: window.scrollY,
+  };
+}
+
+function _restoreMatchingScroll(state) {
+  if (!state) return;
+  for (const a of state.ancestors) {
+    if (a.el.isConnected) {
+      a.el.scrollLeft = a.left;
+      a.el.scrollTop = a.top;
+    }
+  }
+  window.scrollTo(state.winX, state.winY);
+  const matchScroll = document.getElementById('matchTableScroll');
+  if (matchScroll && state.match) {
+    matchScroll.scrollLeft = state.match.left;
+    matchScroll.scrollTop = state.match.top;
+  }
+  const compScroll = document.getElementById('compTableScroll');
+  if (compScroll && state.comp) {
+    compScroll.scrollLeft = state.comp.left;
+    compScroll.scrollTop = state.comp.top;
+  }
+}
+
 function renderMatchingTab() {
   const el = document.getElementById('matchingContent');
   if (!el) return;
+  const scrollState = _captureMatchingScroll(el);
+  const scheduleRestoreScroll = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => _restoreMatchingScroll(scrollState));
+    });
+  };
   el.replaceChildren();
 
   if (!bomItems.length) {
@@ -14,6 +60,7 @@ function renderMatchingTab() {
     d.className = 'empty-state';
     d.textContent = 'Carrega o BOM primeiro.';
     el.appendChild(d);
+    scheduleRestoreScroll();
     return;
   }
 
@@ -29,6 +76,7 @@ function renderMatchingTab() {
     d.className = 'empty-state';
     d.textContent = 'Adiciona fornecedores primeiro.';
     el.appendChild(d);
+    scheduleRestoreScroll();
     return;
   }
 
@@ -70,6 +118,8 @@ function renderMatchingTab() {
   } else {
     _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems);
   }
+
+  scheduleRestoreScroll();
 }
 
 function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems) {
