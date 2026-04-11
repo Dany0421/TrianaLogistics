@@ -1,4 +1,8 @@
 // ── Matching Tab ──
+function effPrice(qi) {
+  if (qi == null) return null;
+  return (qi.price || 0) * (1 - ((qi.discount || 0) / 100));
+}
 function switchMatchingView(v) {
   matchingView = v;
   renderMatchingTab();
@@ -181,7 +185,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     const selectedSuppId = selLookup[bi.id];
     let lowestPrice = Infinity;
     for (const s of suppliers) {
-      const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
+      const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items);
       if (p != null && p < lowestPrice) lowestPrice = p;
     }
     const row = tbody.insertRow();
@@ -200,7 +204,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     for (const s of suppliers) {
       const m = matchLookup[bi.id]?.[s.id];
       const isSel = selectedSuppId === s.id;
-      const price = m?.quotation_items?.price;
+      const price = effPrice(m?.quotation_items);
       const isLowest = price != null && price === lowestPrice && lowestPrice < Infinity;
       const tdSupp = row.insertCell();
       const cellDiv = document.createElement('div');
@@ -256,9 +260,9 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
   const colTotals = {};
   for (const s of suppliers) {
-    colTotals[s.id] = equipItems.reduce((sum, bi) => { const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price; return sum + (p != null ? p : 0); }, 0);
+    colTotals[s.id] = equipItems.reduce((sum, bi) => { const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items); return sum + (p != null ? p : 0); }, 0);
   }
-  const totalSelected = selectedOffers.reduce((sum, o) => { const p = matchLookup[o.bom_item_id]?.[o.supplier_id]?.quotation_items?.price; return sum + (p || 0); }, 0);
+  const totalSelected = selectedOffers.reduce((sum, o) => { const p = effPrice(matchLookup[o.bom_item_id]?.[o.supplier_id]?.quotation_items); return sum + (p || 0); }, 0);
   const serviceTotal = serviceItems.reduce((sum, bi) => sum + ((bi.service_price || 0) * (bi.quantity || 1)), 0);
 
   // Stats bar
@@ -315,11 +319,11 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const dDiv = document.createElement('div'); dDiv.style.fontSize = '13px'; dDiv.textContent = bi.description; tdItem.appendChild(dDiv);
       if (bi.part_number) { const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv); }
       let lowestPrice = Infinity;
-      for (const s of suppliers) { const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price; if (p != null && p < lowestPrice) lowestPrice = p; }
+      for (const s of suppliers) { const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items); if (p != null && p < lowestPrice) lowestPrice = p; }
       const selectedSuppId = selLookup[bi.id];
       for (const s of suppliers) {
         const m = matchLookup[bi.id]?.[s.id];
-        const price = m?.quotation_items?.price;
+        const price = effPrice(m?.quotation_items);
         const currency = m?.quotation_items?.currency || '';
         const isSel = selectedSuppId === s.id;
         const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
@@ -560,13 +564,32 @@ async function runAutoMatch() {
       if (allMatchLookup[bi.id]) for (const sid of Object.keys(allMatchLookup[bi.id])) suppIds.add(sid);
     }
     for (const suppId of suppIds) {
-      const source = group.find(bi => allMatchLookup[bi.id]?.[suppId]);
+      // Pick source: Phase-1 newly found first (most recent), then existing match with latest updated_at
+      const newlyFoundInGroup = group.filter(bi =>
+        newMatches.some(nm => nm.bom_item_id === bi.id && nm.supplier_id === suppId)
+      );
+      let source;
+      if (newlyFoundInGroup.length) {
+        source = newlyFoundInGroup[0];
+      } else {
+        source = group
+          .filter(bi => allMatchLookup[bi.id]?.[suppId])
+          .sort((a, b) => {
+            const mA = matches.find(m => m.bom_item_id === a.id && m.supplier_id === suppId);
+            const mB = matches.find(m => m.bom_item_id === b.id && m.supplier_id === suppId);
+            return new Date(mB?.updated_at || 0) - new Date(mA?.updated_at || 0);
+          })[0];
+      }
       if (!source) continue;
       const quotItemId = allMatchLookup[source.id][suppId];
       for (const bi of group) {
-        if (allMatchLookup[bi.id]?.[suppId]) continue; // already matched
+        if (bi.id === source.id) continue;
         if (rejectedSet.has(`${bi.id}:${suppId}:${quotItemId}`)) continue;
-        newMatches.push({ process_id: processId, bom_item_id: bi.id, supplier_id: suppId, quotation_item_id: quotItemId, match_type: 'auto', confidence: 1.0 });
+        // overwrite even if already matched — last-write-wins
+        const existingIdx = newMatches.findIndex(nm => nm.bom_item_id === bi.id && nm.supplier_id === suppId);
+        const entry = { process_id: processId, bom_item_id: bi.id, supplier_id: suppId, quotation_item_id: quotItemId, match_type: 'auto', confidence: 1.0 };
+        if (existingIdx >= 0) newMatches[existingIdx] = entry;
+        else newMatches.push(entry);
         if (!allMatchLookup[bi.id]) allMatchLookup[bi.id] = {};
         allMatchLookup[bi.id][suppId] = quotItemId;
         propagated++;
