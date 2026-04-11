@@ -73,33 +73,59 @@ function renderMatchingTab() {
 }
 
 function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems) {
-  const pctColor2 = pctColor;
-  let html = `
-    <div style="display:flex;align-items:center;gap:20px;margin-bottom:20px;flex-wrap:wrap">
-      <div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
-        <div style="font-size:28px;font-weight:700;color:${pctColor2}">${pct}%</div>
-        <div style="color:var(--muted);font-size:12px">${covered}/${equipItems.length} itens</div>
-      </div>
-      <div style="flex:1">
-        <div class="coverage-bar"><div class="coverage-bar-fill" style="width:${pct}%"></div></div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="runAutoMatch()">⚡ Auto-Match</button>
-    </div>
-    <div style="overflow-x:auto">
-    <table class="match-table">
-      <thead><tr>
-        <th style="min-width:260px">Item BOM</th>
-        <th style="text-align:center;width:50px">Qty</th>
-        ${suppliers.map(s=>`<th style="text-align:center;min-width:140px">${esc(s.name)}</th>`).join('')}
-        <th style="text-align:center;width:110px">Escolha</th>
-      </tr></thead>
-      <tbody>`;
+  // Stats bar
+  const statsDiv = document.createElement('div');
+  statsDiv.style.cssText = 'display:flex;align-items:center;gap:20px;margin-bottom:20px;flex-wrap:wrap';
 
+  const covDiv = document.createElement('div');
+  const covLabel = document.createElement('div');
+  covLabel.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px";
+  covLabel.textContent = 'COBERTURA';
+  const covPct = document.createElement('div');
+  covPct.style.cssText = `font-size:28px;font-weight:700;color:${pctColor}`;
+  covPct.textContent = pct + '%';
+  const covCount = document.createElement('div');
+  covCount.style.cssText = 'color:var(--muted);font-size:12px';
+  covCount.textContent = `${covered}/${equipItems.length} itens`;
+  covDiv.appendChild(covLabel); covDiv.appendChild(covPct); covDiv.appendChild(covCount);
+
+  const barWrap = document.createElement('div');
+  barWrap.style.flex = '1';
+  const bar = document.createElement('div'); bar.className = 'coverage-bar';
+  const barFill = document.createElement('div'); barFill.className = 'coverage-bar-fill'; barFill.style.width = pct + '%';
+  bar.appendChild(barFill); barWrap.appendChild(bar);
+
+  const autoBtn = document.createElement('button');
+  autoBtn.className = 'btn btn-ghost btn-sm';
+  autoBtn.textContent = '⚡ Auto-Match';
+  autoBtn.addEventListener('click', runAutoMatch);
+
+  statsDiv.appendChild(covDiv); statsDiv.appendChild(barWrap); statsDiv.appendChild(autoBtn);
+  el.appendChild(statsDiv);
+
+  // Table
+  const scrollWrap = document.createElement('div');
+  scrollWrap.style.overflowX = 'auto';
+  const table = document.createElement('table');
+  table.className = 'match-table';
+
+  // Thead
+  const thead = table.createTHead();
+  const hrow = thead.insertRow();
+  const thItem = document.createElement('th'); thItem.style.minWidth = '260px'; thItem.textContent = 'Item BOM'; hrow.appendChild(thItem);
+  const thQty = document.createElement('th'); thQty.style.cssText = 'text-align:center;width:50px'; thQty.textContent = 'Qty'; hrow.appendChild(thQty);
+  for (const s of suppliers) {
+    const th = document.createElement('th'); th.style.cssText = 'text-align:center;min-width:140px'; th.textContent = s.name; hrow.appendChild(th);
+  }
+  const thChoice = document.createElement('th'); thChoice.style.cssText = 'text-align:center;width:110px'; thChoice.textContent = 'Escolha'; hrow.appendChild(thChoice);
+
+  // Tbody
+  const tbody = table.createTBody();
   let lastCat = null;
   for (const bi of equipItems) {
     if (bi.category && bi.category !== lastCat) {
-      html += `<tr class="match-cat-row"><td colspan="${3+suppliers.length}">${esc(bi.category)}</td></tr>`;
+      const catRow = tbody.insertRow(); catRow.className = 'match-cat-row';
+      const catTd = catRow.insertCell(); catTd.colSpan = 3 + suppliers.length; catTd.textContent = bi.category;
       lastCat = bi.category;
     }
     const selectedSuppId = selLookup[bi.id];
@@ -108,43 +134,67 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
       if (p != null && p < lowestPrice) lowestPrice = p;
     }
-    html += `<tr>
-      <td>
-        <div style="font-size:13px">${esc(bi.description)}</div>
-        ${bi.part_number?`<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>`:''}
-      </td>
-      <td style="text-align:center;color:var(--muted);font-size:12px">${bi.quantity}</td>
-      ${suppliers.map(s => {
-        const m = matchLookup[bi.id]?.[s.id];
-        const isSel = selectedSuppId === s.id;
-        const price = m?.quotation_items?.price;
-        const isLowest = price != null && price === lowestPrice && lowestPrice < Infinity;
-        if (m) {
-          const currency = m.quotation_items?.currency || '';
-          return `<td><div class="match-cell${isSel?' match-selected':''}${isLowest&&!isSel?' match-lowest':''}" onclick="openMatchModal('${bi.id}','${s.id}')">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">${fmtPrice(price)}<span style="font-size:9px;opacity:.6;margin-left:2px">${esc(currency)}</span></div>
-            ${isSel?`<div style="font-size:9px;color:var(--accent);letter-spacing:1px">SELECIONADO</div>`:''}
-            ${isLowest&&!isSel?`<div style="font-size:9px;color:#4fc3f7;letter-spacing:1px">MAIS BAIXO</div>`:''}
-          </div></td>`;
-        }
-        return `<td><div class="match-cell match-empty" onclick="openMatchModal('${bi.id}','${s.id}')">+</div></td>`;
-      }).join('')}
-      <td style="text-align:center">
-        ${selectedSuppId
-          ? `<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent)">${esc(suppliers.find(s=>s.id===selectedSuppId)?.name||'')}</span>`
-          : `<span style="color:#333">—</span>`}
-      </td>
-    </tr>`;
+    const row = tbody.insertRow();
+
+    // Item cell
+    const tdItem = row.insertCell();
+    const descDiv = document.createElement('div'); descDiv.style.fontSize = '13px'; descDiv.textContent = bi.description; tdItem.appendChild(descDiv);
+    if (bi.part_number) {
+      const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv);
+    }
+
+    // Qty cell
+    const tdQty = row.insertCell(); tdQty.style.cssText = 'text-align:center;color:var(--muted);font-size:12px'; tdQty.textContent = bi.quantity;
+
+    // Supplier cells
+    for (const s of suppliers) {
+      const m = matchLookup[bi.id]?.[s.id];
+      const isSel = selectedSuppId === s.id;
+      const price = m?.quotation_items?.price;
+      const isLowest = price != null && price === lowestPrice && lowestPrice < Infinity;
+      const tdSupp = row.insertCell();
+      const cellDiv = document.createElement('div');
+      let cls = 'match-cell';
+      if (m) { if (isSel) cls += ' match-selected'; else if (isLowest) cls += ' match-lowest'; }
+      else cls += ' match-empty';
+      cellDiv.className = cls;
+      cellDiv.addEventListener('click', () => openMatchModal(bi.id, s.id));
+      if (m) {
+        const currency = m.quotation_items?.currency || '';
+        const priceDiv = document.createElement('div');
+        priceDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600";
+        priceDiv.textContent = fmtPrice(price);
+        const currSpan = document.createElement('span'); currSpan.style.cssText = 'font-size:9px;opacity:.6;margin-left:2px'; currSpan.textContent = currency;
+        priceDiv.appendChild(currSpan); cellDiv.appendChild(priceDiv);
+        if (isSel) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px'; lbl.textContent = 'SELECIONADO'; cellDiv.appendChild(lbl); }
+        else if (isLowest) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#4fc3f7;letter-spacing:1px'; lbl.textContent = 'MAIS BAIXO'; cellDiv.appendChild(lbl); }
+      } else {
+        cellDiv.textContent = '+';
+      }
+      tdSupp.appendChild(cellDiv);
+    }
+
+    // Escolha cell
+    const tdChoice = row.insertCell(); tdChoice.style.textAlign = 'center';
+    if (selectedSuppId) {
+      const span = document.createElement('span'); span.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--accent)";
+      span.textContent = suppliers.find(s => s.id === selectedSuppId)?.name || ''; tdChoice.appendChild(span);
+    } else {
+      const dash = document.createElement('span'); dash.style.color = '#333'; dash.textContent = '—'; tdChoice.appendChild(dash);
+    }
   }
 
-  html += `</tbody>
-    <tfoot><tr>
-      <td></td><td></td>
-      ${suppliers.map(s=>`<td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;padding:8px 10px;white-space:nowrap;border-top:1px solid var(--border)">${esc(s.name)}</td>`).join('')}
-      <td></td>
-    </tr></tfoot>
-    </table></div>`;
-  el.appendChild(document.createRange().createContextualFragment(html));
+  // Tfoot
+  const tfoot = table.createTFoot();
+  const tfrow = tfoot.insertRow();
+  tfrow.insertCell(); tfrow.insertCell();
+  for (const s of suppliers) {
+    const td = tfrow.insertCell(); td.style.cssText = "text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;padding:8px 10px;white-space:nowrap;border-top:1px solid var(--border)"; td.textContent = s.name;
+  }
+  tfrow.insertCell();
+
+  scrollWrap.appendChild(table);
+  el.appendChild(scrollWrap);
 }
 
 function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems) {
@@ -154,114 +204,107 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   const suppCoverage = {};
   for (const s of suppliers) suppCoverage[s.id] = equipItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
   const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
-
   const colTotals = {};
   for (const s of suppliers) {
-    colTotals[s.id] = equipItems.reduce((sum, bi) => {
-      const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
-      return sum + (p != null ? p : 0);
-    }, 0);
+    colTotals[s.id] = equipItems.reduce((sum, bi) => { const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price; return sum + (p != null ? p : 0); }, 0);
   }
-
-  const totalSelected = selectedOffers.reduce((sum, o) => {
-    const p = matchLookup[o.bom_item_id]?.[o.supplier_id]?.quotation_items?.price;
-    return sum + (p || 0);
-  }, 0);
-
+  const totalSelected = selectedOffers.reduce((sum, o) => { const p = matchLookup[o.bom_item_id]?.[o.supplier_id]?.quotation_items?.price; return sum + (p || 0); }, 0);
   const serviceTotal = serviceItems.reduce((sum, bi) => sum + ((bi.service_price || 0) * (bi.quantity || 1)), 0);
 
-  let html = `
-    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px">
-      <div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">COBERTURA</div>
-        <div style="font-size:24px;font-weight:700;color:${pctColor}">${pct}%</div>
-        <div style="color:var(--muted);font-size:12px">${covered}/${equipItems.length} itens</div>
-      </div>
-      ${topSupp ? `<div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">MAIS COBERTURA</div>
-        <div style="font-size:15px;font-weight:600;color:#fff">${esc(topSupp.name)}</div>
-        <div style="color:var(--muted);font-size:12px">${suppCoverage[topSupp.id]} itens</div>
-      </div>` : ''}
-      ${totalSelected > 0 ? `<div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">TOTAL SELECIONADO</div>
-        <div style="font-size:15px;font-weight:600;color:var(--accent)">${fmtPrice(totalSelected)}</div>
-      </div>` : ''}
-      ${serviceTotal > 0 ? `<div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">SERVIÇOS TRIANA</div>
-        <div style="font-size:15px;font-weight:600;color:var(--warn)">${fmtPrice(serviceTotal)}</div>
-      </div>` : ''}
-    </div>
-    <div class="comp-wrap">
-    <table class="comp-table">
-      <thead><tr>
-        <th>Item BOM</th>
-        ${suppliers.map(s => `<th>${esc(s.name)}</th>`).join('')}
-        ${hasServices ? '<th style="color:var(--warn)">Triana</th>' : ''}
-      </tr></thead>
-      <tbody>`;
+  // Stats bar
+  const statsDiv = document.createElement('div');
+  statsDiv.style.cssText = 'display:flex;gap:24px;flex-wrap:wrap;margin-bottom:20px';
 
+  const makeStatBlock = (label, valueText, color, subText) => {
+    const d = document.createElement('div');
+    const lbl = document.createElement('div'); lbl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px"; lbl.textContent = label;
+    const val = document.createElement('div'); val.style.cssText = `font-size:${label === 'COBERTURA' ? '24' : '15'}px;font-weight:${label === 'COBERTURA' ? '700' : '600'};color:${color}`; val.textContent = valueText;
+    d.appendChild(lbl); d.appendChild(val);
+    if (subText) { const sub = document.createElement('div'); sub.style.cssText = 'color:var(--muted);font-size:12px'; sub.textContent = subText; d.appendChild(sub); }
+    return d;
+  };
+  statsDiv.appendChild(makeStatBlock('COBERTURA', pct + '%', pctColor, `${covered}/${equipItems.length} itens`));
+  if (topSupp) statsDiv.appendChild(makeStatBlock('MAIS COBERTURA', topSupp.name, '#fff', suppCoverage[topSupp.id] + ' itens'));
+  if (totalSelected > 0) statsDiv.appendChild(makeStatBlock('TOTAL SELECIONADO', fmtPrice(totalSelected), 'var(--accent)'));
+  if (serviceTotal > 0) statsDiv.appendChild(makeStatBlock('SERVIÇOS TRIANA', fmtPrice(serviceTotal), 'var(--warn)'));
+  el.appendChild(statsDiv);
+
+  // Comp table
+  const compWrap = document.createElement('div'); compWrap.className = 'comp-wrap';
+  const table = document.createElement('table'); table.className = 'comp-table';
+
+  // Thead
+  const thead = table.createTHead(); const hrow = thead.insertRow();
+  const th0 = document.createElement('th'); th0.textContent = 'Item BOM'; hrow.appendChild(th0);
+  for (const s of suppliers) { const th = document.createElement('th'); th.textContent = s.name; hrow.appendChild(th); }
+  if (hasServices) { const thSvc = document.createElement('th'); thSvc.style.color = 'var(--warn)'; thSvc.textContent = 'Triana'; hrow.appendChild(thSvc); }
+
+  // Tbody
+  const tbody = table.createTBody();
   let lastCat = null;
   for (const bi of bomItems) {
     if (bi.category && bi.category !== lastCat) {
-      html += `<tr class="comp-cat-row"><td colspan="${1 + numCols}">${esc(bi.category)}</td></tr>`;
+      const catRow = tbody.insertRow(); catRow.className = 'comp-cat-row';
+      const td = catRow.insertCell(); td.colSpan = 1 + numCols; td.textContent = bi.category;
       lastCat = bi.category;
     }
+    const row = tbody.insertRow();
+    const tdItem = row.insertCell();
 
     if (bi.is_service) {
       const svcTotal = (bi.service_price || 0) * (bi.quantity || 1);
-      html += `<tr>
-        <td>
-          <div style="font-size:13px;color:var(--warn)">${esc(bi.description)}</div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--warn);opacity:.6">Qty: ${bi.quantity || 1}</div>
-        </td>
-        ${suppliers.map(() => '<td></td>').join('')}
-        <td><span class="comp-cell" style="color:var(--warn)">${svcTotal > 0 ? fmtPrice(svcTotal) : '—'}<span style="font-size:9px;opacity:.7;margin-left:3px">MZN</span></span></td>
-      </tr>`;
+      const dDiv = document.createElement('div'); dDiv.style.cssText = 'font-size:13px;color:var(--warn)'; dDiv.textContent = bi.description; tdItem.appendChild(dDiv);
+      const qDiv = document.createElement('div'); qDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--warn);opacity:.6"; qDiv.textContent = 'Qty: ' + (bi.quantity || 1); tdItem.appendChild(qDiv);
+      for (const _s of suppliers) row.insertCell();
+      const tdSvc = row.insertCell();
+      const span = document.createElement('span'); span.className = 'comp-cell'; span.style.color = 'var(--warn)';
+      span.textContent = svcTotal > 0 ? fmtPrice(svcTotal) : '—';
+      if (svcTotal > 0) { const mzn = document.createElement('span'); mzn.style.cssText = 'font-size:9px;opacity:.7;margin-left:3px'; mzn.textContent = 'MZN'; span.appendChild(mzn); }
+      tdSvc.appendChild(span);
     } else {
+      const dDiv = document.createElement('div'); dDiv.style.fontSize = '13px'; dDiv.textContent = bi.description; tdItem.appendChild(dDiv);
+      if (bi.part_number) { const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv); }
       let lowestPrice = Infinity;
-      for (const s of suppliers) {
-        const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price;
-        if (p != null && p < lowestPrice) lowestPrice = p;
-      }
+      for (const s of suppliers) { const p = matchLookup[bi.id]?.[s.id]?.quotation_items?.price; if (p != null && p < lowestPrice) lowestPrice = p; }
       const selectedSuppId = selLookup[bi.id];
-      html += `<tr>
-        <td>
-          <div style="font-size:13px">${esc(bi.description)}</div>
-          ${bi.part_number ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">${esc(bi.part_number)}</div>` : ''}
-        </td>
-        ${suppliers.map(s => {
-          const m = matchLookup[bi.id]?.[s.id];
-          const price = m?.quotation_items?.price;
-          const currency = m?.quotation_items?.currency || '';
-          const isSel = selectedSuppId === s.id;
-          const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
-          if (price != null) {
-            const cls = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
-            return `<td><span class="${cls}">${fmtPrice(price)}<span style="font-size:9px;opacity:.7;margin-left:3px">${esc(currency)}</span></span></td>`;
-          }
-          return `<td><span class="comp-cell comp-cell-none">—</span></td>`;
-        }).join('')}
-        ${hasServices ? '<td></td>' : ''}
-      </tr>`;
+      for (const s of suppliers) {
+        const m = matchLookup[bi.id]?.[s.id];
+        const price = m?.quotation_items?.price;
+        const currency = m?.quotation_items?.currency || '';
+        const isSel = selectedSuppId === s.id;
+        const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
+        const td = row.insertCell();
+        const span = document.createElement('span');
+        if (price != null) {
+          span.className = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
+          span.textContent = fmtPrice(price);
+          const cSpan = document.createElement('span'); cSpan.style.cssText = 'font-size:9px;opacity:.7;margin-left:3px'; cSpan.textContent = currency; span.appendChild(cSpan);
+        } else {
+          span.className = 'comp-cell comp-cell-none'; span.textContent = '—';
+        }
+        td.appendChild(span);
+      }
+      if (hasServices) row.insertCell();
     }
   }
 
-  html += `</tbody>
-    <tfoot>
-    <tr>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase">Total Equipamento</td>
-      ${suppliers.map(s => `<td>${colTotals[s.id] > 0 ? fmtPrice(colTotals[s.id]) : '<span style="color:#334">—</span>'}</td>`).join('')}
-      ${hasServices ? `<td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--warn);font-weight:600">${serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'}</td>` : ''}
-    </tr>
-    <tr>
-      <td></td>
-      ${suppliers.map(s => `<td style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;padding:6px 12px;white-space:nowrap">${esc(s.name)}</td>`).join('')}
-      ${hasServices ? '<td style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--warn);letter-spacing:.6px;text-transform:uppercase;text-align:center;padding:6px 12px">Triana</td>' : ''}
-    </tr>
-    </tfoot>
-    </table></div>`;
+  // Tfoot
+  const tfoot = table.createTFoot();
+  const totalRow = tfoot.insertRow();
+  const tdTLbl = totalRow.insertCell(); tdTLbl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase"; tdTLbl.textContent = 'Total Equipamento';
+  for (const s of suppliers) {
+    const td = totalRow.insertCell();
+    if (colTotals[s.id] > 0) { td.textContent = fmtPrice(colTotals[s.id]); }
+    else { const dash = document.createElement('span'); dash.style.color = '#334'; dash.textContent = '—'; td.appendChild(dash); }
+  }
+  if (hasServices) { const td = totalRow.insertCell(); td.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--warn);font-weight:600"; td.textContent = serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'; }
 
-  el.appendChild(document.createRange().createContextualFragment(html));
+  const namesRow = tfoot.insertRow(); namesRow.insertCell();
+  for (const s of suppliers) { const td = namesRow.insertCell(); td.style.cssText = "text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;padding:6px 12px;white-space:nowrap"; td.textContent = s.name; }
+  if (hasServices) { const td = namesRow.insertCell(); td.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--warn);letter-spacing:.6px;text-transform:uppercase;text-align:center;padding:6px 12px"; td.textContent = 'Triana'; }
+
+  compWrap.appendChild(table);
+  el.appendChild(compWrap);
 }
 
 function openMatchModal(bomItemId, supplierId) {
@@ -273,37 +316,51 @@ function openMatchModal(bomItemId, supplierId) {
   const selOffer = selectedOffers.find(o => o.bom_item_id === bomItemId);
   const isSelectedSupp = selOffer?.supplier_id === supplierId;
 
-  showModal(`
-    <div class="modal-tag">${esc(s?.name||'')}</div>
-    <div class="modal-title" style="font-size:15px;margin-bottom:4px">${esc(bi?.description||'')}</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Qty BOM: ${bi?.quantity} ${bi?.unit||''}</div>
-    ${!qItems.length ? `<div style="color:var(--muted);font-size:13px;margin-bottom:16px">Este fornecedor não tem cotação carregada.<br><button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="closeModal();uploadQuotation('${supplierId}')">📎 Carregar Cotação</button></div>` : `
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SELECIONA UM ITEM DA COTAÇÃO</div>
-      <div style="max-height:300px;overflow-y:auto;margin-bottom:16px">
-        ${qItems.map(qi => {
-          const isLinked = currentMatch?.quotation_item_id === qi.id;
-          return `<div class="match-pick-row${isLinked?' linked':''}" onclick="linkItem('${bomItemId}','${supplierId}','${qi.id}')">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(qi.raw_description)}</div>
-              ${qi.raw_part_number?`<div style="font-size:10px;color:var(--muted)">${esc(qi.raw_part_number)}</div>`:''}
-            </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600">${fmtPrice(qi.price)}</div>
-              <div style="font-size:10px;color:var(--muted)">${qi.currency}</div>
-            </div>
-            ${isLinked?`<div style="font-size:9px;color:var(--accent);letter-spacing:1px;white-space:nowrap">✓${isSelectedSupp?' SEL.':''}</div>`:''}
-          </div>`;
-        }).join('')}
-      </div>
-    `}
-    <div class="modal-actions">
-      ${currentMatch ? `
-        <button class="btn btn-ghost btn-sm" onclick="selectOffer('${bomItemId}','${supplierId}','${currentMatch.quotation_item_id}')">✓ Selecionar como melhor oferta</button>
-        <button class="btn btn-danger btn-sm" onclick="unlinkItem('${bomItemId}','${supplierId}','${currentMatch.id}')">Remover</button>
-      ` : ''}
-      <button class="btn btn-ghost" onclick="closeModal()">Fechar</button>
-    </div>
-  `);
+  const el = document.createElement('div');
+
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = s?.name || ''; el.appendChild(tag);
+  const title = document.createElement('div'); title.className = 'modal-title'; title.style.cssText = 'font-size:15px;margin-bottom:4px'; title.textContent = bi?.description || ''; el.appendChild(title);
+  const qtyLine = document.createElement('div'); qtyLine.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:16px'; qtyLine.textContent = `Qty BOM: ${bi?.quantity} ${bi?.unit || ''}`; el.appendChild(qtyLine);
+
+  if (!qItems.length) {
+    const noQ = document.createElement('div'); noQ.style.cssText = 'color:var(--muted);font-size:13px;margin-bottom:16px';
+    noQ.textContent = 'Este fornecedor não tem cotação carregada.';
+    noQ.appendChild(document.createElement('br'));
+    const upBtn = document.createElement('button'); upBtn.className = 'btn btn-ghost btn-sm'; upBtn.style.marginTop = '8px'; upBtn.textContent = '📎 Carregar Cotação';
+    upBtn.addEventListener('click', () => { closeModal(); uploadQuotation(supplierId); });
+    noQ.appendChild(upBtn);
+    el.appendChild(noQ);
+  } else {
+    const qLabel = document.createElement('div'); qLabel.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px"; qLabel.textContent = 'SELECIONA UM ITEM DA COTAÇÃO'; el.appendChild(qLabel);
+    const listWrap = document.createElement('div'); listWrap.style.cssText = 'max-height:300px;overflow-y:auto;margin-bottom:16px';
+    for (const qi of qItems) {
+      const isLinked = currentMatch?.quotation_item_id === qi.id;
+      const row = document.createElement('div'); row.className = 'match-pick-row' + (isLinked ? ' linked' : '');
+      row.addEventListener('click', () => linkItem(bomItemId, supplierId, qi.id));
+      const infoDiv = document.createElement('div'); infoDiv.style.cssText = 'flex:1;min-width:0';
+      const desc = document.createElement('div'); desc.style.cssText = 'font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'; desc.textContent = qi.raw_description; infoDiv.appendChild(desc);
+      if (qi.raw_part_number) { const pn = document.createElement('div'); pn.style.cssText = 'font-size:10px;color:var(--muted)'; pn.textContent = qi.raw_part_number; infoDiv.appendChild(pn); }
+      const priceDiv = document.createElement('div'); priceDiv.style.cssText = 'text-align:right;flex-shrink:0';
+      const pv = document.createElement('div'); pv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600"; pv.textContent = fmtPrice(qi.price); priceDiv.appendChild(pv);
+      const cv = document.createElement('div'); cv.style.cssText = 'font-size:10px;color:var(--muted)'; cv.textContent = qi.currency; priceDiv.appendChild(cv);
+      row.appendChild(infoDiv); row.appendChild(priceDiv);
+      if (isLinked) { const badge = document.createElement('div'); badge.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px;white-space:nowrap'; badge.textContent = '✓' + (isSelectedSupp ? ' SEL.' : ''); row.appendChild(badge); }
+      listWrap.appendChild(row);
+    }
+    el.appendChild(listWrap);
+  }
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  if (currentMatch) {
+    const selBtn = document.createElement('button'); selBtn.className = 'btn btn-ghost btn-sm'; selBtn.textContent = '✓ Selecionar como melhor oferta';
+    selBtn.addEventListener('click', () => selectOffer(bomItemId, supplierId, currentMatch.quotation_item_id)); actions.appendChild(selBtn);
+    const rmBtn = document.createElement('button'); rmBtn.className = 'btn btn-danger btn-sm'; rmBtn.textContent = 'Remover';
+    rmBtn.addEventListener('click', () => unlinkItem(bomItemId, supplierId, currentMatch.id)); actions.appendChild(rmBtn);
+  }
+  const closeBtn = document.createElement('button'); closeBtn.className = 'btn btn-ghost'; closeBtn.textContent = 'Fechar'; closeBtn.addEventListener('click', closeModal); actions.appendChild(closeBtn);
+  el.appendChild(actions);
+
+  showModal(el);
 }
 
 async function linkItem(bomItemId, supplierId, quotItemId) {

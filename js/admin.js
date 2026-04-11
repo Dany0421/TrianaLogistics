@@ -472,7 +472,7 @@ function openPrintWindow(entries, { dateFrom, dateTo }) {
 
 // ── Init ──
 // ── Modal / Toast ──
-function showModal(html) {
+function showModal(el) {
   const root = document.getElementById('modalRoot');
   root.replaceChildren();
   const overlay = document.createElement('div');
@@ -480,7 +480,7 @@ function showModal(html) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
   const box = document.createElement('div');
   box.className = 'modal-box';
-  box.appendChild(document.createRange().createContextualFragment(html));
+  box.appendChild(el);
   overlay.appendChild(box);
   root.appendChild(overlay);
 }
@@ -511,9 +511,10 @@ const roleBg     = { admin: 'rgba(16,185,129,.15)', procurement: 'rgba(59,130,24
 function roleBadge(role) {
   const c = roleColors[role] || 'var(--muted)';
   const bg = roleBg[role] || 'var(--surface2)';
-  return '<span style="display:inline-block;padding:2px 9px;border-radius:4px;font-size:10px;font-weight:700;'
-    + 'text-transform:uppercase;letter-spacing:.5px;font-family:\'DM Mono\',monospace;'
-    + 'background:' + bg + ';color:' + c + '">' + (roleLabels[role] || role) + '</span>';
+  const span = document.createElement('span');
+  span.style.cssText = `display:inline-block;padding:2px 9px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-family:'DM Mono',monospace;background:${bg};color:${c}`;
+  span.textContent = roleLabels[role] || role;
+  return span;
 }
 
 async function loadUsers() {
@@ -569,7 +570,7 @@ function createUserRowEl(u) {
   emailDiv.className = 'user-email';
   emailDiv.textContent = u.email || '';
   const roleCell = document.createElement('div');
-  roleCell.appendChild(document.createRange().createContextualFragment(roleBadge(u.role)));
+  roleCell.appendChild(roleBadge(u.role));
   const seen = document.createElement('div');
   seen.className = 'user-last-seen';
   seen.textContent = u.last_sign_in_at ? timeAgo(u.last_sign_in_at) : 'Nunca';
@@ -591,26 +592,38 @@ function createUserRowEl(u) {
 
 function openEditUserModal(u) {
   const isSelf = currentProfile && u.id === currentProfile.id;
-  const roleOptions = ['commercial', 'procurement', 'admin'].map(r =>
-    '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' + roleLabels[r] + '</option>'
-  ).join('');
 
-  showModal(
-    '<div class="modal-tag">Utilizador</div>'
-    + '<div class="modal-title">Editar ' + esc(u.name || u.email) + '</div>'
-    + '<div class="form-row"><label>Nome</label><input id="eu_name" value="" maxlength="100"></div>'
-    + '<div class="form-row"><label>Cargo</label>'
-    + (isSelf
-      ? '<div style="margin-top:6px">' + roleBadge(u.role) + ' <span style="font-size:12px;color:var(--muted);margin-left:8px">Não podes mudar o teu próprio cargo</span></div>'
-      : '<select id="eu_role">' + roleOptions + '</select>')
-    + '</div>'
-    + '<div class="modal-actions">'
-    + '<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>'
-    + '<button class="btn btn-primary" onclick="saveUserEdit(\'' + u.id + '\',' + isSelf + ')">Guardar</button>'
-    + '</div>'
-  );
-  const euName = document.getElementById('eu_name');
-  if (euName) euName.value = u.name || '';
+  const el = document.createElement('div');
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Utilizador'; el.appendChild(tag);
+
+  const title = document.createElement('div'); title.className = 'modal-title';
+  title.textContent = 'Editar ' + (u.name || u.email); el.appendChild(title);
+
+  const nameRow = document.createElement('div'); nameRow.className = 'form-row';
+  const nameLbl = document.createElement('label'); nameLbl.textContent = 'Nome'; nameRow.appendChild(nameLbl);
+  const nameInp = document.createElement('input'); nameInp.id = 'eu_name'; nameInp.maxLength = 100; nameInp.value = u.name || ''; nameRow.appendChild(nameInp);
+  el.appendChild(nameRow);
+
+  const roleRow = document.createElement('div'); roleRow.className = 'form-row';
+  const roleLbl = document.createElement('label'); roleLbl.textContent = 'Cargo'; roleRow.appendChild(roleLbl);
+  if (isSelf) {
+    const roleInfo = document.createElement('div'); roleInfo.style.marginTop = '6px';
+    roleInfo.appendChild(roleBadge(u.role));
+    const note = document.createElement('span'); note.style.cssText = 'font-size:12px;color:var(--muted);margin-left:8px'; note.textContent = 'Não podes mudar o teu próprio cargo'; roleInfo.appendChild(note);
+    roleRow.appendChild(roleInfo);
+  } else {
+    const roleSel = document.createElement('select'); roleSel.id = 'eu_role';
+    ['commercial', 'procurement', 'admin'].forEach(r => { const opt = document.createElement('option'); opt.value = r; opt.textContent = roleLabels[r]; if (u.role === r) opt.selected = true; roleSel.appendChild(opt); });
+    roleRow.appendChild(roleSel);
+  }
+  el.appendChild(roleRow);
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-primary'; saveBtn.textContent = 'Guardar'; saveBtn.addEventListener('click', () => saveUserEdit(u.id, isSelf)); actions.appendChild(saveBtn);
+  el.appendChild(actions);
+
+  showModal(el);
 }
 
 async function saveUserEdit(userId, isSelf) {

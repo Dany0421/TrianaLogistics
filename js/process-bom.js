@@ -72,51 +72,60 @@ function openBomValidationModal(fileName) {
   const isRevision = pendingDiff !== null;
   const removed = isRevision ? pendingDiff.removed : [];
 
-  // Count diff stats
-  let diffSummary = '';
+  const el = document.createElement('div');
+
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = isRevision ? 'Revisão BOM' : 'Validação BOM'; el.appendChild(tag);
+  const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = fileName; el.appendChild(title);
+  const sub = document.createElement('div'); sub.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:8px'; sub.textContent = `${pendingBomItems.length} linha(s) encontrada(s). Revê e confirma antes de guardar.`; el.appendChild(sub);
+
+  // Diff summary
   if (isRevision) {
     const counts = { unchanged:0, qty_changed:0, changed:0, new:0 };
     pendingBomItems.forEach(i => counts[i._diffStatus] = (counts[i._diffStatus]||0)+1);
-    diffSummary = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12px">
-      ${counts.unchanged ? `<span style="color:var(--muted)">${counts.unchanged} iguais</span>` : ''}
-      ${counts.qty_changed ? `<span style="color:#ffcc00">${counts.qty_changed} qty alterada</span>` : ''}
-      ${counts.changed ? `<span style="color:#ff8800">${counts.changed} alterados</span>` : ''}
-      ${counts.new ? `<span style="color:#60a5fa">${counts.new} novos</span>` : ''}
-      ${removed.length ? `<span style="color:#ff4444">${removed.length} removidos</span>` : ''}
-    </div>`;
+    const summary = document.createElement('div'); summary.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12px';
+    const addTag = (text, color) => { const s = document.createElement('span'); s.style.color = color; s.textContent = text; summary.appendChild(s); };
+    if (counts.unchanged) addTag(`${counts.unchanged} iguais`, 'var(--muted)');
+    if (counts.qty_changed) addTag(`${counts.qty_changed} qty alterada`, '#ffcc00');
+    if (counts.changed) addTag(`${counts.changed} alterados`, '#ff8800');
+    if (counts.new) addTag(`${counts.new} novos`, '#60a5fa');
+    if (removed.length) addTag(`${removed.length} removidos`, '#ff4444');
+    el.appendChild(summary);
   }
 
-  showModalLg(`
-    <div class="modal-tag">${isRevision ? 'Revisão BOM' : 'Validação BOM'}</div>
-    <div class="modal-title">${esc(fileName)}</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:8px">${pendingBomItems.length} linha(s) encontrada(s). Revê e confirma antes de guardar.</div>
-    ${diffSummary}
-    <div style="max-height:380px;overflow-y:auto;margin-bottom:12px">
-      <table class="bom-validate-table">
-        <thead><tr>
-          ${isRevision ? '<th style="width:7%">Estado</th>' : ''}
-          <th style="width:11%">Part #</th>
-          <th style="width:${isRevision ? '31%' : '38%'}">Descrição</th>
-          <th style="width:7%">Qty</th>
-          <th style="width:8%">Unid.</th>
-          <th style="width:9%">Categoria</th>
-          <th style="width:5%" title="Serviço Triana">Serv.</th>
-          <th style="width:10%"></th>
-        </tr></thead>
-        <tbody id="bomValTbody"></tbody>
-      </table>
-    </div>
-    ${removed.length ? `
-    <div style="background:#1a0505;border:1px solid #440000;border-radius:4px;padding:10px;margin-bottom:12px;font-size:12px">
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#ff4444;letter-spacing:1px;margin-bottom:6px">REMOVIDOS DO BOM (${removed.length})</div>
-      ${removed.map(r => `<div style="color:#ff8888;padding:2px 0">${esc(r.part_number ? r.part_number+' — ' : '')}${esc(r.description)}</div>`).join('')}
-    </div>` : ''}
-    <div class="modal-actions">
-      <button class="btn btn-ghost btn-sm" onclick="addBomRow()">+ Linha</button>
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmBom()">Confirmar e Guardar</button>
-    </div>
-  `);
+  // Table
+  const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
+  const table = document.createElement('table'); table.className = 'bom-validate-table';
+  // Static thead (isRevision flag is developer-controlled, not user data)
+  const theadStr = `<thead><tr>
+    ${isRevision ? '<th style="width:7%">Estado</th>' : ''}
+    <th style="width:10%">Part #</th>
+    <th style="width:${isRevision ? '43%' : '48%'}">Descrição</th>
+    <th style="width:7%">Qty</th>
+    <th style="width:8%">Unid.</th>
+    <th style="width:9%">Categoria</th>
+    <th style="width:5%" title="Serviço Triana">Serv.</th>
+    <th style="width:${isRevision ? '11%' : '13%'}"></th>
+  </tr></thead>`;
+  table.insertAdjacentHTML('afterbegin', theadStr);
+  const tbody = document.createElement('tbody'); tbody.id = 'bomValTbody'; table.appendChild(tbody);
+  tableWrap.appendChild(table); el.appendChild(tableWrap);
+
+  // Removed items section
+  if (removed.length) {
+    const removedSec = document.createElement('div'); removedSec.style.cssText = 'background:#1a0505;border:1px solid #440000;border-radius:4px;padding:10px;margin-bottom:12px;font-size:12px';
+    const removedLbl = document.createElement('div'); removedLbl.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:#ff4444;letter-spacing:1px;margin-bottom:6px"; removedLbl.textContent = `REMOVIDOS DO BOM (${removed.length})`; removedSec.appendChild(removedLbl);
+    removed.forEach(r => { const d = document.createElement('div'); d.style.cssText = 'color:#ff8888;padding:2px 0'; d.textContent = (r.part_number ? r.part_number + ' — ' : '') + r.description; removedSec.appendChild(d); });
+    el.appendChild(removedSec);
+  }
+
+  // Actions
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const addBtn = document.createElement('button'); addBtn.className = 'btn btn-ghost btn-sm'; addBtn.textContent = '+ Linha'; addBtn.addEventListener('click', addBomRow); actions.appendChild(addBtn);
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  const confirmBtn = document.createElement('button'); confirmBtn.className = 'btn btn-primary'; confirmBtn.textContent = 'Confirmar e Guardar'; confirmBtn.addEventListener('click', confirmBom); actions.appendChild(confirmBtn);
+  el.appendChild(actions);
+
+  showModalLg(el);
   renderBomValTable();
 }
 
@@ -201,7 +210,7 @@ function renderBomValTable() {
     const inQty = document.createElement('input');
     inQty.type = 'number';
     inQty.value = item.quantity;
-    inQty.style.width = '55px';
+    inQty.style.width = '100%';
     inQty.onchange = function() { pendingBomItems[i].quantity = parseFloat(this.value) || 1; };
     tdQty.appendChild(inQty);
     tr.appendChild(tdQty);
@@ -210,7 +219,7 @@ function renderBomValTable() {
     const inUnit = document.createElement('input');
     inUnit.type = 'text';
     inUnit.value = item.unit || '';
-    inUnit.style.width = '66px';
+    inUnit.style.width = '100%';
     inUnit.onchange = function() { pendingBomItems[i].unit = this.value || null; };
     tdUnit.appendChild(inUnit);
     tr.appendChild(tdUnit);
@@ -334,32 +343,41 @@ function renderBomTable(items) {
     holder.appendChild(empty);
     return;
   }
-  let html = `<table class="bom-table"><thead><tr>
+  // Static table header
+  const tableWrap = document.createRange().createContextualFragment(`<table class="bom-table"><thead><tr>
     <th style="width:13%">Part #</th>
     <th style="width:42%">Descrição</th>
     <th style="width:7%">Qty</th>
     <th style="width:7%">Unid.</th>
     <th style="width:19%">Categoria</th>
     <th style="width:5%;text-align:center" title="Serviço Triana">Serv.</th>
-  </tr></thead><tbody>`;
+  </tr></thead><tbody></tbody></table>`);
+  holder.appendChild(tableWrap);
+  const tbody = holder.querySelector('tbody');
 
   let lastCat = null;
   for (const item of items) {
     if (item.category && item.category !== lastCat) {
-      html += `<tr class="category-row"><td colspan="6">${esc(item.category)}</td></tr>`;
+      const catRow = document.createElement('tr'); catRow.className = 'category-row';
+      const catTd = document.createElement('td'); catTd.colSpan = 6; catTd.textContent = item.category;
+      catRow.appendChild(catTd); tbody.appendChild(catRow);
       lastCat = item.category;
     }
-    html += `<tr>
-      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${esc(item.part_number||'—')}</td>
-      <td>${esc(item.description)}</td>
-      <td style="text-align:center">${item.quantity}</td>
-      <td style="color:var(--muted)">${esc(item.unit||'')}</td>
-      <td style="font-size:11px;color:var(--muted)">${esc(item.category||'')}</td>
-      <td style="text-align:center"><input type="checkbox" ${item.is_service ? 'checked' : ''} onchange="toggleServiceItem('${item.id}',this.checked)" title="Serviço Triana"></td>
-    </tr>`;
+    const tr = document.createElement('tr');
+
+    const tdPart = document.createElement('td'); tdPart.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)"; tdPart.textContent = item.part_number || '—';
+    const tdDesc = document.createElement('td'); tdDesc.textContent = item.description;
+    const tdQty = document.createElement('td'); tdQty.style.textAlign = 'center'; tdQty.textContent = item.quantity;
+    const tdUnit = document.createElement('td'); tdUnit.style.color = 'var(--muted)'; tdUnit.textContent = item.unit || '';
+    const tdCat = document.createElement('td'); tdCat.style.cssText = 'font-size:11px;color:var(--muted)'; tdCat.textContent = item.category || '';
+    const tdSvc = document.createElement('td'); tdSvc.style.textAlign = 'center';
+    const chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = !!item.is_service; chk.title = 'Serviço Triana';
+    chk.addEventListener('change', function() { toggleServiceItem(item.id, this.checked); });
+    tdSvc.appendChild(chk);
+
+    tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty); tr.appendChild(tdUnit); tr.appendChild(tdCat); tr.appendChild(tdSvc);
+    tbody.appendChild(tr);
   }
-  html += '</tbody></table>';
-  holder.appendChild(document.createRange().createContextualFragment(html));
 }
 
 async function toggleServiceItem(bomItemId, isService) {
@@ -396,25 +414,33 @@ async function openBomHistoryModal() {
   }
   window._bomHistoryPairs = pairs;
 
-  const options = pairs.map((p, idx) =>
-    `<option value="${idx}">v${p.newer.version_number} \u2192 v${p.older.version_number} \u00a0(${esc(p.newer.original_name || '')})</option>`
-  ).join('');
+  const el = document.createElement('div');
 
-  showModalLg(`
-    <div class="modal-tag">Hist\u00f3rico de Revis\u00f5es</div>
-    <div class="modal-title">Compara\u00e7\u00e3o entre vers\u00f5es BOM</div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <label style="font-size:12px;color:var(--muted);white-space:nowrap">Comparar:</label>
-      <select id="histPairSel" class="input" style="flex:1;max-width:360px" onchange="renderBomHistoryDiff(window._bomHistoryPairs[+this.value].newer.id, window._bomHistoryPairs[+this.value].older.id)">
-        ${options}
-      </select>
-    </div>
-    <div id="historyDiffContent" style="max-height:420px;overflow-y:auto"></div>
-    <div style="margin-top:16px;display:flex;justify-content:flex-end">
-      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fechar</button>
-    </div>
-  `);
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Histórico de Revisões'; el.appendChild(tag);
+  const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = 'Comparação entre versões BOM'; el.appendChild(title);
 
+  const selRow = document.createElement('div'); selRow.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:16px';
+  const selLbl = document.createElement('label'); selLbl.style.cssText = 'font-size:12px;color:var(--muted);white-space:nowrap'; selLbl.textContent = 'Comparar:'; selRow.appendChild(selLbl);
+
+  const sel = document.createElement('select'); sel.id = 'histPairSel'; sel.className = 'input'; sel.style.cssText = 'flex:1;max-width:360px';
+  pairs.forEach((p, idx) => {
+    const opt = document.createElement('option'); opt.value = idx;
+    opt.textContent = `v${p.newer.version_number} → v${p.older.version_number}  (${p.newer.original_name || ''})`;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', function() {
+    const p = window._bomHistoryPairs[+this.value];
+    renderBomHistoryDiff(p.newer.id, p.older.id);
+  });
+  selRow.appendChild(sel); el.appendChild(selRow);
+
+  const diffContent = document.createElement('div'); diffContent.id = 'historyDiffContent'; diffContent.style.cssText = 'max-height:420px;overflow-y:auto'; el.appendChild(diffContent);
+
+  const footer = document.createElement('div'); footer.style.cssText = 'margin-top:16px;display:flex;justify-content:flex-end';
+  const closeBtn = document.createElement('button'); closeBtn.className = 'btn btn-ghost btn-sm'; closeBtn.textContent = 'Fechar'; closeBtn.addEventListener('click', closeModal); footer.appendChild(closeBtn);
+  el.appendChild(footer);
+
+  showModalLg(el);
   await renderBomHistoryDiff(pairs[0].newer.id, pairs[0].older.id);
 }
 

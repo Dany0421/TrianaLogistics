@@ -281,45 +281,80 @@ async function loadDurationEstimate() {
 function openEditModal() {
   const p = process;
   pendingProcessCategories = [...(p.categories || [])];
-  showModal(`
+
+  const el = document.createElement('div');
+  // Static skeleton — no user data
+  el.appendChild(document.createRange().createContextualFragment(`
     <div class="modal-tag">Editar Processo</div>
     <div class="form-grid-2">
-      <div><label>Cliente</label><input id="ep_client" value=""></div>
-      <div><label>Projeto</label><input id="ep_project" value=""></div>
+      <div><label>Cliente</label><input id="ep_client"></div>
+      <div><label>Projeto</label><input id="ep_project"></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Deadline</label><input type="date" id="ep_deadline" value="${p.deadline||''}"></div>
+      <div><label>Deadline</label><input type="date" id="ep_deadline"></div>
       <div><label>Prioridade</label>
         <select id="ep_priority">
-          ${['Low','Medium','High','Urgent'].map(v=>`<option ${p.priority===v?'selected':''}>${v}</option>`).join('')}
+          <option>Low</option><option>Medium</option><option>High</option><option>Urgent</option>
         </select>
       </div>
     </div>
     <div class="form-row"><label>Estado</label>
       <select id="ep_status">
-        ${STANDARD_STATUSES.map(v=>`<option ${p.status===v?'selected':''}>${v}</option>`).join('')}
-        ${!STANDARD_STATUSES.includes(p.status) ? `<option value="${esc(p.status)}" selected>${esc(p.status)}</option>` : ''}
         <option value="__custom__">+ Criar estado...</option>
       </select>
-      <div id="ep_custom_row" style="display:${!STANDARD_STATUSES.includes(p.status)?'flex':'none'};gap:8px;margin-top:6px;align-items:center">
-        <input type="text" id="ep_custom_name" placeholder="Nome do estado" style="flex:1" value="${!STANDARD_STATUSES.includes(p.status)?esc(p.status):''}">
-        <input type="color" id="ep_custom_color" value="${p.status_color||'#3b82f6'}" style="width:40px;height:36px;padding:2px;cursor:pointer">
+      <div id="ep_custom_row" style="display:none;gap:8px;margin-top:6px;align-items:center">
+        <input type="text" id="ep_custom_name" placeholder="Nome do estado" style="flex:1">
+        <input type="color" id="ep_custom_color" style="width:40px;height:36px;padding:2px;cursor:pointer">
       </div>
     </div>
-    <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto — opcional)</span></label><div class="tag-input-box" id="ep_catBox"></div></div>
+    <div class="form-row">
+      <label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto — opcional)</span></label>
+      <div class="tag-input-box" id="ep_catBox"></div>
+    </div>
     <div class="form-row"><label>Notas</label><textarea id="ep_notes"></textarea></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveEditProcess()">Guardar</button>
+      <button class="btn btn-ghost" id="ep_cancel">Cancelar</button>
+      <button class="btn btn-primary" id="ep_save">Guardar</button>
     </div>
-  `);
-  const _ep = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+  `));
+
+  // Fill user data via DOM queries on el (works on detached elements)
+  const _ep = (id, v) => { const inp = el.querySelector('#' + id); if (inp) inp.value = v == null ? '' : String(v); };
   _ep('ep_client', p.client_name || '');
   _ep('ep_project', p.project_name || '');
+  _ep('ep_deadline', p.deadline || '');
   _ep('ep_notes', p.notes || '');
-  document.getElementById('ep_status').addEventListener('change', function() {
-    document.getElementById('ep_custom_row').style.display = this.value === '__custom__' ? 'flex' : 'none';
+  _ep('ep_custom_color', p.status_color || '#3b82f6');
+
+  // Priority
+  el.querySelectorAll('#ep_priority option').forEach(opt => { if (opt.value === p.priority) opt.selected = true; });
+
+  // Status — insert options before __custom__
+  const statusSel = el.querySelector('#ep_status');
+  const customOpt = statusSel.lastChild;
+  STANDARD_STATUSES.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    if (p.status === v) opt.selected = true;
+    statusSel.insertBefore(opt, customOpt);
   });
+  if (!STANDARD_STATUSES.includes(p.status)) {
+    const opt = document.createElement('option');
+    opt.value = p.status; opt.textContent = p.status; opt.selected = true;
+    statusSel.insertBefore(opt, customOpt);
+    el.querySelector('#ep_custom_row').style.display = 'flex';
+    _ep('ep_custom_name', p.status);
+  }
+
+  statusSel.addEventListener('change', function() {
+    el.querySelector('#ep_custom_row').style.display = this.value === '__custom__' ? 'flex' : 'none';
+  });
+
+  el.querySelector('#ep_cancel').addEventListener('click', closeModal);
+  el.querySelector('#ep_save').addEventListener('click', saveEditProcess);
+
+  showModal(el);
+  renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
 }
 
 async function saveEditProcess() {
@@ -355,7 +390,7 @@ async function saveEditProcess() {
 }
 
 // ── Modal helpers ──
-function showModal(html) {
+function showModal(el) {
   const root = document.getElementById('modalRoot');
   root.replaceChildren();
   const overlay = document.createElement('div');
@@ -363,11 +398,11 @@ function showModal(html) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
   const box = document.createElement('div');
   box.className = 'modal-box';
-  box.appendChild(document.createRange().createContextualFragment(html));
+  box.appendChild(el);
   overlay.appendChild(box);
   root.appendChild(overlay);
 }
-function showModalLg(html) {
+function showModalLg(el) {
   const root = document.getElementById('modalRoot');
   root.replaceChildren();
   const overlay = document.createElement('div');
@@ -375,7 +410,7 @@ function showModalLg(html) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
   const box = document.createElement('div');
   box.className = 'modal-box-lg';
-  box.appendChild(document.createRange().createContextualFragment(html));
+  box.appendChild(el);
   overlay.appendChild(box);
   root.appendChild(overlay);
 }
