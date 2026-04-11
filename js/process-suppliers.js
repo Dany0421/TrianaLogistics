@@ -606,6 +606,7 @@ function openManualQuotEntry(supplierId) {
     quantity: qi.quantity,
     price: qi.price,
     currency: qi.currency,
+    discount: qi.discount || 0,
   }));
   pendingQuotFile = null;
   openQuotationValModal(existing.length ? 'Editar Cotação' : 'Entrada Manual');
@@ -752,12 +753,36 @@ function openQuotationValModal(fileName, rawPdfText) {
   const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = fileName; el.appendChild(title);
   const sub = document.createElement('div'); sub.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:12px'; sub.textContent = `${pendingQuotItems.length} linha(s) detetada(s). Revê e confirma antes de guardar.`; el.appendChild(sub);
 
+  // Reset global discount control (per-item discounts already loaded from DB)
+  quotGlobalDiscount = 0;
+  pendingQuotItems.forEach(item => { if (item.discount == null) item.discount = 0; item._discountManual = false; });
+
+  // Discount bar
+  const discBar = document.createElement('div'); discBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
+  const discLabel = document.createElement('label'); discLabel.style.cssText = 'font-size:12px;color:var(--muted)'; discLabel.textContent = 'Desconto global';
+  const discIn = document.createElement('input'); discIn.type = 'number'; discIn.min = '0'; discIn.max = '100'; discIn.step = '0.1'; discIn.value = '0'; discIn.style.cssText = 'width:70px;padding:4px 6px;font-size:12px';
+  const discPct = document.createElement('span'); discPct.style.cssText = 'font-size:12px;color:var(--muted)'; discPct.textContent = '%';
+  discIn.oninput = function() {
+    quotGlobalDiscount = parseFloat(this.value) || 0;
+    pendingQuotItems.forEach(item => { if (!item._discountManual) item.discount = quotGlobalDiscount; });
+    renderQuotValTable();
+  };
+  const resetDiscBtn = document.createElement('button'); resetDiscBtn.className = 'btn btn-ghost btn-sm'; resetDiscBtn.textContent = 'Reset 0%';
+  resetDiscBtn.onclick = function() {
+    quotGlobalDiscount = 0; discIn.value = '0';
+    pendingQuotItems.forEach(item => { item.discount = 0; item._discountManual = false; });
+    renderQuotValTable();
+  };
+  discBar.appendChild(discLabel); discBar.appendChild(discIn); discBar.appendChild(discPct); discBar.appendChild(resetDiscBtn);
+  el.appendChild(discBar);
+
   // Table (static thead, dynamic tbody populated by renderQuotValTable)
   const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
   const table = document.createElement('table'); table.className = 'bom-validate-table';
   table.insertAdjacentHTML('afterbegin', `<thead><tr>
-    <th style="width:10%">Part #</th><th style="width:52%">Descrição</th>
+    <th style="width:10%">Part #</th><th style="width:45%">Descrição</th>
     <th style="width:6%">Qty</th><th style="width:10%">Preço Unit.</th>
+    <th style="width:7%">Desc.%</th>
     <th style="width:9%">Moeda</th><th style="width:13%"></th>
   </tr></thead>`);
   const tbody = document.createElement('tbody'); tbody.id = 'quotValTbody'; table.appendChild(tbody);
@@ -818,6 +843,17 @@ function renderQuotValTable() {
     inQty.onchange = function() { pendingQuotItems[i].quantity = parseFloat(this.value) || 1; };
     tdQty.appendChild(inQty);
 
+    // Desconto %
+    const tdDisc = document.createElement('td');
+    const inDisc = document.createElement('input');
+    inDisc.type = 'number'; inDisc.min = '0'; inDisc.max = '100'; inDisc.step = '0.1';
+    inDisc.value = item.discount ?? 0; inDisc.style.width = '100%';
+    inDisc.onchange = function() {
+      pendingQuotItems[i].discount = parseFloat(this.value) || 0;
+      pendingQuotItems[i]._discountManual = true;
+    };
+    tdDisc.appendChild(inDisc);
+
     // Preço + anomaly badge
     const tdPrice = document.createElement('td');
     const inPrice = document.createElement('input');
@@ -859,13 +895,13 @@ function renderQuotValTable() {
     tdDel.appendChild(delBtn);
 
     tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty);
-    tr.appendChild(tdPrice); tr.appendChild(tdCur); tr.appendChild(tdDel);
+    tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
 }
 
 function addQuotRow() {
-  pendingQuotItems.push({ raw_part_number: null, raw_description: '', quantity: 1, price: 0, currency: 'MZN' });
+  pendingQuotItems.push({ raw_part_number: null, raw_description: '', quantity: 1, price: 0, currency: 'MZN', discount: quotGlobalDiscount });
   renderQuotValTable();
 }
 
@@ -878,7 +914,10 @@ async function confirmQuotation() {
     const keepIds = new Set(valid.filter(i => i.id).map(i => i.id));
     const idsToDelete = [...existingIds].filter(id => !keepIds.has(id));
     await API.updateQuotationItems(
-      valid.map(i => ({ ...i, supplier_id: currentQuotSuppId })),
+      valid.map(i => {
+        const { _discountManual, ...rest } = i;
+        return { ...rest, supplier_id: currentQuotSuppId };
+      }),
       idsToDelete
     );
     quotationMap[currentQuotSuppId] = await API.getQuotationItems(currentQuotSuppId);

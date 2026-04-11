@@ -198,9 +198,10 @@ const API = {
   },
 
   async saveMatch(match) {
+    const payload = { ...match, updated_at: new Date().toISOString() };
     const { data, error } = await supabase
       .from('item_matches')
-      .upsert(match, { onConflict: 'bom_item_id,supplier_id' })
+      .upsert(payload, { onConflict: 'bom_item_id,supplier_id' })
       .select()
       .single();
     if (error) throw _sanitizeError(error);
@@ -210,9 +211,11 @@ const API = {
   async saveMatches(matches) {
     // Batch upsert — one roundtrip instead of N
     if (!matches.length) return [];
+    const now = new Date().toISOString();
+    const payloads = matches.map(m => ({ ...m, updated_at: now }));
     const { data, error } = await supabase
       .from('item_matches')
-      .upsert(matches, { onConflict: 'bom_item_id,supplier_id' })
+      .upsert(payloads, { onConflict: 'bom_item_id,supplier_id' })
       .select();
     if (error) throw _sanitizeError(error);
     return data || [];

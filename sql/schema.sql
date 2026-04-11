@@ -414,3 +414,9 @@ ALTER TABLE installation_costs ADD COLUMN IF NOT EXISTS sort_order int DEFAULT 0
 ALTER TABLE installation_costs ADD COLUMN IF NOT EXISTS tech_rows jsonb DEFAULT '[]';
 ALTER TABLE installation_costs ADD CONSTRAINT installation_costs_process_sheet_unique UNIQUE (process_id, sheet_name);
 GRANT EXECUTE ON FUNCTION get_duration_estimates TO authenticated;
+
+-- ── Quotation discount ──
+ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS discount numeric DEFAULT 0;
+
+-- ── item_matches: track last update time for last-write-wins propagation ──
+ALTER TABLE item_matches ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();

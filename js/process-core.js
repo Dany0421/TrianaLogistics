@@ -30,6 +30,7 @@ let supplierHistory = {}; // normalised name → { email, email_cc }
 let globalSuppliersList = [];
 let priceAnomalies = {};   // modal: itemIndex → { type, median, ratio }
 let savedAnomalyMap = {};  // supplier cards: qi.id → { type, median, ratio }
+let quotGlobalDiscount = 0;
 let pendingProcessCategories = [];
 let rejectedAutoMatch = []; // persisted rejections: never auto-recreate these matches
 
