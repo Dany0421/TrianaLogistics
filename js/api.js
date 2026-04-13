@@ -188,13 +188,28 @@ const API = {
   },
 
   // ── Item Matches ──
-  async getMatches(processId) {
+  async getMatches(processId, bomItemIds) {
+    if (bomItemIds && bomItemIds.length) {
+      const BATCH = 80;
+      const all = [];
+      for (let i = 0; i < bomItemIds.length; i += BATCH) {
+        const chunk = bomItemIds.slice(i, i + BATCH);
+        const { data, error } = await supabase
+          .from('item_matches')
+          .select('*, bom_items(*), quotation_items(*), suppliers(name)')
+          .eq('process_id', processId)
+          .in('bom_item_id', chunk);
+        if (error) throw _sanitizeError(error);
+        if (data) all.push(...data);
+      }
+      return all;
+    }
     const { data, error } = await supabase
       .from('item_matches')
       .select('*, bom_items(*), quotation_items(*), suppliers(name)')
       .eq('process_id', processId);
     if (error) throw _sanitizeError(error);
-    return data;
+    return data || [];
   },
 
   async saveMatch(match) {

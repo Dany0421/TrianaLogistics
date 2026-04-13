@@ -125,15 +125,14 @@ async function loadAll() {
     }
     if (!hasRole('commercial')) {
       const supplierIds = suppliers.map(s => s.id);
-      console.log('[loadAll Debug] supplierIds:', supplierIds.length, 'role:', currentProfile?.role);
+      const currentBomItemIds = bomItems.map(bi => bi.id);
       const [allQFlat, mtch, selOfrs, qFiles, rejAuto] = await Promise.all([
         API.getQuotationItemsForSuppliers(supplierIds),
-        API.getMatches(processId),
+        API.getMatches(processId, currentBomItemIds),
         API.getSelectedOffers(processId),
         API.getQuotationFiles(supplierIds),
         API.getRejectedAutoMatch(processId),
       ]);
-      console.log('[loadAll Debug] quotItems:', allQFlat.length, 'matches:', mtch.length, 'offers:', selOfrs.length);
       // Group quotation items by supplier
       quotationMap = {};
       for (const qi of allQFlat) {
@@ -141,7 +140,8 @@ async function loadAll() {
         quotationMap[qi.supplier_id].push(qi);
       }
       matches = mtch;
-      selectedOffers = selOfrs;
+      const currentBomIds = new Set(currentBomItemIds);
+      selectedOffers = selOfrs.filter(o => currentBomIds.has(o.bom_item_id));
       rejectedAutoMatch = rejAuto;
       quotationFilesMap = {};
       for (const f of qFiles) {
@@ -166,14 +166,13 @@ async function loadAll() {
 }
 
 async function loadMatchData() {
+  const currentBomItemIds = bomItems.map(bi => bi.id);
   [matches, selectedOffers, rejectedAutoMatch] = await Promise.all([
-    API.getMatches(processId),
+    API.getMatches(processId, currentBomItemIds),
     API.getSelectedOffers(processId),
     API.getRejectedAutoMatch(processId),
   ]);
-  // Filter to only matches/offers referencing current BOM version items
-  const currentBomIds = new Set(bomItems.map(bi => bi.id));
-  matches = matches.filter(m => currentBomIds.has(m.bom_item_id));
+  const currentBomIds = new Set(currentBomItemIds);
   selectedOffers = selectedOffers.filter(o => currentBomIds.has(o.bom_item_id));
 }
 
