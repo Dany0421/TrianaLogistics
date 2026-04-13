@@ -125,6 +125,7 @@ async function loadAll() {
     }
     if (!hasRole('commercial')) {
       const supplierIds = suppliers.map(s => s.id);
+      console.log('[loadAll Debug] supplierIds:', supplierIds.length, 'role:', currentProfile?.role);
       const [allQFlat, mtch, selOfrs, qFiles, rejAuto] = await Promise.all([
         API.getQuotationItemsForSuppliers(supplierIds),
         API.getMatches(processId),
@@ -132,6 +133,7 @@ async function loadAll() {
         API.getQuotationFiles(supplierIds),
         API.getRejectedAutoMatch(processId),
       ]);
+      console.log('[loadAll Debug] quotItems:', allQFlat.length, 'matches:', mtch.length, 'offers:', selOfrs.length);
       // Group quotation items by supplier
       quotationMap = {};
       for (const qi of allQFlat) {
