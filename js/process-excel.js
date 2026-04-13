@@ -147,9 +147,10 @@ async function generateExcel() {
     } else {
       const itemMatches = matchLookup[bi.id];
       if (itemMatches) {
+        let bestPrice = Infinity;
         for (const [sid, m] of Object.entries(itemMatches)) {
           const q = (quotationMap[sid] || []).find(q => q.id === m.quotation_item_id);
-          if (q && q.price != null) { suppId = sid; qi = q; break; }
+          if (q && q.price != null && q.price < bestPrice) { bestPrice = q.price; suppId = sid; qi = q; }
         }
       }
     }
