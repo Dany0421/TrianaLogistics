@@ -86,8 +86,18 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
   let row=4;
   const vl=col2l(vc);
   const trL=trCol?col2l(trCol):null;
+  const sheetTitleF={bold:true,size:12,name:'Calibri',color:{argb:'FF000000'}};
+  const sheetTitleFill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE8E8E8'}};
+  let lastSheet = null;
 
   for (const item of allRows) {
+    if (item.sheetName && item.sheetName !== lastSheet) {
+      lastSheet = item.sheetName;
+      ws.mergeCells(row, 1, row, tc);
+      sc2(ws.getCell(row,1),{value:item.sheetName,font:sheetTitleF,fill:sheetTitleFill,border:MB,alignment:{horizontal:'center',vertical:'middle'}});
+      ws.getRow(row).height=22;
+      row++;
+    }
     for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
 
     if (item.type === 'equip') {
@@ -134,7 +144,7 @@ async function generateExcel() {
   for (const bi of bomItems) {
     if (bi.is_service) {
       if ((bi.service_price || 0) > 0) hasServices = true;
-      allRows.push({ type: 'service', model: bi.description, qty: bi.quantity || 1, unitPrice: bi.service_price || 0 });
+      allRows.push({ type: 'service', model: bi.description, qty: bi.quantity || 1, unitPrice: bi.service_price || 0, sheetName: bi.sheet_name || null });
       continue;
     }
 
@@ -160,7 +170,7 @@ async function generateExcel() {
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
     const indexInSupplier = supplierCounters[suppId]++;
     supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: String(qi.quantity || bi.quantity), price: String(qi.price) });
-    allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: qi.quantity || bi.quantity, suppId, indexInSupplier });
+    allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: qi.quantity || bi.quantity, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
