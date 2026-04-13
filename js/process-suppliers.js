@@ -787,7 +787,25 @@ function openQuotationValModal(fileName, rawPdfText) {
     <th style="width:9%">Moeda</th><th style="width:13%"></th>
   </tr></thead>`);
   const tbody = document.createElement('tbody'); tbody.id = 'quotValTbody'; table.appendChild(tbody);
-  tableWrap.appendChild(table); el.appendChild(tableWrap);
+  tableWrap.appendChild(table);
+
+  // Search bar
+  _quotValFilter = '';
+  const qSearchWrap = document.createElement('div');
+  qSearchWrap.style.cssText = 'position:relative;margin-bottom:8px';
+  const qSearchIn = document.createElement('input');
+  qSearchIn.type = 'text';
+  qSearchIn.placeholder = 'Pesquisar part # ou descrição…';
+  qSearchIn.style.cssText = 'width:100%;padding:6px 28px 6px 8px;font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box';
+  qSearchIn.oninput = function() { _quotValFilter = this.value; renderQuotValTable(); };
+  const qClearBtn = document.createElement('button');
+  qClearBtn.textContent = '×';
+  qClearBtn.style.cssText = 'position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0';
+  qClearBtn.addEventListener('click', () => { qSearchIn.value = ''; _quotValFilter = ''; renderQuotValTable(); });
+  qSearchWrap.appendChild(qSearchIn);
+  qSearchWrap.appendChild(qClearBtn);
+  el.appendChild(qSearchWrap);
+  el.appendChild(tableWrap);
 
   const btnRow = document.createElement('div'); btnRow.style.cssText = 'margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap';
   const addRowBtn = document.createElement('button'); addRowBtn.className = 'btn btn-ghost btn-sm'; addRowBtn.textContent = '+ Linha'; addRowBtn.addEventListener('click', addQuotRow); btnRow.appendChild(addRowBtn);
@@ -820,7 +838,14 @@ function renderQuotValTable() {
   const tbody = document.getElementById('quotValTbody');
   if (!tbody) return;
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  const _norm = s => (s || '').toLowerCase();
+  const _tokens = _norm(_quotValFilter).split(/\s+/).filter(Boolean);
+
   pendingQuotItems.forEach((item, i) => {
+    if (_tokens.length && !_tokens.every(t =>
+      _norm(item.raw_part_number).includes(t) || _norm(item.raw_description).includes(t)
+    )) return;
+
     const tr = document.createElement('tr');
 
     // Part #
