@@ -164,6 +164,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
 
   // Table
   const scrollWrap = document.createElement('div');
+  scrollWrap.id = 'matchTableScroll';
   scrollWrap.style.overflowX = 'auto';
   const table = document.createElement('table');
   table.className = 'match-table';
@@ -590,7 +591,8 @@ async function runAutoMatch() {
       for (const bi of group) {
         if (bi.id === source.id) continue;
         if (rejectedSet.has(`${bi.id}:${suppId}:${quotItemId}`)) continue;
-        // overwrite even if already matched — last-write-wins
+        // skip if already in DB with same quotation_item_id
+        if (allMatchLookup[bi.id]?.[suppId] === quotItemId) continue;
         const existingIdx = newMatches.findIndex(nm => nm.bom_item_id === bi.id && nm.supplier_id === suppId);
         const entry = { process_id: processId, bom_item_id: bi.id, supplier_id: suppId, quotation_item_id: quotItemId, match_type: 'auto', confidence: 1.0 };
         if (existingIdx >= 0) newMatches[existingIdx] = entry;

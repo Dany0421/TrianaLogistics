@@ -120,7 +120,25 @@ function openBomValidationModal(fileName) {
   </tr></thead>`;
   table.insertAdjacentHTML('afterbegin', theadStr);
   const tbody = document.createElement('tbody'); tbody.id = 'bomValTbody'; table.appendChild(tbody);
-  tableWrap.appendChild(table); el.appendChild(tableWrap);
+  tableWrap.appendChild(table);
+
+  // Search bar
+  _bomValFilter = '';
+  const searchWrap = document.createElement('div');
+  searchWrap.style.cssText = 'position:relative;margin-bottom:8px';
+  const searchIn = document.createElement('input');
+  searchIn.type = 'text';
+  searchIn.placeholder = 'Pesquisar part # ou descrição…';
+  searchIn.style.cssText = 'width:100%;padding:6px 28px 6px 8px;font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box';
+  searchIn.oninput = function() { _bomValFilter = this.value; renderBomValTable(); };
+  const bomClearBtn = document.createElement('button');
+  bomClearBtn.textContent = '×';
+  bomClearBtn.style.cssText = 'position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0';
+  bomClearBtn.addEventListener('click', () => { searchIn.value = ''; _bomValFilter = ''; renderBomValTable(); });
+  searchWrap.appendChild(searchIn);
+  searchWrap.appendChild(bomClearBtn);
+  el.appendChild(searchWrap);
+  el.appendChild(tableWrap);
 
   // Removed items section
   if (removed.length) {
@@ -173,7 +191,14 @@ function renderBomValTable() {
   let lastSheet = null;
   const colSpan = isRevision ? 8 : 7; // +1 for Serv. column
 
+  const _norm = s => (s || '').toLowerCase();
+  const _tokens = _norm(_bomValFilter).split(/\s+/).filter(Boolean);
+
   pendingBomItems.forEach((item, i) => {
+    if (_tokens.length && !_tokens.every(t =>
+      _norm(item.part_number).includes(t) || _norm(item.description).includes(t)
+    )) return;
+
     // Insert sheet divider row when sheet changes
     if (showDividers && item.sheet_name && item.sheet_name !== lastSheet) {
       lastSheet = item.sheet_name;
