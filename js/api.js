@@ -209,16 +209,24 @@ const API = {
   },
 
   async saveMatches(matches) {
-    // Batch upsert — one roundtrip instead of N
     if (!matches.length) return [];
     const now = new Date().toISOString();
     const payloads = matches.map(m => ({ ...m, updated_at: now }));
-    const { data, error } = await supabase
-      .from('item_matches')
-      .upsert(payloads, { onConflict: 'bom_item_id,supplier_id' })
-      .select();
-    if (error) throw _sanitizeError(error);
-    return data || [];
+    const BATCH = 50;
+    const allSaved = [];
+    for (let i = 0; i < payloads.length; i += BATCH) {
+      const chunk = payloads.slice(i, i + BATCH);
+      const { data, error } = await supabase
+        .from('item_matches')
+        .upsert(chunk, { onConflict: 'bom_item_id,supplier_id' })
+        .select();
+      if (error) {
+        console.error('[API] saveMatches batch failed:', error.message, 'batch', Math.floor(i/BATCH)+1);
+        throw _sanitizeError(error);
+      }
+      if (data) allSaved.push(...data);
+    }
+    return allSaved;
   },
 
   async deleteMatch(id) {

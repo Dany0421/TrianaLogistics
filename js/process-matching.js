@@ -604,15 +604,19 @@ async function runAutoMatch() {
 
   if (!newMatches.length) { showToast('Nenhum match automático encontrado.'); return; }
   try {
-    await API.saveMatches(newMatches);
+    const saved = await API.saveMatches(newMatches);
     await loadMatchData();
     renderMatchingTab();
-    const msg = propagated > 0
-      ? `${newMatches.length} match(es) criado(s) — ${propagated} propagado(s) de itens repetidos.`
-      : `${newMatches.length} match(es) automático(s) criado(s).`;
-    showToast(msg);
+    const actualCount = saved.length;
+    if (actualCount === 0) {
+      showToast('Auto-match: 0 guardados (possível erro de permissões).', true);
+    } else {
+      const msg = propagated > 0
+        ? `${actualCount} match(es) criado(s) — ${propagated} propagado(s) de itens repetidos.`
+        : `${actualCount} match(es) automático(s) criado(s).`;
+      showToast(msg);
+    }
   } catch(e) {
-    // Sync state with DB even on error — partial saves may have occurred
     await loadMatchData(); renderMatchingTab();
     showToast('Erro: ' + e.message, true);
   }
