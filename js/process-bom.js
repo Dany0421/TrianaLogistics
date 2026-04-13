@@ -74,7 +74,7 @@ function diffStatusBadge(status) {
   const map = {
     qty_changed: ['#3a3000','#ffcc00','Qty ↑↓'],
     changed:     ['#3a1500','#ff8800','Alterado'],
-    new:         ['rgba(59,130,246,.15)','#60a5fa','Novo'],
+    new:         ['rgba(3,105,161,.15)','#38bdf8','Novo'],
   };
   const [bg, color, label] = map[status] || ['#333','#aaa', status];
   return `<span style="background:${bg};color:${color};border:1px solid ${color};border-radius:3px;font-size:10px;padding:1px 5px;font-family:'IBM Plex Mono',monospace">${label}</span>`;
@@ -99,7 +99,7 @@ function openBomValidationModal(fileName) {
     if (counts.unchanged) addTag(`${counts.unchanged} iguais`, 'var(--muted)');
     if (counts.qty_changed) addTag(`${counts.qty_changed} qty alterada`, '#ffcc00');
     if (counts.changed) addTag(`${counts.changed} alterados`, '#ff8800');
-    if (counts.new) addTag(`${counts.new} novos`, '#60a5fa');
+    if (counts.new) addTag(`${counts.new} novos`, '#38bdf8');
     if (removed.length) addTag(`${removed.length} removidos`, '#ff4444');
     el.appendChild(summary);
   }
@@ -557,7 +557,7 @@ async function renderBomHistoryDiff(newerId, olderId) {
   if (counts.unchanged)   addTag(`${counts.unchanged} iguais`, 'var(--muted)');
   if (counts.qty_changed) addTag(`${counts.qty_changed} qty alterada`, '#ffcc00');
   if (counts.changed)     addTag(`${counts.changed} alterados`, '#ff8800');
-  if (counts.new)         addTag(`${counts.new} novos`, '#60a5fa');
+  if (counts.new)         addTag(`${counts.new} novos`, '#38bdf8');
   if (removed.length)     addTag(`${removed.length} removidos`, '#ff4444');
   container.appendChild(summary);
 

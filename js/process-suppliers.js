@@ -148,7 +148,7 @@ function renderSuppliers() {
     if (gs?.avg_response_hours > 0) { const rb = document.createElement('span'); rb.className = 'resp-time-badge'; rb.textContent = '~' + formatResponseTime(gs.avg_response_hours); leftDiv.appendChild(rb); }
     header.appendChild(leftDiv);
 
-    const rightDiv = document.createElement('div'); rightDiv.style.cssText = 'display:flex;gap:6px'; rightDiv.addEventListener('click', e => e.stopPropagation());
+    const rightDiv = document.createElement('div'); rightDiv.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap'; rightDiv.addEventListener('click', e => e.stopPropagation());
     if (s.email) { const rfqBtn = document.createElement('button'); rfqBtn.className = 'btn btn-ghost btn-sm'; lbtn(rfqBtn, 'mail', 'RFQ'); rfqBtn.addEventListener('click', e => { e.stopPropagation(); openRFQModal(i); }); rightDiv.appendChild(rfqBtn); }
     const manBtn = document.createElement('button'); manBtn.className = 'btn btn-ghost btn-sm'; lbtn(manBtn, 'pencil', 'Manual'); manBtn.addEventListener('click', () => openManualQuotEntry(s.id)); rightDiv.appendChild(manBtn);
     const quotBtn = document.createElement('button'); quotBtn.className = 'btn btn-ghost btn-sm'; lbtn(quotBtn, 'paperclip', 'Cotação'); quotBtn.addEventListener('click', () => uploadQuotation(s.id)); rightDiv.appendChild(quotBtn);
@@ -228,15 +228,15 @@ function openRFQModal(supplierIdx) {
 
   const titleRow = document.createElement('div'); titleRow.style.cssText = 'display:flex;align-items:baseline;gap:12px;margin-bottom:4px';
   const title = document.createElement('div'); title.className = 'modal-title'; title.style.marginBottom = '0'; title.textContent = s.name; titleRow.appendChild(title);
-  const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace"; emailSpan.textContent = s.email; titleRow.appendChild(emailSpan);
+  const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'DM Mono',monospace"; emailSpan.textContent = s.email; titleRow.appendChild(emailSpan);
   el.appendChild(titleRow);
 
   if (!bomItems.length) {
     const msg = document.createElement('div'); msg.style.cssText = 'color:var(--muted);font-size:13px;margin:20px 0'; msg.textContent = 'Carrega o BOM primeiro.'; el.appendChild(msg);
   } else {
     const listHdr = document.createElement('div'); listHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px';
-    const listLbl = document.createElement('div'); listLbl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase"; listLbl.textContent = 'Seleciona os itens a pedir'; listHdr.appendChild(listLbl);
-    const allLbl = document.createElement('label'); allLbl.style.cssText = 'cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;font-family:JetBrains Mono,monospace;font-weight:400;margin-bottom:0';
+    const listLbl = document.createElement('div'); listLbl.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase"; listLbl.textContent = 'Seleciona os itens a pedir'; listHdr.appendChild(listLbl);
+    const allLbl = document.createElement('label'); allLbl.style.cssText = 'cursor:pointer;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;font-family:DM Mono,monospace;font-weight:400;margin-bottom:0';
     const allCb = document.createElement('input'); allCb.type = 'checkbox'; allCb.id = 'rfq_all'; allCb.checked = true; allCb.style.width = 'auto';
     allCb.addEventListener('change', () => toggleAllRFQ(allCb.checked));
     allLbl.appendChild(allCb); allLbl.appendChild(document.createTextNode(' Selecionar tudo')); listHdr.appendChild(allLbl);
@@ -245,22 +245,22 @@ function openRFQModal(supplierIdx) {
     const listContainer = document.createElement('div'); listContainer.style.cssText = 'border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:420px;overflow-y:auto;margin-bottom:16px';
 
     const buildSecHdr = (label, color) => {
-      const h = document.createElement('div'); h.style.cssText = `padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${color};letter-spacing:.8px;text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1`; h.textContent = label; return h;
+      const h = document.createElement('div'); h.style.cssText = `padding:5px 12px;font-family:'DM Mono',monospace;font-size:10px;color:${color};letter-spacing:.8px;text-transform:uppercase;background:var(--surface2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1`; h.textContent = label; return h;
     };
     const buildGroup = (group, dimmed) => {
       const frag = document.createDocumentFragment(); let lastCat = null;
       for (const { bi, idx } of group) {
         if (bi.category && bi.category !== lastCat) {
-          const catDiv = document.createElement('div'); catDiv.style.cssText = "background:var(--surface2);padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)"; catDiv.textContent = bi.category; frag.appendChild(catDiv); lastCat = bi.category;
+          const catDiv = document.createElement('div'); catDiv.style.cssText = "background:var(--surface2);padding:5px 12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)"; catDiv.textContent = bi.category; frag.appendChild(catDiv); lastCat = bi.category;
         }
         const lbl = document.createElement('label'); lbl.style.cssText = `display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s${dimmed ? ';opacity:.45' : ''}`;
-        lbl.addEventListener('mouseover', () => { lbl.style.background = 'rgba(59,130,246,.05)'; }); lbl.addEventListener('mouseout', () => { lbl.style.background = ''; });
+        lbl.addEventListener('mouseover', () => { lbl.style.background = 'rgba(3,105,161,.05)'; }); lbl.addEventListener('mouseout', () => { lbl.style.background = ''; });
         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'rfq-item-cb'; cb.value = idx; cb.checked = true; cb.style.cssText = 'margin-top:3px;width:auto'; lbl.appendChild(cb);
         const infoDiv = document.createElement('div');
         const descEl = document.createElement('div'); descEl.style.cssText = 'font-size:13px;color:var(--text);line-height:1.4'; descEl.textContent = bi.description; infoDiv.appendChild(descEl);
-        if (bi.part_number) { const pnEl = document.createElement('div'); pnEl.style.cssText = "font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px"; pnEl.textContent = bi.part_number; infoDiv.appendChild(pnEl); }
+        if (bi.part_number) { const pnEl = document.createElement('div'); pnEl.style.cssText = "font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px"; pnEl.textContent = bi.part_number; infoDiv.appendChild(pnEl); }
         lbl.appendChild(infoDiv);
-        const qtyEl = document.createElement('div'); qtyEl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px"; qtyEl.textContent = `× ${bi.quantity} ${bi.unit || ''}`; lbl.appendChild(qtyEl);
+        const qtyEl = document.createElement('div'); qtyEl.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;padding-top:2px"; qtyEl.textContent = `× ${bi.quantity} ${bi.unit || ''}`; lbl.appendChild(qtyEl);
         frag.appendChild(lbl);
       }
       return frag;

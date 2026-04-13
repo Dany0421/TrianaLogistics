@@ -559,4 +559,9 @@ a:focus-visible {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Touch target sizes — mínimo 44px (Apple HIG / Material Design) */
+  .btn { min-height: 44px; padding: 10px 16px; }
+  .btn-sm { min-height: 36px; padding: 8px 12px; }
+  input, select, textarea { min-height: 44px; }
 }

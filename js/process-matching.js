@@ -249,7 +249,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   const tfrow = tfoot.insertRow();
   tfrow.insertCell(); tfrow.insertCell();
   for (const s of suppliers) {
-    const td = tfrow.insertCell(); td.style.cssText = "text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;padding:8px 10px;white-space:nowrap;border-top:1px solid var(--border)"; td.textContent = s.name;
+    const td = tfrow.insertCell(); td.style.cssText = "text-align:center;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;padding:8px 10px;white-space:nowrap;border-top:1px solid var(--border)"; td.textContent = s.name;
   }
   tfrow.insertCell();
 
@@ -277,7 +277,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
 
   const makeStatBlock = (label, valueText, color, subText) => {
     const d = document.createElement('div');
-    const lbl = document.createElement('div'); lbl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px"; lbl.textContent = label;
+    const lbl = document.createElement('div'); lbl.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:2px"; lbl.textContent = label;
     const val = document.createElement('div'); val.style.cssText = `font-size:${label === 'COBERTURA' ? '24' : '15'}px;font-weight:${label === 'COBERTURA' ? '700' : '600'};color:${color}`; val.textContent = valueText;
     d.appendChild(lbl); d.appendChild(val);
     if (subText) { const sub = document.createElement('div'); sub.style.cssText = 'color:var(--muted);font-size:12px'; sub.textContent = subText; d.appendChild(sub); }
@@ -351,17 +351,17 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   // Tfoot
   const tfoot = table.createTFoot();
   const totalRow = tfoot.insertRow();
-  const tdTLbl = totalRow.insertCell(); tdTLbl.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase"; tdTLbl.textContent = 'Total Equipamento';
+  const tdTLbl = totalRow.insertCell(); tdTLbl.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase"; tdTLbl.textContent = 'Total Equipamento';
   for (const s of suppliers) {
     const td = totalRow.insertCell();
     if (colTotals[s.id] > 0) { td.textContent = fmtPrice(colTotals[s.id]); }
     else { const dash = document.createElement('span'); dash.style.color = '#334'; dash.textContent = '—'; td.appendChild(dash); }
   }
-  if (hasServices) { const td = totalRow.insertCell(); td.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--warn);font-weight:600"; td.textContent = serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'; }
+  if (hasServices) { const td = totalRow.insertCell(); td.style.cssText = "font-family:'DM Mono',monospace;font-size:12px;color:var(--warn);font-weight:600"; td.textContent = serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'; }
 
   const namesRow = tfoot.insertRow(); namesRow.insertCell();
-  for (const s of suppliers) { const td = namesRow.insertCell(); td.style.cssText = "text-align:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;padding:6px 12px;white-space:nowrap"; td.textContent = s.name; }
-  if (hasServices) { const td = namesRow.insertCell(); td.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--warn);letter-spacing:.6px;text-transform:uppercase;text-align:center;padding:6px 12px"; td.textContent = 'Triana'; }
+  for (const s of suppliers) { const td = namesRow.insertCell(); td.style.cssText = "text-align:center;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;padding:6px 12px;white-space:nowrap"; td.textContent = s.name; }
+  if (hasServices) { const td = namesRow.insertCell(); td.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--warn);letter-spacing:.6px;text-transform:uppercase;text-align:center;padding:6px 12px"; td.textContent = 'Triana'; }
 
   compWrap.appendChild(table);
   el.appendChild(compWrap);
