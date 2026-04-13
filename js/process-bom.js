@@ -3,25 +3,37 @@ function diffBom(oldItems, newItems) {
   const norm = s => (s||'').toLowerCase().replace(/\s+/g,' ').trim();
   const used = new Set();
 
+  function _classifyMatch(oi, ni) {
+    const qtyDiff = Math.abs((oi.quantity||0) - (ni.quantity||0)) > 0.001;
+    const descDiff = norm(oi.description) !== norm(ni.description);
+    return { _diffStatus: descDiff ? 'changed' : qtyDiff ? 'qty_changed' : 'unchanged', _oldId: oi.id, _oldQty: oi.quantity };
+  }
+
   const result = newItems.map(ni => {
-    // 1. Part number match
+    // 1. Part number exact match
     if (ni.part_number) {
       const m = oldItems.find(oi => !used.has(oi.id) && oi.part_number &&
         norm(oi.part_number) === norm(ni.part_number));
-      if (m) {
-        used.add(m.id);
-        const qtyDiff = Math.abs((m.quantity||0) - (ni.quantity||0)) > 0.001;
-        const descDiff = norm(m.description) !== norm(ni.description);
-        return { ...ni, _diffStatus: descDiff ? 'changed' : qtyDiff ? 'qty_changed' : 'unchanged', _oldId: m.id, _oldQty: m.quantity };
-      }
+      if (m) { used.add(m.id); return { ...ni, ..._classifyMatch(m, ni) }; }
     }
-    // 2. Description match
-    const m = oldItems.find(oi => !used.has(oi.id) && norm(oi.description) === norm(ni.description));
-    if (m) {
-      used.add(m.id);
-      const qtyDiff = Math.abs((m.quantity||0) - (ni.quantity||0)) > 0.001;
-      return { ...ni, _diffStatus: qtyDiff ? 'qty_changed' : 'unchanged', _oldId: m.id, _oldQty: m.quantity };
+
+    // 2. Description + sheet_name + category (best match for duplicates)
+    const descMatches = oldItems.filter(oi => !used.has(oi.id) && norm(oi.description) === norm(ni.description));
+    if (descMatches.length > 0) {
+      // Score candidates: prefer same sheet_name, then same category, then closest sort_order
+      const scored = descMatches.map(oi => {
+        let score = 0;
+        if (ni.sheet_name && oi.sheet_name && ni.sheet_name === oi.sheet_name) score += 100;
+        if (ni.category && oi.category && norm(ni.category) === norm(oi.category)) score += 10;
+        score -= Math.abs((oi.sort_order||0) - (ni.sort_order||0)) * 0.01;
+        return { oi, score };
+      });
+      scored.sort((a, b) => b.score - a.score);
+      const best = scored[0].oi;
+      used.add(best.id);
+      return { ...ni, ..._classifyMatch(best, ni) };
     }
+
     return { ...ni, _diffStatus: 'new', _oldId: null };
   });
 
@@ -306,9 +318,12 @@ async function confirmBom() {
 
     const savedItems = await API.saveBomItems(itemsToSave);
 
-    // Copy matches for unchanged/qty_changed items from previous version
+    // Copy matches for preserved items from previous version
     // Only procurement/admin can write to item_matches and selected_offers
     if (pendingDiff && savedItems?.length && !hasRole('commercial')) {
+      const norm = s => (s||'').toLowerCase().replace(/\s+/g,' ').trim();
+
+      // Phase 1: items matched by diffBom (have _oldId)
       const preserved = pendingBomItems
         .map((item, idx) => ({ item, newId: savedItems[idx]?.id }))
         .filter(({ item, newId }) => newId && item._oldId &&
@@ -321,8 +336,46 @@ async function confirmBom() {
         API.copySelectedOffer(item._oldId, newId, processId)
       ));
 
-      const preservedCount = preserved.length;
-      if (preservedCount) showToast(`BOM v${versionNumber} — ${preservedCount} match${preservedCount!==1?'es':''} preservado${preservedCount!==1?'s':''}.`);
+      // Phase 2: 'new' items with identical description to an old item that had matches
+      const oldItemsByDesc = {};
+      for (const oi of (pendingDiff.removed || [])) {
+        const key = norm(oi.description);
+        if (!oldItemsByDesc[key]) oldItemsByDesc[key] = [];
+        oldItemsByDesc[key].push(oi);
+      }
+      // Also include old items that were matched but might have extra matches to share
+      for (const bi of bomItems) {
+        const key = norm(bi.description);
+        if (!oldItemsByDesc[key]) oldItemsByDesc[key] = [];
+        if (!oldItemsByDesc[key].find(o => o.id === bi.id)) oldItemsByDesc[key].push(bi);
+      }
+
+      const newItems = pendingBomItems
+        .map((item, idx) => ({ item, newId: savedItems[idx]?.id }))
+        .filter(({ item, newId }) => newId && item._diffStatus === 'new');
+
+      let extraCopied = 0;
+      for (const { item, newId } of newItems) {
+        const key = norm(item.description);
+        const oldCandidates = oldItemsByDesc[key] || [];
+        if (!oldCandidates.length) continue;
+        // Pick the best old item (prefer same sheet_name/category)
+        const scored = oldCandidates.map(oi => {
+          let score = 0;
+          if (item.sheet_name && oi.sheet_name && item.sheet_name === oi.sheet_name) score += 10;
+          if (item.category && oi.category && norm(item.category) === norm(oi.category)) score += 5;
+          return { oi, score };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        const donor = scored[0].oi;
+        try {
+          await API.copyItemMatches(donor.id, newId, processId);
+          extraCopied++;
+        } catch(e) { /* best-effort */ }
+      }
+
+      const totalCopied = preserved.length + extraCopied;
+      if (totalCopied) showToast(`BOM v${versionNumber} — ${totalCopied} match${totalCopied!==1?'es':''} preservado${totalCopied!==1?'s':''}.`);
     }
 
     pendingDiff = null;
