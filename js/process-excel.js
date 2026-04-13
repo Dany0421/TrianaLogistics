@@ -63,61 +63,50 @@ function buildSupSheet(wb, supplier) {
   return { dataStart: DS };
 }
 
-function fillMain(ws, suppliers, sheetNames, dataStarts, orderedItems, serviceRowsBySheet = {}) {
-  const allTechRows = [];
-  const allSvcSheets = Object.keys(serviceRowsBySheet).filter(s => (serviceRowsBySheet[s] || []).some(sv => sv.unitPrice > 0));
-  const multiSheet = allSvcSheets.length > 1;
-  for (const [sheetName, svcRows] of Object.entries(serviceRowsBySheet)) {
-    const sheetSuffix = multiSheet ? ` — ${sheetName}` : '';
-    for (const svc of svcRows) {
-      if (svc.unitPrice > 0) allTechRows.push({ label: svc.label + sheetSuffix, isDiversos: true, qty: svc.qty, unitPrice: svc.unitPrice });
-    }
-  }
-  const hasTechs = allTechRows.length > 0;
-  const trCol=hasTechs?4+suppliers.length:null;
-  const vc=hasTechs?trCol+1:4+suppliers.length;
+function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
+  const trCol=hasServices?4+suppliers.length:null;
+  const vc=hasServices?trCol+1:4+suppliers.length;
   const tc=vc+1;
-  ws.columns=hasTechs
+  ws.columns=hasServices
     ?[{width:4.5},{width:45.8},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:14.5},{width:13.9}]
     :[{width:4.5},{width:45.8},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:13.9}];
   const hF={bold:true,size:11,name:'Calibri',color:{argb:'FF000000'}};
   const hA={horizontal:'center',vertical:'middle',wrapText:true};
   const dF={size:11,name:'Calibri'};
+  const svcF={size:11,name:'Calibri',color:{argb:'FFFF8800'}};
   const NF='#,##0.00';
   ws.getRow(3).height=40;
   sc2(ws.getCell(3,1),{value:'Part',font:hF,border:MB,alignment:hA});
   sc2(ws.getCell(3,2),{value:'Model',font:hF,border:MB,alignment:hA});
   sc2(ws.getCell(3,3),{value:'QTY',font:hF,border:MB,alignment:hA});
   suppliers.forEach((s,si)=>sc2(ws.getCell(3,4+si),{value:sheetNames[si],font:hF,border:MB,alignment:hA}));
-  if(hasTechs)sc2(ws.getCell(3,trCol),{value:'Triana',font:hF,border:MB,alignment:hA});
+  if(hasServices)sc2(ws.getCell(3,trCol),{value:'Triana',font:hF,border:MB,alignment:hA});
   sc2(ws.getCell(3,vc),{value:'Preco de Venda',font:hF,fill:OF,border:MB,alignment:hA});
   sc2(ws.getCell(3,tc),{value:'Preco Total',font:hF,fill:OF,border:MB,alignment:hA});
   let row=4;
   const vl=col2l(vc);
-  // Iterate in BOM order — each item knows its supplier and row index in that supplier's sheet
-  orderedItems.forEach(oi=>{
-    const si=suppliers.findIndex(s=>s.id===oi.suppId);
-    if(si<0)return;
-    const ss=sheetNames[si].includes(' ')?`'${sheetNames[si]}'`:sheetNames[si];
-    const ds=dataStarts[si];
+  const trL=trCol?col2l(trCol):null;
+
+  for (const item of allRows) {
     for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
-    sc2(ws.getCell(row,1),{value:oi.part||'',font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-    sc2(ws.getCell(row,2),{value:oi.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
-    sc2(ws.getCell(row,3),{value:oi.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-    sc2(ws.getCell(row,4+si),{value:{formula:`${ss}!R${ds+oi.indexInSupplier}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-    sc2(ws.getCell(row,tc),{value:{formula:`+${vl}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-    row++;
-  });
-  if(hasTechs){
-    const trL=col2l(trCol);
-    for(const t of allTechRows){
-      for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
-      sc2(ws.getCell(row,2),{value:t.label,font:dF,alignment:{horizontal:'left',vertical:'middle'}});
-      sc2(ws.getCell(row,3),{value:t.qty||1,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-      sc2(ws.getCell(row,trCol),{value:t.unitPrice,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      sc2(ws.getCell(row,tc),{value:{formula:`+${trL}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      row++;
+
+    if (item.type === 'equip') {
+      const si=suppliers.findIndex(s=>s.id===item.suppId);
+      if(si<0){row++;continue;}
+      const ss=sheetNames[si].includes(' ')?`'${sheetNames[si]}'`:sheetNames[si];
+      const ds=dataStarts[si];
+      sc2(ws.getCell(row,1),{value:item.part||'',font:dF,alignment:{horizontal:'center',vertical:'middle'}});
+      sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
+      sc2(ws.getCell(row,3),{value:item.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
+      sc2(ws.getCell(row,4+si),{value:{formula:`${ss}!R${ds+item.indexInSupplier}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+      sc2(ws.getCell(row,tc),{value:{formula:`+${vl}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+    } else {
+      sc2(ws.getCell(row,2),{value:item.model,font:svcF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
+      sc2(ws.getCell(row,3),{value:item.qty,font:svcF,alignment:{horizontal:'center',vertical:'middle'}});
+      if(trCol) sc2(ws.getCell(row,trCol),{value:item.unitPrice,font:svcF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+      sc2(ws.getCell(row,tc),{value:{formula:`+${trL}${row}*C${row}`},font:svcF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
     }
+    row++;
   }
 }
 
@@ -135,13 +124,20 @@ async function generateExcel() {
     matchLookup[m.bom_item_id][m.supplier_id] = m;
   }
 
-  // Build supplier items AND ordered item list (BOM order) in one pass
+  // Build supplier items AND ordered row list (BOM order) in one pass
   const supplierItems = {};       // supplierId → items array for buildSupSheet
-  const supplierCounters = {};    // supplierId → how many items added so far (= indexInSupplier)
-  const orderedItems = [];        // flat list in BOM order: { part, model, qty, supplierId, indexInSupplier }
-  const skippedItems = [];        // descriptions of BOM items with no price found
+  const supplierCounters = {};    // supplierId → how many items added so far
+  const allRows = [];             // flat list in BOM order: equip + service interleaved
+  const skippedItems = [];
+  let hasServices = false;
 
   for (const bi of bomItems) {
+    if (bi.is_service) {
+      if ((bi.service_price || 0) > 0) hasServices = true;
+      allRows.push({ type: 'service', model: bi.description, qty: bi.quantity || 1, unitPrice: bi.service_price || 0 });
+      continue;
+    }
+
     const confirmed = selLookup[bi.id];
     let suppId = null, qi = null;
 
@@ -163,26 +159,16 @@ async function generateExcel() {
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
     const indexInSupplier = supplierCounters[suppId]++;
     supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: String(qi.quantity || bi.quantity), price: String(qi.price) });
-    orderedItems.push({ part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: qi.quantity || bi.quantity, suppId, indexInSupplier });
+    allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: qi.quantity || bi.quantity, suppId, indexInSupplier });
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
 
-  const serviceRowsBySheet = {};
-  for (const bi of bomItems) {
-    if (!bi.is_service) continue;
-    const sheet = bi.sheet_name || 'Sheet1';
-    if (!serviceRowsBySheet[sheet]) serviceRowsBySheet[sheet] = [];
-    serviceRowsBySheet[sheet].push({ label: bi.description, qty: bi.quantity || 1, unitPrice: bi.service_price || 0 });
-  }
-
-  const hasServices = Object.values(serviceRowsBySheet).some(arr => arr.some(s => s.unitPrice > 0));
   if (!activeSuppliers.length && !hasServices) { showToast('Sem itens com preço no Matching nem serviços.', true); return; }
   if (skippedItems.length) {
     const noun = skippedItems.length === 1 ? 'item sem preço' : 'itens sem preço';
     console.warn('[Excel] Itens ignorados por falta de preço:', skippedItems);
     showToast(`${skippedItems.length} ${noun} não incluído(s) no Excel — faz matching primeiro.`, true);
-    // Give user a moment to see the warning before download begins
     await new Promise(r => setTimeout(r, 1200));
   }
 
@@ -199,7 +185,7 @@ async function generateExcel() {
       sheetNames.push(s.name.substring(0, 31));
       dataStarts.push(dataStart);
     }
-    fillMain(mainWs, activeSuppliers, sheetNames, dataStarts, orderedItems, serviceRowsBySheet);
+    fillMain(mainWs, activeSuppliers, sheetNames, dataStarts, allRows, hasServices);
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
