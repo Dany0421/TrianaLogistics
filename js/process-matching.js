@@ -100,17 +100,6 @@ function renderMatchingTab() {
 
   const covered = equipItems.length ? equipItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0).length : 0;
   const pct = equipItems.length ? Math.round(covered / equipItems.length * 100) : 100;
-
-  // Debug: remove after fixing
-  console.log('[Matching Debug]', {
-    matchesLoaded: matches.length,
-    equipItems: equipItems.length,
-    covered,
-    sampleMatchBomId: matches[0]?.bom_item_id,
-    sampleEquipId: equipItems[0]?.id,
-    matchInLookup: equipItems.length && matches.length ? !!matchLookup[equipItems[0].id] : 'N/A',
-    bomVersionId: bomItems[0]?.bom_version_id,
-  });
   const pctColor = pct === 100 ? 'var(--accent)' : pct > 50 ? '#4fc3f7' : 'var(--danger)';
 
   // ── Toggle bar (only show if matching view makes sense) ──

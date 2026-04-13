@@ -169,6 +169,10 @@ async function loadMatchData() {
     API.getSelectedOffers(processId),
     API.getRejectedAutoMatch(processId),
   ]);
+  // Filter to only matches/offers referencing current BOM version items
+  const currentBomIds = new Set(bomItems.map(bi => bi.id));
+  matches = matches.filter(m => currentBomIds.has(m.bom_item_id));
+  selectedOffers = selectedOffers.filter(o => currentBomIds.has(o.bom_item_id));
 }
 
 // ── Header ──
