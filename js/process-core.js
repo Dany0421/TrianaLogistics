@@ -97,7 +97,7 @@ async function loadAll() {
           const bView = document.createElement('button');
           bView.type = 'button';
           bView.className = 'btn btn-ghost btn-sm';
-          bView.textContent = '\u{1F4C4} Ver ficheiro';
+          lbtn(bView, 'file-text', 'Ver ficheiro');
           bView.addEventListener('click', () => viewBomFile(v.file_path));
           bomBtn.appendChild(bView);
         }
@@ -105,14 +105,14 @@ async function loadAll() {
           const bHist = document.createElement('button');
           bHist.type = 'button';
           bHist.className = 'btn btn-ghost btn-sm';
-          bHist.textContent = '\u{1F4CB} Histórico';
+          lbtn(bHist, 'history', 'Histórico');
           bHist.addEventListener('click', () => openBomHistoryModal());
           bomBtn.appendChild(bHist);
         }
         const bEdit = document.createElement('button');
         bEdit.type = 'button';
         bEdit.className = 'btn btn-ghost btn-sm';
-        bEdit.textContent = '\u270F Editar BOM';
+        lbtn(bEdit, 'pencil', 'Editar BOM');
         bEdit.addEventListener('click', () => openManualBomEntry());
         bomBtn.appendChild(bEdit);
         const bRev = document.createElement('button');
@@ -120,7 +120,7 @@ async function loadAll() {
         bRev.className = 'btn btn-ghost btn-sm';
         bRev.style.borderColor = '#ff8800';
         bRev.style.color = '#ff8800';
-        bRev.textContent = '\u{1F4C2} Nova Revisão (v' + (v.version_number + 1) + ')';
+        lbtn(bRev, 'folder-sync', 'Nova Revisão (v' + (v.version_number + 1) + ')');
         bRev.addEventListener('click', () => document.getElementById('bomFileInput').click());
         bomBtn.appendChild(bRev);
       }
@@ -197,7 +197,8 @@ function renderHeader() {
   if (process.deadline) {
     const dl = document.createElement('span');
     dl.className = 'deadline-chip ' + deadlineClass(process.deadline);
-    dl.textContent = '\u{1F4C5} ' + fmtDate(process.deadline);
+    dl.appendChild(licon('calendar', 12));
+    dl.appendChild(document.createTextNode('\u00a0' + fmtDate(process.deadline)));
     meta.appendChild(dl);
   }
   if (assigneeName) {
@@ -261,7 +262,7 @@ async function loadDurationEstimate() {
     d.className = 'duration-banner';
     const icon = document.createElement('span');
     icon.className = 'dur-icon';
-    icon.textContent = '⏱';
+    icon.appendChild(licon('timer', 15));
     const body = document.createElement('div');
     body.className = 'dur-body';
     const main = document.createElement('div');
@@ -275,7 +276,7 @@ async function loadDurationEstimate() {
     const close = document.createElement('button');
     close.className = 'dur-close';
     close.title = 'Fechar';
-    close.textContent = '×';
+    close.appendChild(licon('x', 14));
     close.onclick = () => { sessionStorage.setItem(key, '1'); banner.style.display = 'none'; };
     d.appendChild(icon);
     d.appendChild(body);
@@ -443,7 +444,8 @@ function fmtPrice(p) {
       n = parseFloat(t.replace(/[,.]/g, ''));
   }
   if (isNaN(n)) return '—';
-  return new Intl.NumberFormat('pt-PT', {minimumFractionDigits:2, maximumFractionDigits:2}).format(n);
+  const [i, d] = n.toFixed(2).split('.');
+  return i.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + '.' + d;
 }
 function deadlineClass(d) { if (!d) return ''; const diff = (new Date(d)-new Date())/86400000; return diff < 0 ? 'overdue' : diff < 5 ? 'soon' : ''; }
 const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'];

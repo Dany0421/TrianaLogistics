@@ -132,8 +132,9 @@ function openBomValidationModal(fileName) {
   searchIn.style.cssText = 'width:100%;padding:6px 28px 6px 8px;font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box';
   searchIn.oninput = function() { _bomValFilter = this.value; renderBomValTable(); };
   const bomClearBtn = document.createElement('button');
-  bomClearBtn.textContent = '×';
-  bomClearBtn.style.cssText = 'position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0';
+  bomClearBtn.appendChild(licon('x', 13));
+  bomClearBtn.setAttribute('aria-label', 'Limpar pesquisa');
+  bomClearBtn.style.cssText = 'position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;padding:0';
   bomClearBtn.addEventListener('click', () => { searchIn.value = ''; _bomValFilter = ''; renderBomValTable(); });
   searchWrap.appendChild(searchIn);
   searchWrap.appendChild(bomClearBtn);

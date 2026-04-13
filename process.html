@@ -7,6 +7,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:; worker-src blob: https://unpkg.com;">
 <title>Processo — Procurement System</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
@@ -140,8 +141,8 @@
         <span class="section-tag" id="bomVersionLabel">Sem BOM carregado</span>
         <div style="display:flex;gap:8px">
           <input type="file" id="bomFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleBomUpload(this)">
-          <button class="btn btn-ghost btn-sm" onclick="openManualBomEntry()">✏ Manual</button>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bomFileInput').click()">📂 Carregar BOM</button>
+          <button class="btn btn-ghost btn-sm" onclick="openManualBomEntry()"><i data-lucide="pencil" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Manual</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bomFileInput').click()"><i data-lucide="folder-open" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Carregar BOM</button>
         </div>
       </div>
       <div id="durationBanner" style="display:none"></div>
@@ -168,7 +169,7 @@
       <div class="section-header">
         <span class="section-tag">Custos de Instalação / Técnicos / Serviços</span>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost btn-sm" onclick="generateReport()">📄 Relatório</button>
+          <button class="btn btn-ghost btn-sm" onclick="generateReport()"><i data-lucide="file-text" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Relatório</button>
           <button class="btn btn-primary btn-sm" onclick="generateExcel()">↓ Gerar Excel</button>
         </div>
       </div>
@@ -190,5 +191,6 @@
 <script src="js/process-matching.js"></script>
 <script src="js/process-install.js"></script>
 <script src="js/process-excel.js"></script>
+<script>document.addEventListener('DOMContentLoaded', () => lucide.createIcons());</script>
 </body>
 </html>
