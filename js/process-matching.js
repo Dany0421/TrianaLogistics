@@ -151,7 +151,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
 
   const autoBtn = document.createElement('button');
   autoBtn.className = 'btn btn-ghost btn-sm';
-  autoBtn.textContent = '⚡ Auto-Match';
+  lbtn(autoBtn, 'zap', 'Auto-Match');
   autoBtn.addEventListener('click', runAutoMatch);
 
   const exportBtn = document.createElement('button');
@@ -404,7 +404,7 @@ function openMatchModal(bomItemId, supplierId) {
       const pv = document.createElement('div'); pv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600"; pv.textContent = fmtPrice(qi.price); priceDiv.appendChild(pv);
       const cv = document.createElement('div'); cv.style.cssText = 'font-size:10px;color:var(--muted)'; cv.textContent = qi.currency; priceDiv.appendChild(cv);
       row.appendChild(infoDiv); row.appendChild(priceDiv);
-      if (isLinked) { const badge = document.createElement('div'); badge.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px;white-space:nowrap'; badge.textContent = '✓' + (isSelectedSupp ? ' SEL.' : ''); row.appendChild(badge); }
+      if (isLinked) { const badge = document.createElement('div'); badge.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:9px;color:var(--accent);letter-spacing:1px;white-space:nowrap'; badge.appendChild(licon('check', 10)); if (isSelectedSupp) badge.appendChild(document.createTextNode('SEL.')); row.appendChild(badge); }
       listWrap.appendChild(row);
     }
     el.appendChild(listWrap);
@@ -412,7 +412,7 @@ function openMatchModal(bomItemId, supplierId) {
 
   const actions = document.createElement('div'); actions.className = 'modal-actions';
   if (currentMatch) {
-    const selBtn = document.createElement('button'); selBtn.className = 'btn btn-ghost btn-sm'; selBtn.textContent = '✓ Selecionar como melhor oferta';
+    const selBtn = document.createElement('button'); selBtn.className = 'btn btn-ghost btn-sm'; lbtn(selBtn, 'check', 'Selecionar como melhor oferta');
     selBtn.addEventListener('click', () => selectOffer(bomItemId, supplierId, currentMatch.quotation_item_id)); actions.appendChild(selBtn);
     const rmBtn = document.createElement('button'); rmBtn.className = 'btn btn-danger btn-sm'; rmBtn.textContent = 'Remover';
     rmBtn.addEventListener('click', () => unlinkItem(bomItemId, supplierId, currentMatch.id)); actions.appendChild(rmBtn);

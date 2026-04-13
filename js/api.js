@@ -1,3 +1,24 @@
+// ── Icon helper — Lucide stroke icons ──
+// licon(name, size) — returns <i data-lucide="..."> and schedules createIcons after current tick
+// lbtn(el, name, label) — appends icon + text to el (same auto-schedule)
+let _liconTimer = null;
+function _schedLucide() {
+  if (typeof lucide === 'undefined') return;
+  clearTimeout(_liconTimer);
+  _liconTimer = setTimeout(() => lucide.createIcons(), 0);
+}
+function licon(name, size = 13) {
+  const i = document.createElement('i');
+  i.dataset.lucide = name;
+  i.style.cssText = `width:${size}px;height:${size}px;vertical-align:middle;stroke-width:1.75;flex-shrink:0`;
+  _schedLucide();
+  return i;
+}
+function lbtn(el, name, label, size = 13) {
+  el.appendChild(licon(name, size));
+  if (label) el.appendChild(document.createTextNode('\u00a0' + label));
+}
+
 // ── API — all Supabase calls in one place ──
 
 function _sanitizeError(error) {

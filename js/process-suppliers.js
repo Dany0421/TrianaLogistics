@@ -63,7 +63,8 @@ function renderSupplierSuggestions() {
   title.textContent = 'Fornecedores sugeridos — categorias do BOM';
   const closeBtn = document.createElement('button');
   closeBtn.className = 'btn btn-ghost btn-sm';
-  closeBtn.textContent = '×';
+  closeBtn.appendChild(licon('x', 13));
+  closeBtn.setAttribute('aria-label', 'Fechar');
   closeBtn.onclick = () => { while (banner.firstChild) banner.removeChild(banner.firstChild); };
   header.appendChild(title);
   header.appendChild(closeBtn);
@@ -143,16 +144,16 @@ function renderSuppliers() {
     const statusBadge = document.createElement('span'); statusBadge.className = 'badge ' + suppStatusClass(s.status); statusBadge.textContent = s.status; leftDiv.appendChild(statusBadge);
     if (s.is_foreign) { const fb = document.createElement('span'); fb.className = 'badge'; fb.style.cssText = 'background:#3a2a00;color:#ffaa00;border:1px solid #5a4a00'; fb.textContent = 'ESTRANGEIRO'; leftDiv.appendChild(fb); }
     const quotBadge = document.createElement('span'); quotBadge.className = 'quot-badge' + (qCount ? ' has-items' : ''); quotBadge.textContent = qCount ? `${qCount} itens cotação` : 'sem cotação'; leftDiv.appendChild(quotBadge);
-    if (qItems.some(qi => savedAnomalyMap[qi.id])) { const an = document.createElement('span'); an.className = 'anomaly-high'; an.title = 'Preços fora do histórico detectados'; an.textContent = '⚠ outlier'; leftDiv.appendChild(an); }
+    if (qItems.some(qi => savedAnomalyMap[qi.id])) { const an = document.createElement('span'); an.className = 'anomaly-high'; an.title = 'Preços fora do histórico detectados'; an.appendChild(licon('alert-triangle', 11)); an.appendChild(document.createTextNode('\u00a0outlier')); leftDiv.appendChild(an); }
     if (gs?.avg_response_hours > 0) { const rb = document.createElement('span'); rb.className = 'resp-time-badge'; rb.textContent = '~' + formatResponseTime(gs.avg_response_hours); leftDiv.appendChild(rb); }
     header.appendChild(leftDiv);
 
     const rightDiv = document.createElement('div'); rightDiv.style.cssText = 'display:flex;gap:6px'; rightDiv.addEventListener('click', e => e.stopPropagation());
-    if (s.email) { const rfqBtn = document.createElement('button'); rfqBtn.className = 'btn btn-ghost btn-sm'; rfqBtn.textContent = '✉ RFQ'; rfqBtn.addEventListener('click', e => { e.stopPropagation(); openRFQModal(i); }); rightDiv.appendChild(rfqBtn); }
-    const manBtn = document.createElement('button'); manBtn.className = 'btn btn-ghost btn-sm'; manBtn.textContent = '✏ Manual'; manBtn.addEventListener('click', () => openManualQuotEntry(s.id)); rightDiv.appendChild(manBtn);
-    const quotBtn = document.createElement('button'); quotBtn.className = 'btn btn-ghost btn-sm'; quotBtn.textContent = '📎 Cotação'; quotBtn.addEventListener('click', () => uploadQuotation(s.id)); rightDiv.appendChild(quotBtn);
-    const editBtn = document.createElement('button'); editBtn.className = 'btn btn-ghost btn-sm'; editBtn.textContent = 'Editar'; editBtn.addEventListener('click', () => openSupplierModal(i)); rightDiv.appendChild(editBtn);
-    const delBtn = document.createElement('button'); delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '×'; delBtn.addEventListener('click', () => deleteSupplier(s.id)); rightDiv.appendChild(delBtn);
+    if (s.email) { const rfqBtn = document.createElement('button'); rfqBtn.className = 'btn btn-ghost btn-sm'; lbtn(rfqBtn, 'mail', 'RFQ'); rfqBtn.addEventListener('click', e => { e.stopPropagation(); openRFQModal(i); }); rightDiv.appendChild(rfqBtn); }
+    const manBtn = document.createElement('button'); manBtn.className = 'btn btn-ghost btn-sm'; lbtn(manBtn, 'pencil', 'Manual'); manBtn.addEventListener('click', () => openManualQuotEntry(s.id)); rightDiv.appendChild(manBtn);
+    const quotBtn = document.createElement('button'); quotBtn.className = 'btn btn-ghost btn-sm'; lbtn(quotBtn, 'paperclip', 'Cotação'); quotBtn.addEventListener('click', () => uploadQuotation(s.id)); rightDiv.appendChild(quotBtn);
+    const editBtn = document.createElement('button'); editBtn.className = 'btn btn-ghost btn-sm'; lbtn(editBtn, 'settings', 'Editar'); editBtn.addEventListener('click', () => openSupplierModal(i)); rightDiv.appendChild(editBtn);
+    const delBtn = document.createElement('button'); delBtn.className = 'btn btn-danger btn-sm'; delBtn.appendChild(licon('trash-2', 13)); delBtn.setAttribute('aria-label', 'Eliminar'); delBtn.addEventListener('click', () => deleteSupplier(s.id)); rightDiv.appendChild(delBtn);
     header.appendChild(rightDiv);
     card.appendChild(header);
 
@@ -181,7 +182,7 @@ function renderSuppliers() {
       const quotSec = document.createElement('div'); quotSec.style.cssText = 'border-top:1px solid var(--border);padding-top:12px';
       const quotHdr = document.createElement('div'); quotHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
       const quotLbl = document.createElement('div'); quotLbl.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px"; quotLbl.textContent = `COTAÇÃO — ${qCount} ITENS`; quotHdr.appendChild(quotLbl);
-      if (quotationFilesMap[s.id]) { const vBtn = document.createElement('button'); vBtn.className = 'btn btn-ghost btn-sm'; vBtn.textContent = '📄 Ver original'; vBtn.addEventListener('click', e => { e.stopPropagation(); viewQuotFile(quotationFilesMap[s.id].file_path); }); quotHdr.appendChild(vBtn); }
+      if (quotationFilesMap[s.id]) { const vBtn = document.createElement('button'); vBtn.className = 'btn btn-ghost btn-sm'; lbtn(vBtn, 'file-text', 'Ver original'); vBtn.addEventListener('click', e => { e.stopPropagation(); viewQuotFile(quotationFilesMap[s.id].file_path); }); quotHdr.appendChild(vBtn); }
       quotSec.appendChild(quotHdr);
       const qTable = document.createElement('table'); qTable.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px';
       qItems.slice(0, 6).forEach(qi => {
@@ -193,7 +194,7 @@ function renderSuppliers() {
         const rawD = qi.raw_description; tdDesc.textContent = rawD.length > 55 ? rawD.substring(0, 55) + '…' : rawD;
         const tdPrice = document.createElement('td'); tdPrice.style.cssText = `text-align:right;font-family:'IBM Plex Mono',monospace;color:${priceColor};white-space:nowrap`; if (priceTitle) tdPrice.title = priceTitle;
         tdPrice.textContent = `${fmtPrice(qi.price)} ${qi.currency}`;
-        if (anom) { const w = document.createElement('span'); w.style.fontSize = '9px'; w.textContent = ' ⚠'; tdPrice.appendChild(w); }
+        if (anom) { const w = document.createElement('span'); w.style.cssText = 'display:inline-flex;align-items:center;margin-left:3px;color:var(--warn)'; w.appendChild(licon('alert-triangle', 10)); tdPrice.appendChild(w); }
         tr.appendChild(tdDesc); tr.appendChild(tdPrice); qTable.appendChild(tr);
       });
       if (qCount > 6) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 2; td.style.cssText = 'color:var(--muted);padding-top:4px'; td.textContent = `…e mais ${qCount - 6} itens`; tr.appendChild(td); qTable.appendChild(tr); }
@@ -730,8 +731,7 @@ function parseQuotationExcel(arrayBuffer) {
   for (let i = headerRow+1; i < rows.length; i++) {
     const row = rows[i];
     const desc  = String(row[colDesc]||'').trim();
-    const rawP  = String(row[colPrice]||'').replace(/[^\d.,]/g,'').replace(',','.');
-    const price = parseFloat(rawP);
+    const price = parseNum(String(row[colPrice]||''));
     const qty   = colQty!==-1 ? parseFloat(String(row[colQty]||'').replace(',','.')) : 1;
     const part  = colPart!==-1 ? String(row[colPart]||'').trim() : null;
     if (!desc || isNaN(price) || price <= 0) continue;
@@ -799,8 +799,9 @@ function openQuotationValModal(fileName, rawPdfText) {
   qSearchIn.style.cssText = 'width:100%;padding:6px 28px 6px 8px;font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);box-sizing:border-box';
   qSearchIn.oninput = function() { _quotValFilter = this.value; renderQuotValTable(); };
   const qClearBtn = document.createElement('button');
-  qClearBtn.textContent = '×';
-  qClearBtn.style.cssText = 'position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0';
+  qClearBtn.appendChild(licon('x', 13));
+  qClearBtn.setAttribute('aria-label', 'Limpar pesquisa');
+  qClearBtn.style.cssText = 'position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;padding:0';
   qClearBtn.addEventListener('click', () => { qSearchIn.value = ''; _quotValFilter = ''; renderQuotValTable(); });
   qSearchWrap.appendChild(qSearchIn);
   qSearchWrap.appendChild(qClearBtn);
@@ -883,8 +884,8 @@ function renderQuotValTable() {
     // Preço + anomaly badge
     const tdPrice = document.createElement('td');
     const inPrice = document.createElement('input');
-    inPrice.type = 'text'; inPrice.value = item.price || ''; inPrice.style.width = '80px';
-    inPrice.oninput = function() { this.value = this.value.replace(/\s/g, ''); };
+    inPrice.type = 'text'; inPrice.value = item.price > 0 ? fmtPrice(item.price) : ''; inPrice.style.width = '80px';
+    inPrice.oninput = function() { /* allow formatted input — parseNum handles it on change */ };
     inPrice.onchange = function() {
       pendingQuotItems[i].price = parseNum(this.value) || 0;
       // recheck anomaly for this row on price change
@@ -895,9 +896,8 @@ function renderQuotValTable() {
     if (a) {
       const badge = document.createElement('span');
       badge.className = a.type === 'high' ? 'anomaly-high' : 'anomaly-low';
-      badge.textContent = a.type === 'high'
-        ? '\u26a0 ' + a.ratio + '\u00d7 acima (\u00f8' + fmtPrice(a.median) + ')'
-        : '\u26a0 ' + a.ratio + '\u00d7 abaixo (\u00f8' + fmtPrice(a.median) + ')';
+      badge.appendChild(licon('alert-triangle', 10));
+      badge.appendChild(document.createTextNode('\u00a0' + a.ratio + '\u00d7 ' + (a.type === 'high' ? 'acima' : 'abaixo') + ' (\u00f8' + fmtPrice(a.median) + ')'));
       tdPrice.appendChild(badge);
     }
 
