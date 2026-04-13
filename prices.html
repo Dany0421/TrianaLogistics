@@ -13,7 +13,7 @@
 <script src="js/auth.js"></script>
 <script src="js/api.js"></script>
 <style>
-  .back-link { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:20px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; transition:.15s; }
+  .back-link { font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); margin-bottom:20px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; transition:.15s; }
   .back-link:hover { color:var(--accent); }
   .page-title { font-size:22px; font-weight:700; color:#fff; letter-spacing:-.3px; margin-bottom:4px; }
   .page-sub { font-size:13px; color:var(--muted); margin-bottom:24px; }
@@ -25,28 +25,28 @@
   .search-clear:hover { color:var(--text); }
 
   .date-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
-  .date-chip { font-family:'JetBrains Mono',monospace; font-size:11px; padding:5px 12px; border:1px solid var(--border); border-radius:20px; cursor:pointer; color:var(--muted); background:var(--surface); transition:.12s; letter-spacing:.3px; }
+  .date-chip { font-family:'DM Mono',monospace; font-size:11px; padding:5px 12px; border:1px solid var(--border); border-radius:20px; cursor:pointer; color:var(--muted); background:var(--surface); transition:.12s; letter-spacing:.3px; }
   .date-chip:hover { border-color:var(--accent); color:var(--accent); }
-  .date-chip.active { border-color:var(--accent); color:var(--accent); background:rgba(59,130,246,.1); }
+  .date-chip.active { border-color:var(--accent); color:var(--accent); background:rgba(3,105,161,.1); }
 
-  .results-info { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:12px; letter-spacing:.3px; }
+  .results-info { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:12px; letter-spacing:.3px; }
 
   .price-table { width:100%; border-collapse:collapse; font-size:13px; }
-  .price-table th { text-align:left; font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.7px; text-transform:uppercase; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .price-table th { text-align:left; font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.7px; text-transform:uppercase; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
   .price-table td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
-  .price-table tr:hover td { background:rgba(59,130,246,.03); }
+  .price-table tr:hover td { background:rgba(3,105,161,.03); }
 
   .price-desc { font-size:13px; color:var(--text); }
-  .price-part { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted); margin-top:2px; }
-  .price-supplier { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent); }
+  .price-part { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); margin-top:2px; }
+  .price-supplier { font-family:'DM Mono',monospace; font-size:12px; color:var(--accent); }
   .price-process { font-size:12px; color:var(--muted); cursor:pointer; transition:.12s; text-decoration:none; }
   .price-process:hover { color:var(--accent); }
-  .price-amount { font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; color:#fff; white-space:nowrap; }
+  .price-amount { font-family:'DM Mono',monospace; font-size:13px; font-weight:600; color:#fff; white-space:nowrap; }
   .price-currency { font-size:10px; color:var(--muted); margin-left:3px; }
-  .price-date { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap; }
+  .price-date { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); white-space:nowrap; }
 
-  .badge-fresh { display:inline-block; background:rgba(16,185,129,.12); color:#34d399; border:1px solid rgba(16,185,129,.25); border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:9px; padding:1px 6px; margin-left:6px; letter-spacing:.5px; vertical-align:middle; }
-  .badge-old   { display:inline-block; background:var(--surface2); color:var(--muted); border:1px solid var(--border); border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:9px; padding:1px 6px; margin-left:6px; letter-spacing:.5px; vertical-align:middle; }
+  .badge-fresh { display:inline-block; background:rgba(16,185,129,.12); color:#34d399; border:1px solid rgba(16,185,129,.25); border-radius:4px; font-family:'DM Mono',monospace; font-size:9px; padding:1px 6px; margin-left:6px; letter-spacing:.5px; vertical-align:middle; }
+  .badge-old   { display:inline-block; background:var(--surface2); color:var(--muted); border:1px solid var(--border); border-radius:4px; font-family:'DM Mono',monospace; font-size:9px; padding:1px 6px; margin-left:6px; letter-spacing:.5px; vertical-align:middle; }
 
   .search-highlight { background:rgba(251,191,36,.2); color:#fcd34d; border-radius:2px; padding:0 1px; }
 

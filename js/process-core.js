@@ -203,7 +203,7 @@ function renderHeader() {
   }
   if (assigneeName) {
     const as = document.createElement('span');
-    as.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:4px;padding:2px 9px";
+    as.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(3,105,161,.1);border:1px solid rgba(3,105,161,.25);border-radius:4px;padding:2px 9px";
     as.textContent = assigneeName;
     meta.appendChild(as);
   }
@@ -333,7 +333,7 @@ function openEditModal() {
   _ep('ep_project', p.project_name || '');
   _ep('ep_deadline', p.deadline || '');
   _ep('ep_notes', p.notes || '');
-  _ep('ep_custom_color', p.status_color || '#3b82f6');
+  _ep('ep_custom_color', p.status_color || '#0369a1');
 
   // Priority
   el.querySelectorAll('#ep_priority option').forEach(opt => { if (opt.value === p.priority) opt.selected = true; });
