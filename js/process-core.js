@@ -40,19 +40,7 @@ let rejectedAutoMatch = []; // persisted rejections: never auto-recreate these m
 window.addEventListener('load', async () => {
   if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
   await requireAuth('index.html');
-  const trTop = document.getElementById('topbarRight');
-  trTop.replaceChildren();
-  if (hasRole('admin')) {
-    const aAdm = document.createElement('a');
-    aAdm.href = 'admin.html';
-    aAdm.className = 'btn btn-ghost btn-sm';
-    aAdm.style.marginRight = '4px';
-    aAdm.style.borderColor = 'rgba(16,185,129,.3)';
-    aAdm.style.color = '#34d399';
-    aAdm.textContent = 'Admin';
-    trTop.appendChild(aAdm);
-  }
-  mountUserChip(trTop);
+  mountSidebar(document.getElementById('appSidebar'));
   renderTabs();
 
   const params = new URLSearchParams(location.search);

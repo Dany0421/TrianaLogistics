@@ -288,17 +288,20 @@ function buildRFQHtml(selected, supplierName) {
   const tdC = 'style="border:1px solid #cbd5e1;padding:7px 10px;text-align:center"';
   const tdMono = 'style="border:1px solid #cbd5e1;padding:7px 10px;font-family:monospace;font-size:12px"';
 
+  const hasPartNum = selected.some(bi => bi.part_number);
+  const colSpan = hasPartNum ? 4 : 3;
+
   let rows = '';
   let lastCat = undefined;
   for (const bi of selected) {
     if (bi.category !== lastCat) {
       if (bi.category) {
-        rows += '<tr style="background:#e8f0fe"><td colspan="4" style="border:1px solid #cbd5e1;padding:5px 10px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#1e40af">' + esc(bi.category) + '</td></tr>';
+        rows += '<tr style="background:#e8f0fe"><td colspan="' + colSpan + '" style="border:1px solid #cbd5e1;padding:5px 10px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#1e40af">' + esc(bi.category) + '</td></tr>';
       }
       lastCat = bi.category;
     }
     rows += '<tr>';
-    rows += '<td ' + tdMono + '>' + esc(bi.part_number || '-') + '</td>';
+    if (hasPartNum) rows += '<td ' + tdMono + '>' + esc(bi.part_number || '-') + '</td>';
     rows += '<td ' + td + '>' + esc(bi.description || '-') + '</td>';
     rows += '<td ' + tdC + '>' + (bi.quantity || 1) + '</td>';
     rows += '<td ' + td + '>' + esc(bi.unit || 'Unidade') + '</td>';
@@ -311,7 +314,7 @@ function buildRFQHtml(selected, supplierName) {
     + '<p>Queria solicitar uma cota&ccedil;&atilde;o para o equipamento abaixo:</p>'
     + '<table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;width:100%;max-width:720px">'
     + '<thead><tr style="background:#f0f4f8">'
-    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Artigo</th>'
+    + (hasPartNum ? '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Artigo</th>' : '')
     + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Descri&ccedil;&atilde;o</th>'
     + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;font-weight:600">Qtd.</th>'
     + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Unidade</th>'

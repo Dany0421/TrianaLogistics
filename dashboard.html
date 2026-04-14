@@ -95,15 +95,10 @@
 </head>
 <body>
 
-<div class="app-shell">
-  <!-- Topbar -->
-  <div class="topbar">
-    <div class="topbar-brand">Triana · <span>Procurement</span></div>
-    <div class="topbar-right" id="topbarRight"></div>
-  </div>
-
-  <!-- Page -->
-  <div class="page-content">
+<div class="app-layout">
+  <aside class="sidebar" id="appSidebar"></aside>
+  <div class="main-area">
+    <div class="page-content">
 
     <!-- Stats -->
     <div class="stats-grid" id="statsGrid"></div>
@@ -115,6 +110,10 @@
     <div id="followupBanner" style="display:none"></div>
 
     <!-- Charts -->
+    <div id="chartsToggleRow" style="display:none;align-items:center;gap:8px;padding:10px 6px;cursor:pointer;color:var(--muted);border-bottom:1px solid var(--border);user-select:none;margin-bottom:4px" onclick="toggleCharts()">
+      <span id="chartsArrow" style="font-size:10px">▶</span>
+      <span style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase">Gráficos</span>
+    </div>
     <div class="charts-grid" id="chartsSection" style="display:none">
       <div class="chart-card">
         <div class="chart-title">Por Estado</div>
@@ -170,6 +169,7 @@
     </div>
     <div id="processList"></div>
 
+    </div>
   </div>
 </div>
 
@@ -292,11 +292,11 @@ function timeAgoNotif(d) {
 window.addEventListener('load', async () => {
   const auth = await requireAuth('index.html');
   if (!auth) return;
-  const tr = document.getElementById('topbarRight');
-  tr.replaceChildren();
+  mountSidebar(document.getElementById('appSidebar'));
+  // Notification bell → prepend to sidebar footer
   const notifWrap = document.createElement('div');
   notifWrap.id = 'notifWrap';
-  notifWrap.style.cssText = 'position:relative;display:inline-flex;margin-right:4px';
+  notifWrap.style.cssText = 'position:relative;display:inline-flex;margin-bottom:4px';
   const bell = document.createElement('div');
   bell.className = 'notif-bell';
   bell.title = 'Notificações';
@@ -308,32 +308,8 @@ window.addEventListener('load', async () => {
   badge.style.display = 'none';
   bell.appendChild(badge);
   notifWrap.appendChild(bell);
-  tr.appendChild(notifWrap);
-  if (!hasRole('commercial')) {
-    const aPrices = document.createElement('a');
-    aPrices.href = 'prices.html';
-    aPrices.className = 'btn btn-ghost btn-sm';
-    aPrices.style.marginRight = '4px';
-    aPrices.textContent = 'Preços';
-    tr.appendChild(aPrices);
-    const aSupp = document.createElement('a');
-    aSupp.href = 'suppliers.html';
-    aSupp.className = 'btn btn-ghost btn-sm';
-    aSupp.style.marginRight = '4px';
-    aSupp.textContent = 'Fornecedores';
-    tr.appendChild(aSupp);
-  }
-  if (hasRole('admin')) {
-    const aAdm = document.createElement('a');
-    aAdm.href = 'admin.html';
-    aAdm.className = 'btn btn-ghost btn-sm';
-    aAdm.style.marginRight = '4px';
-    aAdm.style.borderColor = 'rgba(16,185,129,.3)';
-    aAdm.style.color = '#34d399';
-    aAdm.textContent = 'Admin';
-    tr.appendChild(aAdm);
-  }
-  mountUserChip(tr);
+  const sidebarFooter = document.querySelector('.sidebar-footer');
+  if (sidebarFooter) sidebarFooter.prepend(notifWrap);
   let topSuppliers = [];
   [procUsers, allProcesses] = await Promise.all([
     API.getProcurementUsers(),
@@ -379,10 +355,16 @@ async function loadProcesses() {
 
 // ── Charts ──
 let _charts = {};
+let chartsExpanded = false;
+function toggleCharts() {
+  chartsExpanded = !chartsExpanded;
+  document.getElementById('chartsArrow').textContent = chartsExpanded ? '▼' : '▶';
+  document.getElementById('chartsSection').style.display = chartsExpanded ? '' : 'none';
+}
 function renderCharts(processes, topSuppliers) {
   if (typeof Chart === 'undefined') return;
   if (!processes.length && !topSuppliers.length) return;
-  document.getElementById('chartsSection').style.display = '';
+  document.getElementById('chartsToggleRow').style.display = 'flex';
 
   Chart.defaults.color = '#64748b';
   Chart.defaults.borderColor = '#1a2235';
@@ -516,6 +498,8 @@ function renderFollowupAlerts(data) {
   banner.replaceChildren();
   const wrap = document.createElement('div');
   wrap.className = 'followup-banner';
+
+  // Header principal (colapsa tudo)
   const hdr = document.createElement('div');
   hdr.className = 'followup-banner-header';
   hdr.addEventListener('click', () => {
@@ -535,35 +519,77 @@ function renderFollowupAlerts(data) {
   caret.textContent = '\u25BE';
   hdr.appendChild(title);
   hdr.appendChild(caret);
+
+  // Agrupar por processo
+  const byProc = new Map();
+  for (const s of data) {
+    const pid = s.processes?.id || '__none__';
+    if (!byProc.has(pid)) byProc.set(pid, { proc: s.processes, suppliers: [] });
+    byProc.get(pid).suppliers.push(s);
+  }
+
   const rowsEl = document.createElement('div');
   rowsEl.className = 'followup-rows';
   rowsEl.id = 'followupRows';
-  for (const s of data) {
-    const proc = s.processes;
-    const due = new Date(s.next_followup_at);
-    const days = Math.round((today - due) / 86400000);
-    const label = days === 0 ? 'hoje' : days + 'd em atraso';
-    const row = document.createElement('div');
-    row.className = 'followup-row';
-    const pid = proc?.id || '';
-    row.addEventListener('click', () => {
-      if (pid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid))
-        window.location.href = 'process.html?id=' + pid;
+
+  for (const [pid, group] of byProc) {
+    // Row do processo (clicável para expandir)
+    const procRow = document.createElement('div');
+    procRow.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-radius:6px;background:var(--surface2);user-select:none';
+
+    const procArrow = document.createElement('span');
+    procArrow.style.cssText = "font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;flex-shrink:0";
+    procArrow.textContent = '\u25B6';
+
+    const procName = document.createElement('span');
+    procName.style.cssText = 'font-size:13px;font-weight:600;color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    procName.textContent = (group.proc?.project_name || '—') + (group.proc?.client_name ? ' · ' + group.proc.client_name : '');
+
+    const procBadge = document.createElement('span');
+    procBadge.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:#fbbf24;flex-shrink:0";
+    procBadge.textContent = group.suppliers.length + ' forn.';
+
+    procRow.appendChild(procArrow);
+    procRow.appendChild(procName);
+    procRow.appendChild(procBadge);
+
+    // Lista de fornecedores (hidden por default)
+    const suppList = document.createElement('div');
+    suppList.style.cssText = 'display:none;flex-direction:column;gap:4px;margin:4px 0 6px 12px';
+
+    for (const s of group.suppliers) {
+      const due = new Date(s.next_followup_at);
+      const days = Math.round((today - due) / 86400000);
+      const label = days === 0 ? 'hoje' : days + 'd em atraso';
+      const row = document.createElement('div');
+      row.className = 'followup-row';
+      row.addEventListener('click', e => {
+        e.stopPropagation();
+        if (pid !== '__none__' && /^[0-9a-f-]{36}$/i.test(pid))
+          window.location.href = 'process.html?id=' + pid;
+      });
+      const sp1 = document.createElement('span');
+      sp1.className = 'followup-supplier';
+      sp1.textContent = s.name || '';
+      const sp3 = document.createElement('span');
+      sp3.className = 'followup-overdue';
+      sp3.textContent = label;
+      row.appendChild(sp1);
+      row.appendChild(sp3);
+      suppList.appendChild(row);
+    }
+
+    let expanded = false;
+    procRow.addEventListener('click', () => {
+      expanded = !expanded;
+      procArrow.textContent = expanded ? '\u25BC' : '\u25B6';
+      suppList.style.display = expanded ? 'flex' : 'none';
     });
-    const sp1 = document.createElement('span');
-    sp1.className = 'followup-supplier';
-    sp1.textContent = s.name || '';
-    const sp2 = document.createElement('span');
-    sp2.className = 'followup-proc';
-    sp2.textContent = (proc?.project_name || '') + (proc?.client_name ? ' · ' + proc.client_name : '');
-    const sp3 = document.createElement('span');
-    sp3.className = 'followup-overdue';
-    sp3.textContent = label;
-    row.appendChild(sp1);
-    row.appendChild(sp2);
-    row.appendChild(sp3);
-    rowsEl.appendChild(row);
+
+    rowsEl.appendChild(procRow);
+    rowsEl.appendChild(suppList);
   }
+
   wrap.appendChild(hdr);
   wrap.appendChild(rowsEl);
   banner.appendChild(wrap);
@@ -572,7 +598,7 @@ function renderFollowupAlerts(data) {
 // ── Stats ──
 function renderStats() {
   const total    = allProcesses.length;
-  const active   = allProcesses.filter(p => p.status === 'Active').length;
+  const active   = allProcesses.filter(p => p.status !== 'Closed' && p.status !== 'Cancelled').length;
   const waiting  = allProcesses.filter(p => p.status === 'Waiting for suppliers' || p.status === 'Waiting for internal info').length;
   const ready    = allProcesses.filter(p => p.status === 'Ready for Excel').length;
   const urgent   = allProcesses.filter(p => p.priority === 'Urgent').length;
@@ -596,7 +622,7 @@ function renderStats() {
     statsGrid.appendChild(card);
   }
   addStatCard(() => setFilter(''), total, 'Total', '', '');
-  addStatCard(() => setFilter('Active'), active, 'Ativos', 'color:var(--accent)', '');
+  addStatCard(() => setFilter(''), active, 'Em aberto', 'color:var(--accent)', '');
   addStatCard(() => setFilter('Waiting for internal info'), waiting, 'A aguardar', 'color:#4fc3f7', '');
   addStatCard(() => setFilter('Ready for Excel'), ready, 'Prontos Excel', 'color:var(--accent)', '');
   addStatCard(() => setFilterPriority('Urgent'), urgent, 'Urgentes', 'color:var(--danger)', '');

@@ -50,14 +50,13 @@
 </style>
 </head>
 <body>
-<div class="app-shell">
-  <div class="topbar">
-    <div class="topbar-brand">Triana &middot; <span>Procurement</span></div>
-    <div class="topbar-right" id="topbarRight"></div>
-  </div>
-  <div class="page-content">
-    <div class="back-link" onclick="window.location.href='suppliers.html'">&#8592; Fornecedores</div>
-    <div id="mainContent"><div class="empty-msg">A carregar...</div></div>
+<div class="app-layout">
+  <aside class="sidebar" id="appSidebar"></aside>
+  <div class="main-area">
+    <div class="page-content">
+      <div class="back-link" onclick="window.location.href='suppliers.html'">&#8592; Fornecedores</div>
+      <div id="mainContent"><div class="empty-msg">A carregar...</div></div>
+    </div>
   </div>
 </div>
 <div id="toast"></div>
@@ -94,7 +93,7 @@ function mkTable(headers){
 window.addEventListener('load',async()=>{
   if(hasRole('commercial')){window.location.href='dashboard.html';return;}
   await requireAuth('index.html');
-  mountUserChip(document.getElementById('topbarRight'));
+  mountSidebar(document.getElementById('appSidebar'));
   const params=new URLSearchParams(location.search);
   const name=params.get('name');
   if(!name){window.location.href='suppliers.html';return;}
