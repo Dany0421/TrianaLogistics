@@ -268,7 +268,18 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   for (const s of suppliers) {
     colTotals[s.id] = equipItems.reduce((sum, bi) => { const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items); return sum + (p != null ? p : 0); }, 0);
   }
-  const totalSelected = selectedOffers.reduce((sum, o) => { const p = effPrice(matchLookup[o.bom_item_id]?.[o.supplier_id]?.quotation_items); return sum + (p || 0); }, 0);
+  const totalCovered = equipItems.reduce((sum, bi) => {
+    const selectedSuppId = selLookup[bi.id];
+    if (selectedSuppId) {
+      const p = effPrice(matchLookup[bi.id]?.[selectedSuppId]?.quotation_items);
+      return sum + (p || 0);
+    }
+    if (matchLookup[bi.id]) {
+      const prices = Object.values(matchLookup[bi.id]).map(m => effPrice(m.quotation_items)).filter(p => p != null);
+      if (prices.length > 0) return sum + Math.min(...prices);
+    }
+    return sum;
+  }, 0);
   const serviceTotal = serviceItems.reduce((sum, bi) => sum + ((bi.service_price || 0) * (bi.quantity || 1)), 0);
 
   // Stats bar
@@ -285,7 +296,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   };
   statsDiv.appendChild(makeStatBlock('COBERTURA', pct + '%', pctColor, `${covered}/${equipItems.length} itens`));
   if (topSupp) statsDiv.appendChild(makeStatBlock('MAIS COBERTURA', topSupp.name, '#fff', suppCoverage[topSupp.id] + ' itens'));
-  if (totalSelected > 0) statsDiv.appendChild(makeStatBlock('TOTAL SELECIONADO', fmtPrice(totalSelected), 'var(--accent)'));
+  if (totalCovered > 0) statsDiv.appendChild(makeStatBlock('TOTAL COBERTO', fmtPrice(totalCovered), 'var(--accent)'));
   if (serviceTotal > 0) statsDiv.appendChild(makeStatBlock('SERVIÇOS TRIANA', fmtPrice(serviceTotal), 'var(--warn)'));
   el.appendChild(statsDiv);
 

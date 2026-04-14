@@ -424,7 +424,7 @@ function openPrintWindow(entries, { dateFrom, dateTo }) {
     'body { font-family:Arial,Helvetica,sans-serif; font-size:11px; color:#334155; background:#fff; }',
     '.doc-header { background:#1e3a5f; color:#fff; padding:18px 28px; display:flex; justify-content:space-between; align-items:center; }',
     '.doc-logo { display:flex; align-items:center; gap:12px; }',
-    '.doc-logo-mark { width:36px; height:36px; border-radius:8px; background:linear-gradient(135deg,#0369a1,#7c3aed); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:#fff; }',
+    '.doc-logo-mark { width:36px; height:36px; border-radius:8px; background:linear-gradient(135deg,#2563eb,#7c3aed); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:#fff; }',
     '.doc-logo-text { font-size:15px; font-weight:700; letter-spacing:-.3px; }',
     '.doc-logo-sub { font-size:10px; color:rgba(255,255,255,.6); margin-top:2px; }',
     '.doc-title { font-size:13px; font-weight:600; color:rgba(255,255,255,.9); text-align:right; }',
@@ -506,7 +506,7 @@ function switchTab(tab) {
 // ── User Management ──
 const roleLabels = { admin: 'Admin', procurement: 'Procurement', commercial: 'Commercial' };
 const roleColors = { admin: '#34d399', procurement: '#38bdf8', commercial: '#fbbf24' };
-const roleBg     = { admin: 'rgba(16,185,129,.15)', procurement: 'rgba(3,105,161,.15)', commercial: 'rgba(245,158,11,.15)' };
+const roleBg     = { admin: 'rgba(16,185,129,.15)', procurement: 'rgba(37,99,235,.15)', commercial: 'rgba(245,158,11,.15)' };
 
 function roleBadge(role) {
   const c = roleColors[role] || 'var(--muted)';

@@ -254,7 +254,7 @@ function openRFQModal(supplierIdx) {
           const catDiv = document.createElement('div'); catDiv.style.cssText = "background:var(--surface2);padding:5px 12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)"; catDiv.textContent = bi.category; frag.appendChild(catDiv); lastCat = bi.category;
         }
         const lbl = document.createElement('label'); lbl.style.cssText = `display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s${dimmed ? ';opacity:.45' : ''}`;
-        lbl.addEventListener('mouseover', () => { lbl.style.background = 'rgba(3,105,161,.05)'; }); lbl.addEventListener('mouseout', () => { lbl.style.background = ''; });
+        lbl.addEventListener('mouseover', () => { lbl.style.background = 'rgba(37,99,235,.05)'; }); lbl.addEventListener('mouseout', () => { lbl.style.background = ''; });
         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'rfq-item-cb'; cb.value = idx; cb.checked = true; cb.style.cssText = 'margin-top:3px;width:auto'; lbl.appendChild(cb);
         const infoDiv = document.createElement('div');
         const descEl = document.createElement('div'); descEl.style.cssText = 'font-size:13px;color:var(--text);line-height:1.4'; descEl.textContent = bi.description; infoDiv.appendChild(descEl);
