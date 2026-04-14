@@ -37,7 +37,7 @@
   .bom-validate-table tr.cat-row td { background:var(--surface2); color:var(--accent2); font-family:'DM Mono',monospace; font-size:10px; padding:6px 8px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; }
   /* Supplier card */
   .supplier-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:10px; overflow:hidden; transition:border-color .15s; }
-  .supplier-card:hover { border-color:rgba(3,105,161,.3); }
+  .supplier-card:hover { border-color:rgba(37,99,235,.3); }
   .supplier-card-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:var(--surface2); border-bottom:1px solid var(--border); cursor:pointer; }
   .supplier-card-body { padding:18px; display:none; }
   .supplier-card-body.open { display:block; }
@@ -61,7 +61,7 @@
   .sugg-card-cats { display:flex; flex-wrap:wrap; gap:3px; }
   .sugg-cat-chip { font-family:'DM Mono',monospace; font-size:10px; background:rgba(99,102,241,.15); border:1px solid rgba(99,102,241,.3); color:#a5b4fc; border-radius:3px; padding:1px 6px; }
   .tag-input-box { display:flex; flex-wrap:wrap; gap:5px; align-items:center; border:1px solid var(--border); border-radius:6px; padding:5px 8px; min-height:36px; background:var(--surface2); cursor:text; }
-  .tag-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(3,105,161,.12); border:1px solid rgba(3,105,161,.3); border-radius:4px; padding:2px 6px; font-size:12px; color:var(--accent); }
+  .tag-chip { display:inline-flex; align-items:center; gap:4px; background:rgba(37,99,235,.12); border:1px solid rgba(37,99,235,.3); border-radius:4px; padding:2px 6px; font-size:12px; color:var(--accent); }
   .tag-chip button { background:none; border:none; color:var(--muted); cursor:pointer; padding:0; font-size:12px; line-height:1; }
   .tag-chip button:hover { color:var(--danger); }
   .tag-input-field { border:none; background:none; outline:none; font-size:13px; color:var(--text); flex:1; min-width:80px; }
@@ -77,14 +77,14 @@
   .match-cell:hover { border-color:var(--border); background:var(--surface2); }
   .match-cell.match-empty { color:#334; border:1px dashed var(--border); font-size:18px; }
   .match-cell.match-empty:hover { border-color:var(--muted); color:var(--muted); }
-  .match-cell.match-selected { background:rgba(3,105,161,.1); border-color:var(--accent); }
+  .match-cell.match-selected { background:rgba(37,99,235,.1); border-color:var(--accent); }
   .match-cell.match-lowest { background:rgba(129,140,248,.08); border-color:var(--accent2); }
   .coverage-bar { height:4px; background:var(--border); border-radius:2px; flex:1; max-width:300px; }
   .coverage-bar-fill { height:100%; border-radius:2px; background:var(--accent); transition:width .4s; }
   /* Match pick list in modal */
   .match-pick-row { display:flex; align-items:center; gap:12px; padding:8px 10px; border-radius:6px; cursor:pointer; border:1px solid transparent; margin-bottom:4px; transition:.12s; }
   .match-pick-row:hover { background:var(--surface2); border-color:var(--border); }
-  .match-pick-row.linked { background:rgba(3,105,161,.08); border-color:rgba(3,105,161,.3); }
+  .match-pick-row.linked { background:rgba(37,99,235,.08); border-color:rgba(37,99,235,.3); }
   /* Quotation badge on supplier card */
   .quot-badge { font-family:'DM Mono',monospace; font-size:10px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:2px 8px; color:var(--muted); }
   .quot-badge.has-items { color:var(--accent2); border-color:rgba(129,140,248,.3); background:rgba(129,140,248,.08); }
@@ -95,13 +95,14 @@
   .comp-table th:first-child { text-align:left; min-width:240px; position:sticky; left:0; background:var(--bg); z-index:1; box-shadow:2px 0 6px rgba(0,0,0,.4); }
   .comp-table td { padding:6px 10px; border-bottom:1px solid var(--border); vertical-align:middle; text-align:center; }
   .comp-table td:first-child { text-align:left; position:sticky; left:0; background:var(--bg); z-index:1; box-shadow:2px 0 6px rgba(0,0,0,.4); }
+  .comp-table th:last-child, .comp-table td:last-child { position:sticky; right:0; background:var(--bg); z-index:1; box-shadow:-2px 0 6px rgba(0,0,0,.4); }
   .comp-table tr.comp-cat-row td { background:var(--surface2); color:var(--accent); font-family:'DM Mono',monospace; font-size:10px; padding:5px 10px; letter-spacing:.8px; text-transform:uppercase; }
   .comp-table tr.comp-cat-row td:first-child { background:var(--surface2); }
   .comp-table tfoot td { font-family:'DM Mono',monospace; font-size:11px; font-weight:600; color:#fff; border-top:1px solid var(--border); padding:7px 10px; }
   .comp-cell { border-radius:5px; padding:5px 8px; font-family:'DM Mono',monospace; font-size:12px; font-weight:600; display:inline-block; }
   .comp-cell-low  { background:rgba(16,185,129,.15); color:#34d399; }
-  .comp-cell-sel  { background:rgba(3,105,161,.15);  color:#38bdf8; }
-  .comp-cell-both { background:rgba(16,185,129,.2);   color:#34d399; outline:1px solid rgba(3,105,161,.5); }
+  .comp-cell-sel  { background:rgba(37,99,235,.15);  color:#38bdf8; }
+  .comp-cell-both { background:rgba(16,185,129,.2);   color:#34d399; outline:1px solid rgba(37,99,235,.5); }
   .comp-cell-none { color:#334; font-size:16px; }
 
   @media (max-width: 768px) {

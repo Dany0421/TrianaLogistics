@@ -74,7 +74,7 @@ function diffStatusBadge(status) {
   const map = {
     qty_changed: ['#3a3000','#ffcc00','Qty ↑↓'],
     changed:     ['#3a1500','#ff8800','Alterado'],
-    new:         ['rgba(3,105,161,.15)','#38bdf8','Novo'],
+    new:         ['rgba(37,99,235,.15)','#38bdf8','Novo'],
   };
   const [bg, color, label] = map[status] || ['#333','#aaa', status];
   return `<span style="background:${bg};color:${color};border:1px solid ${color};border-radius:3px;font-size:10px;padding:1px 5px;font-family:'IBM Plex Mono',monospace">${label}</span>`;
