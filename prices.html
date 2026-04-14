@@ -58,12 +58,10 @@
 </head>
 <body>
 
-<div class="app-shell">
-  <div class="topbar">
-    <div class="topbar-brand">Triana · <span>Procurement</span></div>
-    <div class="topbar-right" id="topbarRight"></div>
-  </div>
-  <div class="page-content">
+<div class="app-layout">
+  <aside class="sidebar" id="appSidebar"></aside>
+  <div class="main-area">
+    <div class="page-content">
 
     <div class="back-link" onclick="window.location.href='dashboard.html'">← Dashboard</div>
 
@@ -96,6 +94,7 @@
       </div>
     </div>
 
+    </div>
   </div>
 </div>
 
@@ -108,7 +107,7 @@ let lastQuery = '';
 window.addEventListener('load', async () => {
   if (hasRole('commercial')) { window.location.href = 'dashboard.html'; return; }
   await requireAuth('index.html');
-  mountUserChip(document.getElementById('topbarRight'));
+  mountSidebar(document.getElementById('appSidebar'));
   document.getElementById('searchInput').addEventListener('input', () => {
     document.getElementById('clearBtn').style.display = document.getElementById('searchInput').value ? '' : 'none';
   });

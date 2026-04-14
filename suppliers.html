@@ -59,12 +59,10 @@
 </head>
 <body>
 
-<div class="app-shell">
-  <div class="topbar">
-    <div class="topbar-brand">Triana &middot; <span>Procurement</span></div>
-    <div class="topbar-right" id="topbarRight"></div>
-  </div>
-  <div class="page-content">
+<div class="app-layout">
+  <aside class="sidebar" id="appSidebar"></aside>
+  <div class="main-area">
+    <div class="page-content">
 
     <div class="back-link" onclick="window.location.href='dashboard.html'">&#8592; Dashboard</div>
 
@@ -89,6 +87,7 @@
       <div class="empty-state"><div class="icon">&#128101;</div><div class="msg">A carregar...</div></div>
     </div>
 
+    </div>
   </div>
 </div>
 
@@ -133,7 +132,7 @@ function closeModal() {
 window.addEventListener('load', async () => {
   if (hasRole('commercial')) { window.location.href = 'dashboard.html'; return; }
   await requireAuth('index.html');
-  mountUserChip(document.getElementById('topbarRight'));
+  mountSidebar(document.getElementById('appSidebar'));
   document.getElementById('addBtn').style.display = hasRole('admin') || hasRole('procurement') ? '' : 'none';
   await loadSuppliers();
 });

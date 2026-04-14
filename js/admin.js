@@ -665,15 +665,7 @@ window.addEventListener('load', async () => {
   await requireAuth('index.html');
   if (!hasRole('admin')) { window.location.href = 'dashboard.html'; return; }
 
-  const tr = document.getElementById('topbarRight');
-  tr.replaceChildren();
-  const dash = document.createElement('a');
-  dash.href = 'dashboard.html';
-  dash.className = 'btn btn-ghost btn-sm';
-  dash.style.marginRight = '4px';
-  dash.textContent = 'Dashboard';
-  tr.appendChild(dash);
-  mountUserChip(tr);
+  mountSidebar(document.getElementById('appSidebar'));
 
   loadUsers();
 });

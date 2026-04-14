@@ -80,3 +80,62 @@ function mountUserChip(container) {
 function hasRole(...roles) {
   return roles.includes(currentProfile?.role);
 }
+
+function mountSidebar(el) {
+  // Brand
+  const brand = document.createElement('a');
+  brand.className = 'sidebar-brand';
+  brand.href = 'dashboard.html';
+  const logo = document.createElement('div');
+  logo.className = 'sidebar-logo';
+  logo.textContent = 'T';
+  const brandName = document.createElement('span');
+  brandName.textContent = 'Triana';
+  brand.appendChild(logo);
+  brand.appendChild(brandName);
+
+  // Nav items
+  const nav = document.createElement('nav');
+  nav.className = 'sidebar-nav';
+  const navItems = [
+    { label: 'Dashboard',    icon: 'layout-dashboard', href: 'dashboard.html',    match: ['dashboard', ''] },
+    { label: 'Fornecedores', icon: 'users',              href: 'suppliers.html',    match: ['suppliers', 'supplier-detail'] },
+    { label: 'Preços',       icon: 'search',            href: 'prices.html',       match: ['prices'] },
+  ];
+  if (hasRole('admin')) navItems.push({ label: 'Admin', icon: 'settings', href: 'admin.html', match: ['admin'] });
+
+  const currentPage = window.location.pathname.split('/').pop().replace('.html', '') || '';
+  for (const item of navItems) {
+    const a = document.createElement('a');
+    a.className = 'sidebar-nav-item' + (item.match.includes(currentPage) ? ' active' : '');
+    a.href = item.href;
+    a.addEventListener('click', e => {
+      const modalOpen = document.querySelector('.modal-overlay, [id$="Modal"][style*="flex"]');
+      if (modalOpen) {
+        e.preventDefault();
+        if (confirm('Tens alterações não guardadas. Sair mesmo assim?')) {
+          window.location.href = item.href;
+        }
+      }
+    });
+    const iconEl = document.createElement('i');
+    iconEl.setAttribute('data-lucide', item.icon);
+    const labelEl = document.createElement('span');
+    labelEl.textContent = item.label;
+    a.appendChild(iconEl);
+    a.appendChild(labelEl);
+    nav.appendChild(a);
+  }
+
+  // Footer: user + logout
+  const footer = document.createElement('div');
+  footer.className = 'sidebar-footer';
+  mountUserChip(footer);
+
+  el.appendChild(brand);
+  el.appendChild(nav);
+  el.appendChild(footer);
+
+  // Render Lucide icons
+  setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 0);
+}
