@@ -162,6 +162,51 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   statsDiv.appendChild(covDiv); statsDiv.appendChild(barWrap); statsDiv.appendChild(autoBtn); statsDiv.appendChild(exportBtn);
   el.appendChild(statsDiv);
 
+  // ── Filter + Search bar ──
+  const controlsRow = document.createElement('div');
+  controlsRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap';
+
+  const filterBtn = document.createElement('button');
+  filterBtn.className = 'btn btn-sm' + (matchingFilter === 'unmatched' ? ' btn-primary' : ' btn-ghost');
+  filterBtn.textContent = 'Sem match';
+  filterBtn.addEventListener('click', () => {
+    matchingFilter = matchingFilter === 'unmatched' ? 'all' : 'unmatched';
+    renderMatchingTab();
+  });
+
+  const searchWrap = document.createElement('div');
+  searchWrap.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:6px';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = 'Pesquisar item...';
+  searchInput.value = matchingSearch;
+  searchInput.style.cssText = 'width:200px;padding:5px 10px;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);outline:none';
+  searchInput.addEventListener('input', () => {
+    matchingSearch = searchInput.value;
+    const cursorPos = searchInput.selectionStart;
+    renderMatchingTab();
+    const newInput = document.querySelector('#matchingContent input[placeholder="Pesquisar item..."]');
+    if (newInput) { newInput.focus(); newInput.setSelectionRange(cursorPos, cursorPos); }
+  });
+  searchWrap.appendChild(searchInput);
+
+  controlsRow.appendChild(filterBtn);
+  controlsRow.appendChild(searchWrap);
+  el.appendChild(controlsRow);
+
+  // Apply filters to equipItems
+  let visibleItems = equipItems;
+  if (matchingFilter === 'unmatched') {
+    visibleItems = equipItems.filter(bi => !matchLookup[bi.id] || Object.keys(matchLookup[bi.id]).length === 0);
+  }
+  if (matchingSearch.trim()) {
+    const q = matchingSearch.trim().toLowerCase();
+    visibleItems = visibleItems.filter(bi =>
+      (bi.description || '').toLowerCase().includes(q) ||
+      (bi.part_number || '').toLowerCase().includes(q)
+    );
+  }
+
   // Table
   const scrollWrap = document.createElement('div');
   scrollWrap.id = 'matchTableScroll';
@@ -182,7 +227,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   // Tbody
   const tbody = table.createTBody();
   let lastCat = null;
-  for (const bi of equipItems) {
+  for (const bi of visibleItems) {
     if (bi.category && bi.category !== lastCat) {
       const catRow = tbody.insertRow(); catRow.className = 'match-cat-row';
       const catTd = catRow.insertCell(); catTd.colSpan = 3 + suppliers.length; catTd.textContent = bi.category;
