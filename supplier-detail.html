@@ -144,10 +144,12 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
 
   // ── Stats ──
   const statsEl=document.createElement('div');statsEl.className='stats-strip';
+  const _respSamples=processHistory.filter(s=>s.contacted_at&&s.replied_at).map(s=>(new Date(s.replied_at)-new Date(s.contacted_at))/3600000).filter(h=>h>0&&h<8760);
+  const _avgHours=_respSamples.length?_respSamples.reduce((a,b)=>a+b,0)/_respSamples.length:0;
   const statsData=[
     {label:'Processos',value:processHistory.length,sub:'aparições'},
     {label:'Itens cotados',value:quotItems.length,sub:'total'},
-    {label:'Tempo médio',value:gs?.avg_response_hours>0?formatResponseTime(gs.avg_response_hours):'—',sub:gs?.response_count?'n='+gs.response_count+' amostras':'sem dados'},
+    {label:'Tempo médio',value:_avgHours>0?formatResponseTime(_avgHours):'—',sub:_respSamples.length?'n='+_respSamples.length+' amostras':'sem dados'},
     {label:'Categorias',value:(gs?.categories||[]).length,sub:'cobertas'},
     {label:'Marcas',value:(gs?.brands||[]).length,sub:'registadas'},
   ];

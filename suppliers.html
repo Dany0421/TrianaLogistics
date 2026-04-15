@@ -4,11 +4,12 @@
 <meta charset="UTF-8">
 <link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net; img-src 'self' data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net; img-src 'self' data:; worker-src blob:;">
 <title>Fornecedores — Procurement</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
 <link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/api.js"></script>
@@ -68,7 +69,10 @@
 
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
       <div class="page-title">Base de Fornecedores</div>
-      <button class="btn btn-primary" id="addBtn" onclick="openSupplierModal()">+ Adicionar</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" id="reportBtn" style="display:none" onclick="exportSupplierReport()">&#8595; Relatório</button>
+        <button class="btn btn-primary" id="addBtn" onclick="openSupplierModal()">+ Adicionar</button>
+      </div>
     </div>
     <div class="page-sub">Diret&oacute;rio global de fornecedores com categorias de equipamentos e marcas.</div>
 
@@ -100,6 +104,9 @@ let activeCat = '';
 let editingId = null;
 let pendingCats = [];
 let pendingBrands = [];
+let selectedIds = new Set();
+let supplierStatsMap = {};
+let currentVisible = [];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -139,7 +146,26 @@ window.addEventListener('load', async () => {
 
 async function loadSuppliers() {
   try {
-    allSuppliers = await API.getGlobalSuppliers();
+    [allSuppliers] = await Promise.all([API.getGlobalSuppliers()]);
+    // Build stats map from process suppliers table
+    try {
+      const allStats = await API.getAllSupplierStats();
+      const raw = {};
+      for (const row of allStats) {
+        const key = (row.name || '').trim().toLowerCase();
+        if (!raw[key]) raw[key] = { pids: new Set(), hours: [] };
+        if (row.process_id) raw[key].pids.add(row.process_id);
+        if (row.contacted_at && row.replied_at) {
+          const h = (new Date(row.replied_at) - new Date(row.contacted_at)) / 3600000;
+          if (h > 0 && h < 8760) raw[key].hours.push(h);
+        }
+      }
+      supplierStatsMap = {};
+      for (const k of Object.keys(raw)) {
+        const s = raw[k];
+        supplierStatsMap[k] = { processCount: s.pids.size, avgHours: s.hours.length ? s.hours.reduce((a,b)=>a+b,0)/s.hours.length : 0, sampleCount: s.hours.length };
+      }
+    } catch(_) {}
     renderCatChips();
     filterSuppliers();
   } catch(e) {
@@ -191,8 +217,10 @@ function filterSuppliers() {
     (s.brands||[]).some(b => b.toLowerCase().includes(q))
   );
   if (activeCat) list = list.filter(s => (s.categories||[]).includes(activeCat));
+  currentVisible = list;
   document.getElementById('resultsInfo').textContent = list.length + ' fornecedor' + (list.length !== 1 ? 'es' : '');
   renderTable(list, q);
+  updateReportBtn();
 }
 
 function clearSearch() {
@@ -239,6 +267,21 @@ function renderTable(list, q) {
   table.className = 'supp-table';
   const thead = document.createElement('thead');
   const hr = document.createElement('tr');
+  // Checkbox header
+  const thCb = document.createElement('th');
+  thCb.style.cssText = 'width:32px;padding:8px 8px 8px 12px';
+  const headerCb = document.createElement('input');
+  headerCb.type = 'checkbox';
+  headerCb.id = 'selectAllCb';
+  headerCb.title = 'Selecionar todos';
+  headerCb.addEventListener('change', () => {
+    if (headerCb.checked) { currentVisible.forEach(s => selectedIds.add(s.id)); }
+    else { currentVisible.forEach(s => selectedIds.delete(s.id)); }
+    updateReportBtn();
+    table.querySelectorAll('tbody input[type=checkbox]').forEach(cb => { cb.checked = headerCb.checked; });
+  });
+  thCb.appendChild(headerCb);
+  hr.appendChild(thCb);
   ['Fornecedor', 'Categorias', 'Marcas', 'Tempo Médio', ''].forEach(h => {
     const th = document.createElement('th');
     th.textContent = h;
@@ -249,6 +292,22 @@ function renderTable(list, q) {
   const tbody = document.createElement('tbody');
   for (const s of list) {
     const tr = document.createElement('tr');
+    // Checkbox cell
+    const tdCb = document.createElement('td');
+    tdCb.style.cssText = 'width:32px;padding:9px 8px 9px 12px;vertical-align:middle';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = selectedIds.has(s.id);
+    cb.addEventListener('change', () => {
+      if (cb.checked) selectedIds.add(s.id); else selectedIds.delete(s.id);
+      updateReportBtn();
+      const allChecked = currentVisible.every(v => selectedIds.has(v.id));
+      const anyChecked = currentVisible.some(v => selectedIds.has(v.id));
+      const hcb = document.getElementById('selectAllCb');
+      if (hcb) { hcb.checked = allChecked; hcb.indeterminate = !allChecked && anyChecked; }
+    });
+    tdCb.appendChild(cb);
+    tr.appendChild(tdCb);
     const tdName = document.createElement('td');
     const nameDiv = document.createElement('div');
     nameDiv.className = 'supp-name';
@@ -300,17 +359,18 @@ function renderTable(list, q) {
       tdBrands.appendChild(sp);
     }
     const tdTime = document.createElement('td');
-    if (s.avg_response_hours > 0) {
+    const stats = supplierStatsMap[(s.name||'').trim().toLowerCase()] || { avgHours: 0, sampleCount: 0 };
+    if (stats.avgHours > 0) {
       const badge = document.createElement('span');
       badge.className = 'resp-time-badge';
-      badge.textContent = '~' + formatResponseTime(s.avg_response_hours);
+      badge.textContent = '~' + formatResponseTime(stats.avgHours);
       tdTime.appendChild(badge);
       tdTime.appendChild(document.createTextNode(' '));
       const n = document.createElement('span');
       n.style.fontFamily = "'DM Mono',monospace";
       n.style.fontSize = '10px';
       n.style.color = 'var(--muted)';
-      n.textContent = '(n=' + s.response_count + ')';
+      n.textContent = '(n=' + stats.sampleCount + ')';
       tdTime.appendChild(n);
     } else {
       const sp = document.createElement('span');
@@ -474,6 +534,96 @@ async function doDelete(id) {
     showToast('Fornecedor apagado.');
     await loadSuppliers();
   } catch(e) { showToast('Erro: ' + e.message, true); }
+}
+
+function updateReportBtn() {
+  const btn = document.getElementById('reportBtn');
+  if (!btn) return;
+  const n = selectedIds.size;
+  btn.style.display = n > 0 ? '' : 'none';
+  btn.textContent = '\u2193 Relat\u00f3rio (' + n + ')';
+}
+
+async function exportSupplierReport() {
+  if (!selectedIds.size) return;
+  const selected = allSuppliers.filter(s => selectedIds.has(s.id));
+  selected.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Fornecedores');
+
+  // Title row
+  ws.mergeCells('A1:G1');
+  const title = ws.getCell('A1');
+  title.value = 'Relatório de Fornecedores — Triana';
+  title.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F1E2E' } };
+  title.alignment = { horizontal: 'left', vertical: 'middle' };
+  ws.getRow(1).height = 28;
+
+  // Date row
+  ws.mergeCells('A2:G2');
+  const dateCell = ws.getCell('A2');
+  dateCell.value = 'Gerado em: ' + new Date().toLocaleDateString('pt-PT');
+  dateCell.font = { size: 10, color: { argb: 'FF6B7280' } };
+  dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F1E2E' } };
+  ws.getRow(2).height = 16;
+
+  // Empty row
+  ws.getRow(3).height = 6;
+
+  // Headers
+  const hdrs = ['Nome', 'Email', 'Email CC', 'Categorias', 'Marcas', 'Nº Processos', 'Tempo Médio'];
+  const hRow = ws.getRow(4);
+  hdrs.forEach((h, i) => {
+    const c = hRow.getCell(i + 1);
+    c.value = h;
+    c.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D2D44' } };
+    c.alignment = { vertical: 'middle' };
+    c.border = { bottom: { style: 'thin', color: { argb: 'FF2D4A6A' } } };
+  });
+  hRow.height = 22;
+
+  // Column widths
+  [28, 32, 32, 38, 38, 16, 22].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+  // Data rows
+  selected.forEach((s, idx) => {
+    const key = (s.name || '').trim().toLowerCase();
+    const st = supplierStatsMap[key] || { processCount: 0, avgHours: 0 };
+    const rn = 5 + idx;
+    const bg = idx % 2 === 0 ? 'FF111827' : 'FF0D1520';
+    const vals = [
+      s.name || '',
+      s.email || '',
+      s.email_cc || '',
+      (s.categories || []).join(', '),
+      (s.brands || []).join(', '),
+      st.processCount,
+      st.avgHours > 0 ? formatResponseTime(st.avgHours) : '—',
+    ];
+    const row = ws.getRow(rn);
+    vals.forEach((v, i) => {
+      const c = row.getCell(i + 1);
+      c.value = v;
+      c.font = { size: 11, color: { argb: 'FFCDD5E0' } };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      c.alignment = { vertical: 'middle', wrapText: i === 3 || i === 4 };
+    });
+    row.height = 20;
+  });
+
+  try {
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Fornecedores_Triana_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) { showToast('Erro ao gerar Excel: ' + e.message, true); }
 }
 </script>
 </body>

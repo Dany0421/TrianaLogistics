@@ -759,6 +759,14 @@ const API = {
     return data;
   },
 
+  async getAllSupplierStats() {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('name, process_id, contacted_at, replied_at');
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
   async markNotificationsRead() {
     const { error } = await supabase
       .from('notifications')
