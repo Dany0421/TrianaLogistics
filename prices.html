@@ -260,14 +260,17 @@ function renderResults(data, query) {
     const procId = proc?.id;
     const tr = document.createElement('tr');
     const tdDesc = document.createElement('td');
+    const bomItem = row.item_matches?.[0]?.bom_items;
+    const displayDesc = bomItem?.custom_description || bomItem?.description || row.raw_description || '';
+    const displayPart = bomItem?.part_number || row.raw_part_number || null;
     const descDiv = document.createElement('div');
     descDiv.className = 'price-desc';
-    appendHighlightedDesc(descDiv, row.raw_description || '', query);
+    appendHighlightedDesc(descDiv, displayDesc, query);
     tdDesc.appendChild(descDiv);
-    if (row.raw_part_number) {
+    if (displayPart) {
       const part = document.createElement('div');
       part.className = 'price-part';
-      part.textContent = row.raw_part_number;
+      part.textContent = displayPart;
       tdDesc.appendChild(part);
     }
     const tdSupp = document.createElement('td');
