@@ -879,8 +879,15 @@ function renderQuotValTable() {
     inDisc.type = 'number'; inDisc.min = '0'; inDisc.max = '100'; inDisc.step = '0.1';
     inDisc.value = item.discount ?? 0; inDisc.style.width = '100%';
     inDisc.onchange = function() {
-      pendingQuotItems[i].discount = parseFloat(this.value) || 0;
+      const d = parseFloat(this.value) || 0;
+      pendingQuotItems[i].discount = d;
       pendingQuotItems[i]._discountManual = true;
+      // Back-calculate to pre-discount unit price (only for PDF items where price = net unit price)
+      if (d > 0 && d < 100 && pendingQuotItems[i].price > 0 && pendingQuotItems[i]._fromPdf) {
+        pendingQuotItems[i].price = Math.round((pendingQuotItems[i].price / (1 - d / 100)) * 100) / 100;
+        pendingQuotItems[i]._fromPdf = false; // applied once — prevent double back-calc if discount changed again
+      }
+      renderQuotValTable();
     };
     tdDisc.appendChild(inDisc);
 
@@ -891,7 +898,7 @@ function renderQuotValTable() {
     inPrice.oninput = function() { /* allow formatted input — parseNum handles it on change */ };
     inPrice.onchange = function() {
       pendingQuotItems[i].price = parseNum(this.value) || 0;
-      // recheck anomaly for this row on price change
+      pendingQuotItems[i]._fromPdf = false; // user manually set price — no back-calculation on discount
       checkPriceAnomalies(pendingQuotItems).then(a => { priceAnomalies = a; renderQuotValTable(); });
     };
     tdPrice.appendChild(inPrice);
@@ -1046,7 +1053,7 @@ async function handlePdfQuotation(file) {
       const qty = parseFloat(item.qty) || 1;
       const total = parseFloat(item.price) || 0;
       const unitPrice = total > 0 ? Math.round((total / qty) * 100) / 100 : 0;
-      return { raw_part_number: item.part || null, raw_description: item.model, quantity: qty, price: unitPrice, currency: 'MZN' };
+      return { raw_part_number: item.part || null, raw_description: item.model, quantity: qty, price: unitPrice, currency: 'MZN', _fromPdf: true };
     });
     if (!newPdfItems.length) showToast('Nenhum item detetado no PDF — adiciona manualmente.', true);
     const existingPdf = (quotationMap[currentQuotSuppId] || []).map(qi => ({
