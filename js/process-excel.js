@@ -173,8 +173,9 @@ async function generateExcel() {
 
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
     const indexInSupplier = supplierCounters[suppId]++;
-    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: String(qi.quantity || bi.quantity), price: String(qi.price) });
-    allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: qi.raw_description || bi.description, qty: qi.quantity || bi.quantity, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
+    const modelDesc = bi.custom_description || qi.raw_description || bi.description;
+    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(qi.quantity || bi.quantity), price: String(qi.price) });
+    allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: qi.quantity || bi.quantity, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);

@@ -243,7 +243,21 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
 
     // Item cell
     const tdItem = row.insertCell();
-    const descDiv = document.createElement('div'); descDiv.style.fontSize = '13px'; descDiv.textContent = bi.description; tdItem.appendChild(descDiv);
+    const descWrap = document.createElement('div'); descWrap.style.cssText = 'display:flex;align-items:center;gap:4px';
+    const descDiv = document.createElement('div'); descDiv.style.fontSize = '13px';
+    if (bi.custom_description) {
+      descDiv.textContent = bi.custom_description;
+      descDiv.style.cssText = 'font-size:13px;font-style:italic;color:var(--accent)';
+    } else {
+      descDiv.textContent = bi.description;
+    }
+    const editBtn = document.createElement('button');
+    editBtn.style.cssText = `background:none;border:none;cursor:pointer;padding:2px;color:${bi.custom_description ? 'var(--accent)' : 'var(--muted)'};display:flex;align-items:center;flex-shrink:0;transition:.15s`;
+    editBtn.title = 'Editar descrição';
+    editBtn.appendChild(licon('pencil', 12));
+    editBtn.addEventListener('click', (e) => { e.stopPropagation(); openDescModal(bi.id); });
+    descWrap.appendChild(descDiv); descWrap.appendChild(editBtn);
+    tdItem.appendChild(descWrap);
     if (bi.part_number) {
       const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv);
     }
@@ -421,6 +435,103 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
 
   compWrap.appendChild(table);
   el.appendChild(compWrap);
+}
+
+function openDescModal(bomItemId) {
+  const bi = bomItems.find(b => b.id === bomItemId);
+  if (!bi) return;
+
+  const selOffer = selectedOffers.find(o => o.bom_item_id === bomItemId);
+  const selQiDesc = selOffer?.quotation_items?.raw_description || null;
+
+  let selectedMode = bi.custom_description ? 'custom' : 'bom';
+  let customText = bi.custom_description || '';
+
+  const el = document.createElement('div');
+
+  const title = document.createElement('div'); title.className = 'modal-title'; title.style.cssText = 'font-size:15px;margin-bottom:16px'; title.textContent = 'Descrição do item'; el.appendChild(title);
+
+  const makeRadioOption = (mode, label, subtext) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:10px 12px;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;cursor:pointer;transition:.12s';
+    const topRow = document.createElement('label'); topRow.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer';
+    const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'descMode_' + bomItemId; radio.value = mode;
+    if (mode === selectedMode) { radio.checked = true; wrap.style.borderColor = 'var(--accent)'; }
+    const labelSpan = document.createElement('span'); labelSpan.style.cssText = 'font-size:13px;font-weight:600'; labelSpan.textContent = label;
+    topRow.appendChild(radio); topRow.appendChild(labelSpan); wrap.appendChild(topRow);
+    if (subtext) {
+      const sub = document.createElement('div'); sub.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px;padding-left:22px;word-break:break-word"; sub.textContent = subtext; wrap.appendChild(sub);
+    }
+    radio.addEventListener('change', () => {
+      selectedMode = mode;
+      el.querySelectorAll('[data-opt-wrap]').forEach(w => w.style.borderColor = 'var(--border)');
+      wrap.style.borderColor = 'var(--accent)';
+    });
+    wrap.setAttribute('data-opt-wrap', '1');
+    wrap.addEventListener('click', () => { radio.checked = true; radio.dispatchEvent(new Event('change')); });
+    return { wrap, radio };
+  };
+
+  const { wrap: bomWrap } = makeRadioOption('bom', 'BOM original', bi.description);
+  el.appendChild(bomWrap);
+
+  if (selQiDesc) {
+    const { wrap: suppWrap } = makeRadioOption('supplier', 'Fornecedor selecionado', selQiDesc);
+    el.appendChild(suppWrap);
+  }
+
+  const customOuterWrap = document.createElement('div');
+  customOuterWrap.style.cssText = 'padding:10px 12px;border-radius:8px;border:1px solid ' + (selectedMode === 'custom' ? 'var(--accent)' : 'var(--border)') + ';margin-bottom:16px;transition:.12s';
+  customOuterWrap.setAttribute('data-opt-wrap', '1');
+  const customTopRow = document.createElement('label'); customTopRow.style.cssText = 'display:flex;align-items:center;gap:8px;cursor:pointer';
+  const customRadio = document.createElement('input'); customRadio.type = 'radio'; customRadio.name = 'descMode_' + bomItemId; customRadio.value = 'custom';
+  if (selectedMode === 'custom') customRadio.checked = true;
+  const customLabel = document.createElement('span'); customLabel.style.cssText = 'font-size:13px;font-weight:600'; customLabel.textContent = 'Custom';
+  customTopRow.appendChild(customRadio); customTopRow.appendChild(customLabel);
+  const customInput = document.createElement('input'); customInput.type = 'text';
+  customInput.style.cssText = 'width:100%;margin-top:8px;padding:7px 10px;font-size:13px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);outline:none;box-sizing:border-box';
+  customInput.placeholder = 'Descrição personalizada...'; customInput.value = customText;
+  customInput.addEventListener('input', () => { customText = customInput.value; });
+  customInput.addEventListener('focus', () => {
+    customRadio.checked = true; selectedMode = 'custom';
+    el.querySelectorAll('[data-opt-wrap]').forEach(w => w.style.borderColor = 'var(--border)');
+    customOuterWrap.style.borderColor = 'var(--accent)';
+  });
+  customRadio.addEventListener('change', () => {
+    selectedMode = 'custom';
+    el.querySelectorAll('[data-opt-wrap]').forEach(w => w.style.borderColor = 'var(--border)');
+    customOuterWrap.style.borderColor = 'var(--accent)';
+    customInput.focus();
+  });
+  customOuterWrap.addEventListener('click', () => { customRadio.checked = true; customRadio.dispatchEvent(new Event('change')); });
+  customOuterWrap.appendChild(customTopRow); customOuterWrap.appendChild(customInput);
+  el.appendChild(customOuterWrap);
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-primary'; saveBtn.textContent = 'Guardar';
+  saveBtn.addEventListener('click', async () => {
+    let newDesc = null;
+    if (selectedMode === 'supplier') newDesc = selQiDesc;
+    else if (selectedMode === 'custom') newDesc = customText.trim() || null;
+    // 'bom' → newDesc stays null (clears custom)
+    saveBtn.disabled = true;
+    try {
+      await API.updateBomItemCustomDescription(bomItemId, newDesc);
+      const idx = bomItems.findIndex(b => b.id === bomItemId);
+      if (idx >= 0) bomItems[idx].custom_description = newDesc;
+      closeModal();
+      renderMatchingTab();
+      showToast('Descrição atualizada.');
+    } catch(e) {
+      showToast('Erro: ' + e.message, true);
+      saveBtn.disabled = false;
+    }
+  });
+  actions.appendChild(saveBtn);
+  el.appendChild(actions);
+
+  showModal(el);
 }
 
 function openMatchModal(bomItemId, supplierId) {

@@ -432,6 +432,11 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async updateBomItemCustomDescription(id, text) {
+    const { error } = await supabase.from('bom_items').update({ custom_description: text || null }).eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
   // ── Installation Costs ──
   async getInstallation(processId) {
     const { data } = await supabase.from('installation_costs')
@@ -727,7 +732,7 @@ const API = {
   async searchPriceHistory(query, dateFrom) {
     let q = supabase
       .from('quotation_items')
-      .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, processes(id, project_name, client_name))')
+      .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, processes(id, project_name, client_name)), item_matches(bom_items(description, part_number, custom_description))')
       .order('created_at', { ascending: false });
     if (dateFrom) q = q.gte('created_at', dateFrom);
     // Server-side filter on first word to cut down rows before transfer
@@ -743,7 +748,9 @@ const API = {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(1);
     if (!words.length) return rows;
     return rows.filter(item => {
-      const hay = ((item.raw_description || '') + ' ' + (item.raw_part_number || '')).toLowerCase();
+      const bomDesc = item.item_matches?.[0]?.bom_items?.description || '';
+      const bomPart = item.item_matches?.[0]?.bom_items?.part_number || '';
+      const hay = ((item.raw_description || '') + ' ' + (item.raw_part_number || '') + ' ' + bomDesc + ' ' + bomPart).toLowerCase();
       return words.every(w => hay.includes(w));
     });
   },
