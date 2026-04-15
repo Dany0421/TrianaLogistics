@@ -14,7 +14,9 @@ function buildSupSheet(wb, supplier) {
   const direitos = (parseFloat(supplier.direitos) || 0) / 100;
   const name = (supplier.name || 'Fornecedor').substring(0, 31);
   const ws = wb.addWorksheet(name, {properties:{tabColor:{argb:'FFC00000'}},views:[{showGridLines:false}]});
-  ws.columns=[{width:15.7},{width:40},{width:12},{width:13},{width:15.5},{width:18.2},{width:19.5},{width:13},{width:15.1},{width:14.8},{width:15.8},{width:18.8},{width:15.5},{width:11.8},{width:18.2},{width:12.5},{width:9.8},{width:17.8},{width:16.5},{width:14.5}];
+  const wPart = items.reduce((m,i)=>Math.max(m,(i.part||'').length+2),15.7);
+  const wModel = Math.min(70,items.reduce((m,i)=>Math.max(m,(i.model||'').length+2),40));
+  ws.columns=[{width:wPart},{width:wModel},{width:12},{width:13},{width:15.5},{width:18.2},{width:19.5},{width:13},{width:15.1},{width:14.8},{width:15.8},{width:18.8},{width:15.5},{width:11.8},{width:18.2},{width:12.5},{width:9.8},{width:17.8},{width:16.5},{width:14.5}];
   const DS=4,lastItemRow=DS+items.length-1,totalRow=lastItemRow+2,transportRow=totalRow+1,cambioRow=transportRow+2;
   ws.getRow(2).height=19.25;
   sc2(ws.getCell(2,16),{value:'Homologacao',font:{bold:true,size:14,name:'Calibri'},alignment:{horizontal:'center',vertical:'middle'}});
@@ -67,9 +69,11 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
   const trCol=hasServices?4+suppliers.length:null;
   const vc=hasServices?trCol+1:4+suppliers.length;
   const tc=vc+1;
+  const wMainPart = allRows.reduce((m,r)=>Math.max(m,(r.part||'').length+2),4.5);
+  const wMainModel = Math.min(70,allRows.reduce((m,r)=>Math.max(m,(r.model||'').length+2),45.8));
   ws.columns=hasServices
-    ?[{width:4.5},{width:45.8},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:14.5},{width:13.9}]
-    :[{width:4.5},{width:45.8},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:13.9}];
+    ?[{width:wMainPart},{width:wMainModel},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:14.5},{width:13.9}]
+    :[{width:wMainPart},{width:wMainModel},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:13.9}];
   const hF={bold:true,size:11,name:'Calibri',color:{argb:'FF000000'}};
   const hA={horizontal:'center',vertical:'middle',wrapText:true};
   const dF={size:11,name:'Calibri'};
