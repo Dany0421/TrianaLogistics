@@ -585,31 +585,39 @@ async function exportSupplierReport() {
   });
   hRow.height = 22;
 
-  // Column widths
-  [28, 32, 32, 38, 38, 16, 22].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-
-  // Data rows
-  selected.forEach((s, idx) => {
+  // Build all row data first so we can auto-size columns
+  const allRows = selected.map(s => {
     const key = (s.name || '').trim().toLowerCase();
     const st = supplierStatsMap[key] || { processCount: 0, avgHours: 0 };
-    const rn = 5 + idx;
-    const bg = idx % 2 === 0 ? 'FF111827' : 'FF0D1520';
-    const vals = [
+    return [
       s.name || '',
       s.email || '',
       s.email_cc || '',
       (s.categories || []).join(', '),
       (s.brands || []).join(', '),
-      st.processCount,
+      st.processCount || 0,
       st.avgHours > 0 ? formatResponseTime(st.avgHours) : '—',
     ];
+  });
+
+  // Auto column widths: max content length per column + padding, capped at 60
+  const colWidths = hdrs.map((h, i) => {
+    const maxData = allRows.reduce((m, r) => Math.max(m, String(r[i] || '').length), 0);
+    return Math.min(60, Math.max(h.length, maxData) + 4);
+  });
+  colWidths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+  // Data rows
+  allRows.forEach((vals, idx) => {
+    const rn = 5 + idx;
+    const bg = idx % 2 === 0 ? 'FF111827' : 'FF0D1520';
     const row = ws.getRow(rn);
     vals.forEach((v, i) => {
       const c = row.getCell(i + 1);
       c.value = v;
       c.font = { size: 11, color: { argb: 'FFCDD5E0' } };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-      c.alignment = { vertical: 'middle', wrapText: i === 3 || i === 4 };
+      c.alignment = { vertical: 'middle', wrapText: false };
     });
     row.height = 20;
   });
