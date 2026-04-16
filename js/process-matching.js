@@ -325,17 +325,27 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
   const colTotals = {};
   for (const s of suppliers) {
-    colTotals[s.id] = equipItems.reduce((sum, bi) => { const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items); return sum + (p != null ? p : 0); }, 0);
+    colTotals[s.id] = equipItems.reduce((sum, bi) => {
+      const matchCount = Object.keys(matchLookup[bi.id] || {}).length;
+      const selectedSuppId = selLookup[bi.id];
+      const isSelected = selectedSuppId === s.id;
+      const isOnlyMatch = matchCount === 1 && matchLookup[bi.id]?.[s.id] != null;
+      if (!isSelected && !isOnlyMatch) return sum;
+      const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items);
+      return sum + (p != null ? p : 0);
+    }, 0);
   }
   const totalCovered = equipItems.reduce((sum, bi) => {
+    const matchCount = Object.keys(matchLookup[bi.id] || {}).length;
     const selectedSuppId = selLookup[bi.id];
     if (selectedSuppId) {
       const p = effPrice(matchLookup[bi.id]?.[selectedSuppId]?.quotation_items);
       return sum + (p || 0);
     }
-    if (matchLookup[bi.id]) {
-      const prices = Object.values(matchLookup[bi.id]).map(m => effPrice(m.quotation_items)).filter(p => p != null);
-      if (prices.length > 0) return sum + Math.min(...prices);
+    if (matchCount === 1) {
+      const onlySuppId = Object.keys(matchLookup[bi.id])[0];
+      const p = effPrice(matchLookup[bi.id][onlySuppId]?.quotation_items);
+      return sum + (p || 0);
     }
     return sum;
   }, 0);
@@ -542,6 +552,114 @@ function openDescModal(bomItemId) {
   showModal(el);
 }
 
+function openAddToBomModal(parentBomId, supplierId, qi) {
+  const parentBi = bomItems.find(b => b.id === parentBomId);
+  const el = document.createElement('div');
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Adicionar ao BOM'; el.appendChild(tag);
+  const title = document.createElement('div'); title.className = 'modal-title'; title.style.cssText = 'font-size:14px;margin-bottom:4px'; title.textContent = qi.raw_description; el.appendChild(title);
+  const sub = document.createElement('div'); sub.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:16px';
+  sub.textContent = 'Novo item do BOM — fica imediatamente abaixo do item pai escolhido.'; el.appendChild(sub);
+
+  const grid = document.createElement('div'); grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px';
+
+  function mkField(label, value, fullWidth) {
+    const wrap = document.createElement('div'); if (fullWidth) wrap.style.gridColumn = '1/-1';
+    const lbl = document.createElement('label'); lbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);margin-bottom:4px'; lbl.textContent = label;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.value = value || ''; inp.style.width = '100%';
+    wrap.appendChild(lbl); wrap.appendChild(inp); grid.appendChild(wrap);
+    return inp;
+  }
+
+  const inpDesc = mkField('Descrição', qi.raw_description, true);
+  const inpPart = mkField('Part #', qi.raw_part_number || '');
+  const inpQty  = mkField('Qty', qi.quantity || 1);
+  const inpCat  = mkField('Categoria', parentBi?.category || '');
+
+  // Sheet dropdown
+  const sheetWrap = document.createElement('div');
+  const sheetLbl = document.createElement('label'); sheetLbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);margin-bottom:4px'; sheetLbl.textContent = 'Sheet';
+  const sheetSel = document.createElement('select'); sheetSel.style.width = '100%';
+  const sheets = [...new Set(bomItems.map(b => b.sheet_name).filter(Boolean))];
+  sheets.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; if (s === (parentBi?.sheet_name || sheets[0])) o.selected = true; sheetSel.appendChild(o); });
+  sheetWrap.appendChild(sheetLbl); sheetWrap.appendChild(sheetSel); grid.appendChild(sheetWrap);
+
+  el.appendChild(grid);
+
+  // Parent item dropdown
+  const parWrap = document.createElement('div'); parWrap.style.marginBottom = '16px';
+  const parLbl = document.createElement('label'); parLbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);margin-bottom:4px'; parLbl.textContent = 'Item pai (novo item fica abaixo deste)';
+  const parSel = document.createElement('select'); parSel.style.width = '100%';
+  bomItems.filter(b => !b.is_service).forEach(b => {
+    const o = document.createElement('option'); o.value = b.id;
+    o.textContent = (b.description || '—') + (b.part_number ? '  [' + b.part_number + ']' : '');
+    if (b.id === parentBomId) o.selected = true;
+    parSel.appendChild(o);
+  });
+  parWrap.appendChild(parLbl); parWrap.appendChild(parSel); el.appendChild(parWrap);
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  const confirmBtn = document.createElement('button'); confirmBtn.className = 'btn btn-primary'; lbtn(confirmBtn, 'plus', 'Adicionar ao BOM');
+  confirmBtn.addEventListener('click', async () => {
+    const desc = inpDesc.value.trim();
+    if (!desc) { showToast('Descrição obrigatória.', true); return; }
+    confirmBtn.disabled = true;
+    try {
+      await addToBom(parSel.value, supplierId, qi, {
+        description: desc,
+        part_number: inpPart.value.trim() || null,
+        qty: parseFloat(inpQty.value) || 1,
+        category: inpCat.value.trim() || null,
+        sheet: sheetSel.value,
+      });
+    } catch(e) { showToast('Erro: ' + e.message, true); confirmBtn.disabled = false; }
+  });
+  actions.appendChild(confirmBtn);
+  el.appendChild(actions);
+  showModal(el);
+}
+
+async function addToBom(parentBomId, supplierId, qi, formData) {
+  const pai = bomItems.find(b => b.id === parentBomId);
+  if (!pai) throw new Error('Item pai não encontrado.');
+
+  // Shift all items after parent
+  const toShift = bomItems.filter(b => b.sort_order > pai.sort_order);
+  if (toShift.length) {
+    await API.updateBomItemsSortOrder(toShift.map(b => ({ id: b.id, sort_order: b.sort_order + 1 })));
+  }
+
+  // Insert new BOM item
+  const newItem = {
+    process_id: processId,
+    bom_version_id: bomVersions[0]?.id || null,
+    description: formData.description,
+    part_number: formData.part_number,
+    quantity: formData.qty,
+    category: formData.category || pai.category || null,
+    sheet_name: formData.sheet || pai.sheet_name || 'Sheet1',
+    sort_order: pai.sort_order + 1,
+    is_service: false,
+    service_price: 0,
+  };
+  const [saved] = await API.saveBomItems([newItem]);
+
+  // Create match
+  await API.saveMatch({
+    process_id: processId,
+    bom_item_id: saved.id,
+    supplier_id: supplierId,
+    quotation_item_id: qi.id,
+    match_type: 'manual',
+    confidence: 1,
+  });
+
+  showToast('Item adicionado ao BOM e linkado.');
+  closeModal();
+  await loadAll();
+  renderMatchingTab();
+}
+
 function openMatchModal(bomItemId, supplierId) {
   if (!UUID_RE.test(bomItemId) || !UUID_RE.test(supplierId)) return;
   const bi    = bomItems.find(x => x.id === bomItemId);
@@ -570,6 +688,7 @@ function openMatchModal(bomItemId, supplierId) {
     const listWrap = document.createElement('div'); listWrap.style.cssText = 'max-height:300px;overflow-y:auto;margin-bottom:16px';
     for (const qi of qItems) {
       const isLinked = currentMatch?.quotation_item_id === qi.id;
+      const hasAnyMatch = matches.some(m => m.quotation_item_id === qi.id);
       const row = document.createElement('div'); row.className = 'match-pick-row' + (isLinked ? ' linked' : '');
       row.addEventListener('click', () => linkItem(bomItemId, supplierId, qi.id));
       const infoDiv = document.createElement('div'); infoDiv.style.cssText = 'flex:1;min-width:0';
@@ -579,7 +698,16 @@ function openMatchModal(bomItemId, supplierId) {
       const pv = document.createElement('div'); pv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600"; pv.textContent = fmtPrice(qi.price); priceDiv.appendChild(pv);
       const cv = document.createElement('div'); cv.style.cssText = 'font-size:10px;color:var(--muted)'; cv.textContent = qi.currency; priceDiv.appendChild(cv);
       row.appendChild(infoDiv); row.appendChild(priceDiv);
-      if (isLinked) { const badge = document.createElement('div'); badge.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:9px;color:var(--accent);letter-spacing:1px;white-space:nowrap'; badge.appendChild(licon('check', 10)); if (isSelectedSupp) badge.appendChild(document.createTextNode('SEL.')); row.appendChild(badge); }
+      if (isLinked) {
+        const badge = document.createElement('div'); badge.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:9px;color:var(--accent);letter-spacing:1px;white-space:nowrap';
+        badge.appendChild(licon('check', 10)); if (isSelectedSupp) badge.appendChild(document.createTextNode('SEL.')); row.appendChild(badge);
+      } else if (!hasAnyMatch) {
+        const addBtn = document.createElement('button'); addBtn.className = 'btn btn-ghost btn-sm';
+        addBtn.style.cssText = 'font-size:10px;padding:2px 7px;flex-shrink:0;margin-left:6px';
+        lbtn(addBtn, 'plus', 'BOM');
+        addBtn.addEventListener('click', e => { e.stopPropagation(); closeModal(); openAddToBomModal(bomItemId, supplierId, qi); });
+        row.appendChild(addBtn);
+      }
       listWrap.appendChild(row);
     }
     el.appendChild(listWrap);
