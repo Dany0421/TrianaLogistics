@@ -705,7 +705,7 @@ const API = {
     if (!supplierIds.length) return [];
     const { data, error } = await supabase
       .from('quotation_items')
-      .select('id, raw_description, raw_part_number, price, currency, created_at, supplier_id, item_matches(bom_items(category)), suppliers!inner(name, process_id, processes!inner(id, project_name, client_name))')
+      .select('id, raw_description, raw_part_number, price, currency, created_at, supplier_id, item_matches(bom_items(category, description, custom_description)), suppliers!inner(name, process_id, processes!inner(id, project_name, client_name))')
       .in('supplier_id', supplierIds)
       .order('created_at', { ascending: false });
     if (error) throw _sanitizeError(error);

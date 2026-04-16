@@ -409,6 +409,14 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
           span.className = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
           span.textContent = fmtPrice(price);
           const cSpan = document.createElement('span'); cSpan.style.cssText = 'font-size:9px;opacity:.7;margin-left:3px'; cSpan.textContent = currency; span.appendChild(cSpan);
+          const etaVal = m?.quotation_items?.eta_value || '';
+          const etaUnit = m?.quotation_items?.eta_unit || 'dias';
+          if (etaVal) {
+            const etaDiv = document.createElement('div');
+            etaDiv.style.cssText = `font-size:10px;margin-top:2px;color:${isSel ? 'var(--accent)' : 'var(--muted)'};font-family:'IBM Plex Mono',monospace`;
+            etaDiv.textContent = etaVal + ' ' + etaUnit;
+            span.appendChild(etaDiv);
+          }
         } else {
           span.className = 'comp-cell comp-cell-none'; span.textContent = '—';
         }

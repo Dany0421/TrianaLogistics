@@ -612,6 +612,8 @@ function openManualQuotEntry(supplierId) {
     price: qi.price,
     currency: qi.currency,
     discount: qi.discount || 0,
+    eta_value: qi.eta_value || '',
+    eta_unit: qi.eta_unit || 'dias',
   }));
   pendingQuotFile = null;
   openQuotationValModal(existing.length ? 'Editar Cotação' : 'Entrada Manual');
@@ -757,9 +759,16 @@ function openQuotationValModal(fileName, rawPdfText) {
   const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = fileName; el.appendChild(title);
   const sub = document.createElement('div'); sub.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:12px'; sub.textContent = `${pendingQuotItems.length} linha(s) detetada(s). Revê e confirma antes de guardar.`; el.appendChild(sub);
 
-  // Reset global discount control (per-item discounts already loaded from DB)
+  // Reset global discount + ETA controls (per-item values already loaded from DB)
   quotGlobalDiscount = 0;
-  pendingQuotItems.forEach(item => { if (item.discount == null) item.discount = 0; item._discountManual = false; });
+  quotGlobalEta = { value: '', unit: 'dias' };
+  pendingQuotItems.forEach(item => {
+    if (item.discount == null) item.discount = 0;
+    item._discountManual = false;
+    item._etaManual = false;
+    if (item.eta_value == null) item.eta_value = '';
+    if (item.eta_unit == null) item.eta_unit = 'dias';
+  });
 
   // Discount bar
   const discBar = document.createElement('div'); discBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
@@ -780,14 +789,43 @@ function openQuotationValModal(fileName, rawPdfText) {
   discBar.appendChild(discLabel); discBar.appendChild(discIn); discBar.appendChild(discPct); discBar.appendChild(resetDiscBtn);
   el.appendChild(discBar);
 
+  // ETA global bar
+  const etaBar = document.createElement('div'); etaBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
+  const etaLabel = document.createElement('label'); etaLabel.style.cssText = 'font-size:12px;color:var(--muted)'; etaLabel.textContent = 'ETA global';
+  const etaValIn = document.createElement('input'); etaValIn.type = 'text'; etaValIn.placeholder = '—'; etaValIn.value = ''; etaValIn.style.cssText = 'width:70px;padding:4px 6px;font-size:12px';
+  const etaGlobalUnitBtn = document.createElement('button');
+  etaGlobalUnitBtn.textContent = 'Dias'; etaGlobalUnitBtn.dataset.unit = 'dias';
+  etaGlobalUnitBtn.style.cssText = 'font-size:11px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-family:inherit';
+  etaGlobalUnitBtn.addEventListener('click', () => {
+    const next = etaGlobalUnitBtn.dataset.unit === 'dias' ? 'semanas' : 'dias';
+    etaGlobalUnitBtn.dataset.unit = next;
+    etaGlobalUnitBtn.textContent = next === 'dias' ? 'Dias' : 'Semanas';
+    quotGlobalEta.unit = next;
+    pendingQuotItems.forEach(item => { if (!item._etaManual) item.eta_unit = next; });
+    renderQuotValTable();
+  });
+  etaValIn.addEventListener('input', () => {
+    quotGlobalEta.value = etaValIn.value.trim();
+    pendingQuotItems.forEach(item => { if (!item._etaManual) { item.eta_value = quotGlobalEta.value; item.eta_unit = quotGlobalEta.unit; } });
+    renderQuotValTable();
+  });
+  const resetEtaBtn = document.createElement('button'); resetEtaBtn.className = 'btn btn-ghost btn-sm'; resetEtaBtn.textContent = 'Reset';
+  resetEtaBtn.onclick = function() {
+    quotGlobalEta = { value: '', unit: 'dias' }; etaValIn.value = ''; etaGlobalUnitBtn.dataset.unit = 'dias'; etaGlobalUnitBtn.textContent = 'Dias';
+    pendingQuotItems.forEach(item => { item.eta_value = ''; item.eta_unit = 'dias'; item._etaManual = false; });
+    renderQuotValTable();
+  };
+  etaBar.appendChild(etaLabel); etaBar.appendChild(etaValIn); etaBar.appendChild(etaGlobalUnitBtn); etaBar.appendChild(resetEtaBtn);
+  el.appendChild(etaBar);
+
   // Table (static thead, dynamic tbody populated by renderQuotValTable)
   const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
   const table = document.createElement('table'); table.className = 'bom-validate-table';
   table.insertAdjacentHTML('afterbegin', `<thead><tr>
-    <th style="width:10%">Part #</th><th style="width:45%">Descrição</th>
-    <th style="width:6%">Qty</th><th style="width:10%">Preço Unit.</th>
-    <th style="width:7%">Desc.%</th>
-    <th style="width:9%">Moeda</th><th style="width:13%"></th>
+    <th style="width:9%">Part #</th><th style="width:34%">Descrição</th>
+    <th style="width:5%">Qty</th><th style="width:10%">Preço Unit.</th>
+    <th style="width:6%">Desc.%</th>
+    <th style="width:10%">Moeda</th><th style="width:13%">ETA</th><th style="width:13%"></th>
   </tr></thead>`);
   const tbody = document.createElement('tbody'); tbody.id = 'quotValTbody'; table.appendChild(tbody);
   tableWrap.appendChild(table);
@@ -869,7 +907,7 @@ function renderQuotValTable() {
     // Qty
     const tdQty = document.createElement('td');
     const inQty = document.createElement('input');
-    inQty.type = 'number'; inQty.value = item.quantity; inQty.style.width = '100%';
+    inQty.type = 'text'; inQty.value = item.quantity; inQty.style.width = '100%';
     inQty.onchange = function() { pendingQuotItems[i].quantity = parseFloat(this.value) || 1; };
     tdQty.appendChild(inQty);
 
@@ -913,7 +951,7 @@ function renderQuotValTable() {
 
     // Moeda
     const tdCur = document.createElement('td');
-    const sel = document.createElement('select');
+    const sel = document.createElement('select'); sel.style.width = '100%';
     ['MZN','USD','EUR','ZAR'].forEach(c => {
       const opt = document.createElement('option');
       opt.value = c; opt.textContent = c;
@@ -923,6 +961,28 @@ function renderQuotValTable() {
     sel.onchange = function() { pendingQuotItems[i].currency = this.value; };
     tdCur.appendChild(sel);
 
+    // ETA
+    const tdEta = document.createElement('td'); tdEta.style.cssText = 'white-space:nowrap';
+    const etaWrap = document.createElement('div'); etaWrap.style.cssText = 'display:flex;align-items:center;gap:4px';
+    const etaIn = document.createElement('input');
+    etaIn.type = 'text'; etaIn.placeholder = '—'; etaIn.value = item.eta_value || '';
+    etaIn.style.cssText = 'width:48px;padding:3px 5px;font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:3px;color:var(--text)';
+    const etaUnitBtn = document.createElement('button');
+    const _etaUnit = item.eta_unit || 'dias';
+    etaUnitBtn.textContent = _etaUnit === 'dias' ? 'D' : 'S';
+    etaUnitBtn.dataset.unit = _etaUnit;
+    etaUnitBtn.style.cssText = 'font-size:10px;padding:2px 5px;background:var(--surface);border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-family:inherit';
+    etaUnitBtn.addEventListener('click', () => {
+      const next = etaUnitBtn.dataset.unit === 'dias' ? 'semanas' : 'dias';
+      etaUnitBtn.dataset.unit = next;
+      etaUnitBtn.textContent = next === 'dias' ? 'D' : 'S';
+      pendingQuotItems[i].eta_unit = next;
+      pendingQuotItems[i]._etaManual = true;
+    });
+    etaIn.addEventListener('change', () => { pendingQuotItems[i].eta_value = etaIn.value.trim(); pendingQuotItems[i]._etaManual = true; });
+    etaWrap.appendChild(etaIn); etaWrap.appendChild(etaUnitBtn);
+    tdEta.appendChild(etaWrap);
+
     // Delete
     const tdDel = document.createElement('td');
     const delBtn = document.createElement('button');
@@ -931,13 +991,13 @@ function renderQuotValTable() {
     tdDel.appendChild(delBtn);
 
     tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty);
-    tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdDel);
+    tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdEta); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
 }
 
 function addQuotRow() {
-  pendingQuotItems.push({ raw_part_number: null, raw_description: '', quantity: 1, price: 0, currency: 'MZN', discount: quotGlobalDiscount });
+  pendingQuotItems.push({ raw_part_number: null, raw_description: '', quantity: 1, price: 0, currency: 'MZN', discount: quotGlobalDiscount, eta_value: quotGlobalEta.value, eta_unit: quotGlobalEta.unit });
   renderQuotValTable();
 }
 
@@ -951,7 +1011,7 @@ async function confirmQuotation() {
     const idsToDelete = [...existingIds].filter(id => !keepIds.has(id));
     await API.updateQuotationItems(
       valid.map(i => {
-        const { _discountManual, ...rest } = i;
+        const { _discountManual, _etaManual, ...rest } = i;
         return { ...rest, supplier_id: currentQuotSuppId };
       }),
       idsToDelete
