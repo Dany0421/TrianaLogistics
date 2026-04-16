@@ -1,0 +1,13 @@
+# Claude Code / superpowers internals
+.claude/
+CLAUDE.md
+PROCUREMENT_SYSTEM.md
+docs/superpowers/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
