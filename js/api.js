@@ -118,6 +118,13 @@ const API = {
     return data;
   },
 
+  async updateBomItemsSortOrder(updates) {
+    // updates = [{id, sort_order}, ...]
+    if (!updates.length) return;
+    const { error } = await supabase.from('bom_items').upsert(updates, { onConflict: 'id' });
+    if (error) throw _sanitizeError(error);
+  },
+
   async getBomItems(processId, versionId = null) {
     let q = supabase.from('bom_items').select('*').eq('process_id', processId);
     if (versionId) q = q.eq('bom_version_id', versionId);

@@ -145,14 +145,33 @@ function generateReport() {
 
   const selItems = [];
   let equipTotal = 0;
+  const selectedBomIds = new Set(selectedOffers.map(o => o.bom_item_id));
+
+  // Selected offers
   for (const o of selectedOffers) {
     const bi = bomItems.find(b => b.id === o.bom_item_id);
     const qi = (quotationMap[o.supplier_id] || []).find(q => q.id === o.quotation_item_id);
-    if (!bi || !qi) continue;
-    const total = (qi.price || 0) * (bi.quantity || 1);
+    if (!bi || !qi || bi.is_service) continue;
+    const effP = (qi.price || 0) * (1 - ((qi.discount || 0) / 100));
+    const total = effP * (bi.quantity || 1);
     equipTotal += total;
-    selItems.push({ description: bi.description, part: bi.part_number || '-', qty: bi.quantity || 1,
-      supplier: suppLookup[o.supplier_id] || '-', unitPrice: qi.price || 0, totalPrice: total });
+    selItems.push({ description: bi.custom_description || bi.description, part: bi.part_number || '-', qty: bi.quantity || 1,
+      supplier: suppLookup[o.supplier_id] || '-', unitPrice: effP, totalPrice: total });
+  }
+
+  // Items with exactly 1 match (not selected)
+  for (const bi of bomItems) {
+    if (bi.is_service || selectedBomIds.has(bi.id)) continue;
+    const biMatches = matches.filter(m => m.bom_item_id === bi.id);
+    if (biMatches.length !== 1) continue;
+    const m = biMatches[0];
+    const qi = (quotationMap[m.supplier_id] || []).find(q => q.id === m.quotation_item_id);
+    if (!qi) continue;
+    const effP = (qi.price || 0) * (1 - ((qi.discount || 0) / 100));
+    const total = effP * (bi.quantity || 1);
+    equipTotal += total;
+    selItems.push({ description: bi.custom_description || bi.description, part: bi.part_number || '-', qty: bi.quantity || 1,
+      supplier: suppLookup[m.supplier_id] || '-', unitPrice: effP, totalPrice: total });
   }
 
   let installTotal = 0;
