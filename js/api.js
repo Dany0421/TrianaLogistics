@@ -32,17 +32,6 @@ function _sanitizeError(error) {
   return error;
 }
 
-/** Remove UI-only keys (e.g. _fromPdf) before insert/upsert — PostgREST rejects unknown columns. */
-function _quotationItemRowForDb(row) {
-  if (!row || typeof row !== 'object') return row;
-  const out = {};
-  for (const k of Object.keys(row)) {
-    if (k.startsWith('_')) continue;
-    out[k] = row[k];
-  }
-  return out;
-}
-
 const API = {
 
   // ── Processes ──
@@ -168,8 +157,7 @@ const API = {
 
   // ── Quotation Items ──
   async saveQuotationItems(items) {
-    const rows = items.map(_quotationItemRowForDb);
-    const { data, error } = await supabase.from('quotation_items').insert(rows).select();
+    const { data, error } = await supabase.from('quotation_items').insert(items).select();
     if (error) throw _sanitizeError(error);
     return data;
   },
@@ -207,13 +195,13 @@ const API = {
       if (error) throw _sanitizeError(error);
     }
     // Update items that already exist in DB (have an id)
-    const toUpsert = items.filter(i => i.id).map(_quotationItemRowForDb);
+    const toUpsert = items.filter(i => i.id);
     if (toUpsert.length > 0) {
       const { error } = await supabase.from('quotation_items').upsert(toUpsert, { onConflict: 'id' });
       if (error) throw _sanitizeError(error);
     }
     // Insert truly new items (no id yet)
-    const toInsert = items.filter(i => !i.id).map(({ id, ...rest }) => _quotationItemRowForDb(rest));
+    const toInsert = items.filter(i => !i.id).map(({ id, ...rest }) => rest);
     if (toInsert.length > 0) {
       const { error } = await supabase.from('quotation_items').insert(toInsert);
       if (error) throw _sanitizeError(error);
