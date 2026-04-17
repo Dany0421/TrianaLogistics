@@ -418,5 +418,9 @@ GRANT EXECUTE ON FUNCTION get_duration_estimates TO authenticated;
 -- ── Quotation discount ──
 ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS discount numeric DEFAULT 0;
 
+-- ── Quotation line ETA (lead time) ──
+ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS eta_value text DEFAULT '';
+ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS eta_unit text DEFAULT 'dias';
+
 -- ── item_matches: track last update time for last-write-wins propagation ──
 ALTER TABLE item_matches ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
