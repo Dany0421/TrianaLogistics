@@ -234,10 +234,14 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       lastCat = bi.category;
     }
     const selectedSuppId = selLookup[bi.id];
-    let lowestPrice = Infinity;
+    let lowestPriceMZN = Infinity;
     for (const s of suppliers) {
-      const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items);
-      if (p != null && p < lowestPrice) lowestPrice = p;
+      const _m = matchLookup[bi.id]?.[s.id];
+      if (_m?.match_type === 'included_in') continue;
+      const p = effPrice(_m?.quotation_items);
+      const rate = (s.is_foreign && s.cambio) ? s.cambio : 1;
+      const pMZN = p != null ? p * rate : null;
+      if (pMZN != null && pMZN < lowestPriceMZN) lowestPriceMZN = pMZN;
     }
     const row = tbody.insertRow();
 
@@ -268,25 +272,32 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     // Supplier cells
     for (const s of suppliers) {
       const m = matchLookup[bi.id]?.[s.id];
+      const isIncludedIn = m?.match_type === 'included_in';
       const isSel = selectedSuppId === s.id;
       const price = effPrice(m?.quotation_items);
-      const isLowest = price != null && price === lowestPrice && lowestPrice < Infinity;
+      const rate = (s.is_foreign && s.cambio) ? s.cambio : 1;
+      const priceMZN = price != null ? price * rate : null;
+      const isLowest = !isIncludedIn && priceMZN != null && priceMZN === lowestPriceMZN && lowestPriceMZN < Infinity;
       const tdSupp = row.insertCell();
       const cellDiv = document.createElement('div');
       let cls = 'match-cell';
-      if (m) { if (isSel) cls += ' match-selected'; else if (isLowest) cls += ' match-lowest'; }
+      if (m) { if (isIncludedIn) cls += ' match-incl'; else if (isSel) cls += ' match-selected'; else if (isLowest) cls += ' match-lowest'; }
       else cls += ' match-empty';
       cellDiv.className = cls;
       cellDiv.addEventListener('click', () => openMatchModal(bi.id, s.id));
       if (m) {
-        const currency = m.quotation_items?.currency || '';
-        const priceDiv = document.createElement('div');
-        priceDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600";
-        priceDiv.textContent = fmtPrice(price);
-        const currSpan = document.createElement('span'); currSpan.style.cssText = 'font-size:9px;opacity:.6;margin-left:2px'; currSpan.textContent = currency;
-        priceDiv.appendChild(currSpan); cellDiv.appendChild(priceDiv);
-        if (isSel) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px'; lbl.textContent = 'SELECIONADO'; cellDiv.appendChild(lbl); }
-        else if (isLowest) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#4fc3f7;letter-spacing:1px'; lbl.textContent = 'MAIS BAIXO'; cellDiv.appendChild(lbl); }
+        if (isIncludedIn) {
+          const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--muted);letter-spacing:1px'; lbl.textContent = 'INCL.'; cellDiv.appendChild(lbl);
+        } else {
+          const currency = m.quotation_items?.currency || '';
+          const priceDiv = document.createElement('div');
+          priceDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600";
+          priceDiv.textContent = fmtPrice(price);
+          const currSpan = document.createElement('span'); currSpan.style.cssText = 'font-size:9px;opacity:.6;margin-left:2px'; currSpan.textContent = currency;
+          priceDiv.appendChild(currSpan); cellDiv.appendChild(priceDiv);
+          if (isSel) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px'; lbl.textContent = 'SELECIONADO'; cellDiv.appendChild(lbl); }
+          else if (isLowest) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#4fc3f7;letter-spacing:1px'; lbl.textContent = 'MAIS BAIXO'; cellDiv.appendChild(lbl); }
+        }
       } else {
         cellDiv.textContent = '+';
       }
@@ -329,23 +340,29 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const matchCount = Object.keys(matchLookup[bi.id] || {}).length;
       const selectedSuppId = selLookup[bi.id];
       const isSelected = selectedSuppId === s.id;
-      const isOnlyMatch = matchCount === 1 && matchLookup[bi.id]?.[s.id] != null;
+      const thisMatch = matchLookup[bi.id]?.[s.id];
+      if (thisMatch?.match_type === 'included_in') return sum;
+      const isOnlyMatch = matchCount === 1 && thisMatch != null && thisMatch.match_type !== 'included_in';
       if (!isSelected && !isOnlyMatch) return sum;
-      const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items);
-      return sum + (p != null ? p : 0);
+      const p = effPrice(thisMatch?.quotation_items);
+      return sum + (p != null ? p * (bi.quantity || 1) : 0);
     }, 0);
   }
   const totalCovered = equipItems.reduce((sum, bi) => {
     const matchCount = Object.keys(matchLookup[bi.id] || {}).length;
     const selectedSuppId = selLookup[bi.id];
     if (selectedSuppId) {
-      const p = effPrice(matchLookup[bi.id]?.[selectedSuppId]?.quotation_items);
-      return sum + (p || 0);
+      const selMatch = matchLookup[bi.id]?.[selectedSuppId];
+      if (selMatch?.match_type === 'included_in') return sum;
+      const p = effPrice(selMatch?.quotation_items);
+      return sum + (p ? p * (bi.quantity || 1) : 0);
     }
     if (matchCount === 1) {
       const onlySuppId = Object.keys(matchLookup[bi.id])[0];
-      const p = effPrice(matchLookup[bi.id][onlySuppId]?.quotation_items);
-      return sum + (p || 0);
+      const onlyMatch = matchLookup[bi.id][onlySuppId];
+      if (onlyMatch?.match_type === 'included_in') return sum;
+      const p = effPrice(onlyMatch?.quotation_items);
+      return sum + (p ? p * (bi.quantity || 1) : 0);
     }
     return sum;
   }, 0);
@@ -404,18 +421,22 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
     } else {
       const dDiv = document.createElement('div'); dDiv.style.fontSize = '13px'; dDiv.textContent = bi.description; tdItem.appendChild(dDiv);
       if (bi.part_number) { const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv); }
-      let lowestPrice = Infinity;
-      for (const s of suppliers) { const p = effPrice(matchLookup[bi.id]?.[s.id]?.quotation_items); if (p != null && p < lowestPrice) lowestPrice = p; }
+      let lowestPriceMZN = Infinity;
+      for (const s of suppliers) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const p = effPrice(cm?.quotation_items); const r = (s.is_foreign && s.cambio) ? s.cambio : 1; const pMZN = p != null ? p * r : null; if (pMZN != null && pMZN < lowestPriceMZN) lowestPriceMZN = pMZN; }
       const selectedSuppId = selLookup[bi.id];
       for (const s of suppliers) {
         const m = matchLookup[bi.id]?.[s.id];
+        const isIncl = m?.match_type === 'included_in';
         const price = effPrice(m?.quotation_items);
         const currency = m?.quotation_items?.currency || '';
         const isSel = selectedSuppId === s.id;
-        const isLow = price != null && price === lowestPrice && lowestPrice < Infinity;
+        const rate = (s.is_foreign && s.cambio) ? s.cambio : 1;
+        const isLow = !isIncl && price != null && (price * rate) === lowestPriceMZN && lowestPriceMZN < Infinity;
         const td = row.insertCell();
         const span = document.createElement('span');
-        if (price != null) {
+        if (isIncl) {
+          span.className = 'comp-cell'; span.style.color = 'var(--muted)'; span.style.fontSize = '10px'; span.textContent = 'INCL.';
+        } else if (price != null) {
           span.className = isSel && isLow ? 'comp-cell comp-cell-both' : isSel ? 'comp-cell comp-cell-sel' : isLow ? 'comp-cell comp-cell-low' : 'comp-cell';
           span.textContent = fmtPrice(price);
           const cSpan = document.createElement('span'); cSpan.style.cssText = 'font-size:9px;opacity:.7;margin-left:3px'; cSpan.textContent = currency; span.appendChild(cSpan);
@@ -683,6 +704,14 @@ function openMatchModal(bomItemId, supplierId) {
     upBtn.addEventListener('click', () => { closeModal(); uploadQuotation(supplierId); });
     noQ.appendChild(upBtn);
     el.appendChild(noQ);
+  } else if (currentMatch?.match_type === 'included_in') {
+    const coveringBi = bomItems.find(b => b.id === currentMatch.included_in_bom_item_id);
+    const inclBanner = document.createElement('div');
+    inclBanner.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:16px';
+    const inclLbl = document.createElement('div'); inclLbl.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px"; inclLbl.textContent = 'INCLUÍDO EM';
+    const inclDesc = document.createElement('div'); inclDesc.style.cssText = 'font-size:13px;font-weight:600'; inclDesc.textContent = coveringBi?.description || '—';
+    inclBanner.appendChild(inclLbl); inclBanner.appendChild(inclDesc);
+    el.appendChild(inclBanner);
   } else {
     const qLabel = document.createElement('div'); qLabel.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px"; qLabel.textContent = 'SELECIONA UM ITEM DA COTAÇÃO'; el.appendChild(qLabel);
     const listWrap = document.createElement('div'); listWrap.style.cssText = 'max-height:300px;overflow-y:auto;margin-bottom:16px';
@@ -715,15 +744,69 @@ function openMatchModal(bomItemId, supplierId) {
 
   const actions = document.createElement('div'); actions.className = 'modal-actions';
   if (currentMatch) {
-    const selBtn = document.createElement('button'); selBtn.className = 'btn btn-ghost btn-sm'; lbtn(selBtn, 'check', 'Selecionar como melhor oferta');
-    selBtn.addEventListener('click', () => selectOffer(bomItemId, supplierId, currentMatch.quotation_item_id)); actions.appendChild(selBtn);
+    if (currentMatch.match_type !== 'included_in') {
+      const selBtn = document.createElement('button'); selBtn.className = 'btn btn-ghost btn-sm'; lbtn(selBtn, 'check', 'Selecionar como melhor oferta');
+      selBtn.addEventListener('click', () => selectOffer(bomItemId, supplierId, currentMatch.quotation_item_id)); actions.appendChild(selBtn);
+    }
     const rmBtn = document.createElement('button'); rmBtn.className = 'btn btn-danger btn-sm'; rmBtn.textContent = 'Remover';
     rmBtn.addEventListener('click', () => unlinkItem(bomItemId, supplierId, currentMatch.id)); actions.appendChild(rmBtn);
+  } else if (qItems.length) {
+    const inclBtn = document.createElement('button'); inclBtn.className = 'btn btn-ghost btn-sm'; lbtn(inclBtn, 'link-2', 'Incluído noutro item');
+    inclBtn.addEventListener('click', () => { closeModal(); openIncludedInModal(bomItemId, supplierId); }); actions.appendChild(inclBtn);
   }
   const closeBtn = document.createElement('button'); closeBtn.className = 'btn btn-ghost'; closeBtn.textContent = 'Fechar'; closeBtn.addEventListener('click', closeModal); actions.appendChild(closeBtn);
   el.appendChild(actions);
 
   showModal(el);
+}
+
+function openIncludedInModal(bomItemId, supplierId) {
+  const bi = bomItems.find(b => b.id === bomItemId);
+  const s  = suppliers.find(x => x.id === supplierId);
+  const el = document.createElement('div');
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = s?.name || ''; el.appendChild(tag);
+  const title = document.createElement('div'); title.className = 'modal-title'; title.style.cssText = 'font-size:14px;margin-bottom:4px'; title.textContent = bi?.description || ''; el.appendChild(title);
+  const sub = document.createElement('div'); sub.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:16px'; sub.textContent = 'O preço deste item está incluído na linha de outro item deste fornecedor.'; el.appendChild(sub);
+
+  const selWrap = document.createElement('div'); selWrap.style.marginBottom = '16px';
+  const selLbl = document.createElement('label'); selLbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);margin-bottom:4px'; selLbl.textContent = 'Coberto por';
+  const sel = document.createElement('select'); sel.style.width = '100%';
+  const hasSuppMatch = id => matches.some(m => m.bom_item_id === id && m.supplier_id === supplierId && m.match_type !== 'included_in');
+  bomItems.filter(b => !b.is_service && b.id !== bomItemId).forEach(b => {
+    const o = document.createElement('option'); o.value = b.id;
+    o.textContent = (b.description || '—') + (b.part_number ? '  [' + b.part_number + ']' : '') + (hasSuppMatch(b.id) ? '  ✓' : '');
+    sel.appendChild(o);
+  });
+  selWrap.appendChild(selLbl); selWrap.appendChild(sel); el.appendChild(selWrap);
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  const confirmBtn = document.createElement('button'); confirmBtn.className = 'btn btn-primary'; lbtn(confirmBtn, 'link-2', 'Confirmar');
+  confirmBtn.addEventListener('click', async () => {
+    if (!sel.value) return;
+    confirmBtn.disabled = true;
+    try { await saveIncludedIn(bomItemId, supplierId, sel.value); }
+    catch(e) { showToast('Erro: ' + e.message, true); confirmBtn.disabled = false; }
+  });
+  actions.appendChild(confirmBtn);
+  el.appendChild(actions);
+  showModal(el);
+}
+
+async function saveIncludedIn(bomItemId, supplierId, coveringBomItemId) {
+  await API.saveMatch({
+    process_id: processId,
+    bom_item_id: bomItemId,
+    supplier_id: supplierId,
+    quotation_item_id: null,
+    match_type: 'included_in',
+    confidence: 1,
+    included_in_bom_item_id: coveringBomItemId,
+  });
+  showToast('Item marcado como incluído.');
+  closeModal();
+  await loadMatchData();
+  renderMatchingTab();
 }
 
 async function linkItem(bomItemId, supplierId, quotItemId) {

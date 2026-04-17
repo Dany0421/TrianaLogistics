@@ -49,7 +49,7 @@ const API = {
   async getProcesses() {
     const { data, error } = await supabase
       .from('processes')
-      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id)')
+      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial:profiles!commercial_id(name, id)')
       .order('created_at', { ascending: false });
     if (error) throw _sanitizeError(error);
     return data;
@@ -58,11 +58,17 @@ const API = {
   async getProcess(id) {
     const { data, error } = await supabase
       .from('processes')
-      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id)')
+      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial:profiles!commercial_id(name, id)')
       .eq('id', id)
       .single();
     if (error) throw _sanitizeError(error);
     return data;
+  },
+
+  async getCommercialUsers() {
+    const { data, error } = await supabase.from('profiles').select('id, name').eq('role', 'commercial').order('name');
+    if (error) throw _sanitizeError(error);
+    return data || [];
   },
 
   async getProcurementUsers() {
@@ -236,7 +242,7 @@ const API = {
         const chunk = bomItemIds.slice(i, i + BATCH);
         const { data, error } = await supabase
           .from('item_matches')
-          .select('*, bom_items(*), quotation_items(*), suppliers(name)')
+          .select('*, bom_items!bom_item_id(*), quotation_items(*), suppliers(name)')
           .eq('process_id', processId)
           .in('bom_item_id', chunk);
         if (error) throw _sanitizeError(error);
@@ -246,7 +252,7 @@ const API = {
     }
     const { data, error } = await supabase
       .from('item_matches')
-      .select('*, bom_items(*), quotation_items(*), suppliers(name)')
+      .select('*, bom_items!bom_item_id(*), quotation_items(*), suppliers(name)')
       .eq('process_id', processId);
     if (error) throw _sanitizeError(error);
     return data || [];
@@ -724,7 +730,7 @@ const API = {
     if (!supplierIds.length) return [];
     const { data, error } = await supabase
       .from('quotation_items')
-      .select('id, raw_description, raw_part_number, price, currency, created_at, supplier_id, item_matches(bom_items(category, description, custom_description)), suppliers!inner(name, process_id, processes!inner(id, project_name, client_name))')
+      .select('id, raw_description, raw_part_number, price, currency, created_at, supplier_id, item_matches(bom_items!bom_item_id(category, description, custom_description)), suppliers!inner(name, process_id, processes!inner(id, project_name, client_name))')
       .in('supplier_id', supplierIds)
       .order('created_at', { ascending: false });
     if (error) throw _sanitizeError(error);
@@ -751,7 +757,7 @@ const API = {
   async searchPriceHistory(query, dateFrom) {
     let q = supabase
       .from('quotation_items')
-      .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, processes(id, project_name, client_name)), item_matches(bom_items(description, part_number, custom_description))')
+      .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, processes(id, project_name, client_name)), item_matches(bom_items!bom_item_id(description, part_number, custom_description))')
       .order('created_at', { ascending: false });
     if (dateFrom) q = q.gte('created_at', dateFrom);
     // Server-side filter on first word to cut down rows before transfer

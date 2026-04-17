@@ -152,11 +152,14 @@ function generateReport() {
     const bi = bomItems.find(b => b.id === o.bom_item_id);
     const qi = (quotationMap[o.supplier_id] || []).find(q => q.id === o.quotation_item_id);
     if (!bi || !qi || bi.is_service) continue;
+    const matchForOffer = matches.find(m => m.bom_item_id === o.bom_item_id && m.supplier_id === o.supplier_id);
+    if (matchForOffer?.match_type === 'included_in') continue;
     const effP = (qi.price || 0) * (1 - ((qi.discount || 0) / 100));
     const total = effP * (bi.quantity || 1);
     equipTotal += total;
+    const eta1 = qi.eta_value ? (qi.eta_value + ' ' + (qi.eta_unit || 'dias')) : '';
     selItems.push({ description: bi.custom_description || bi.description, part: bi.part_number || '-', qty: bi.quantity || 1,
-      supplier: suppLookup[o.supplier_id] || '-', unitPrice: effP, totalPrice: total });
+      supplier: suppLookup[o.supplier_id] || '-', unitPrice: effP, totalPrice: total, eta: eta1 });
   }
 
   // Items with exactly 1 match (not selected)
@@ -165,13 +168,15 @@ function generateReport() {
     const biMatches = matches.filter(m => m.bom_item_id === bi.id);
     if (biMatches.length !== 1) continue;
     const m = biMatches[0];
+    if (m.match_type === 'included_in') continue;
     const qi = (quotationMap[m.supplier_id] || []).find(q => q.id === m.quotation_item_id);
     if (!qi) continue;
     const effP = (qi.price || 0) * (1 - ((qi.discount || 0) / 100));
     const total = effP * (bi.quantity || 1);
     equipTotal += total;
+    const eta2 = qi.eta_value ? (qi.eta_value + ' ' + (qi.eta_unit || 'dias')) : '';
     selItems.push({ description: bi.custom_description || bi.description, part: bi.part_number || '-', qty: bi.quantity || 1,
-      supplier: suppLookup[m.supplier_id] || '-', unitPrice: effP, totalPrice: total });
+      supplier: suppLookup[m.supplier_id] || '-', unitPrice: effP, totalPrice: total, eta: eta2 });
   }
 
   let installTotal = 0;
@@ -245,13 +250,14 @@ function generateReport() {
   }
 
   if (selItems.length) {
+    const hasEta = selItems.some(it => it.eta);
     html += '<h2>Precos Seleccionados</h2>';
-    html += '<table><thead><tr><th>Item</th><th>Part Number</th><th>Fornecedor</th><th class="r">Qtd</th><th class="r">Preco Unit.</th><th class="r">Total</th></tr></thead><tbody>';
+    html += '<table><thead><tr><th>Item</th><th>Part Number</th><th>Fornecedor</th><th class="r">Qtd</th><th class="r">Preco Unit.</th><th class="r">Total</th>' + (hasEta ? '<th>ETA</th>' : '') + '</tr></thead><tbody>';
     for (var ii = 0; ii < selItems.length; ii++) {
       var it = selItems[ii];
-      html += '<tr><td>' + esc(it.description) + '</td><td class="m">' + esc(it.part) + '</td><td class="m">' + esc(it.supplier) + '</td><td class="r">' + it.qty + '</td><td class="r">' + fmt(it.unitPrice) + '</td><td class="r">' + fmt(it.totalPrice) + '</td></tr>';
+      html += '<tr><td>' + esc(it.description) + '</td><td class="m">' + esc(it.part) + '</td><td class="m">' + esc(it.supplier) + '</td><td class="r">' + it.qty + '</td><td class="r">' + fmt(it.unitPrice) + '</td><td class="r">' + fmt(it.totalPrice) + '</td>' + (hasEta ? '<td class="m">' + esc(it.eta || '—') + '</td>' : '') + '</tr>';
     }
-    html += '<tr class="total-row"><td colspan="5">Subtotal Equipamentos</td><td class="r">' + fmt(equipTotal) + '</td></tr>';
+    html += '<tr class="total-row"><td colspan="' + (hasEta ? 6 : 5) + '">Subtotal Equipamentos</td><td class="r">' + fmt(equipTotal) + '</td></tr>';
     html += '</tbody></table>';
   }
 
