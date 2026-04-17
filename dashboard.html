@@ -983,6 +983,7 @@ function openCreateModal(id = null) {
       return `<input type="hidden" id="f_assigned" value="">`;
     })()}
     <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto — opcional)</span></label><div class="tag-input-box" id="f_catBox"></div></div>
+    <div class="form-row"><label>Comercial responsável</label><input type="text" id="f_commercial" placeholder="Nome do comercial" value="${esc(p?.commercial_name||'')}"></div>
     <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observações..."></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -1011,6 +1012,7 @@ async function saveProcess() {
     deadline:     document.getElementById('f_deadline').value || null,
     priority:     document.getElementById('f_priority').value || null,
     notes:        document.getElementById('f_notes').value.trim(),
+    commercial_name: document.getElementById('f_commercial')?.value.trim() || null,
     categories:   pendingProcessCategories,
   };
   const statusEl = document.getElementById('f_status');

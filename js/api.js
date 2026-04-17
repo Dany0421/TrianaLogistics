@@ -49,7 +49,7 @@ const API = {
   async getProcesses() {
     const { data, error } = await supabase
       .from('processes')
-      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial:profiles!commercial_id(name, id)')
+      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial_name')
       .order('created_at', { ascending: false });
     if (error) throw _sanitizeError(error);
     return data;
@@ -58,17 +58,11 @@ const API = {
   async getProcess(id) {
     const { data, error } = await supabase
       .from('processes')
-      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial:profiles!commercial_id(name, id)')
+      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial_name')
       .eq('id', id)
       .single();
     if (error) throw _sanitizeError(error);
     return data;
-  },
-
-  async getCommercialUsers() {
-    const { data, error } = await supabase.from('profiles').select('id, name').eq('role', 'commercial').order('name');
-    if (error) throw _sanitizeError(error);
-    return data || [];
   },
 
   async getProcurementUsers() {
@@ -136,10 +130,12 @@ const API = {
   },
 
   async updateBomItemsSortOrder(updates) {
-    // updates = [{id, sort_order}, ...]
     if (!updates.length) return;
-    const { error } = await supabase.from('bom_items').upsert(updates, { onConflict: 'id' });
-    if (error) throw _sanitizeError(error);
+    const results = await Promise.all(
+      updates.map(u => supabase.from('bom_items').update({ sort_order: u.sort_order }).eq('id', u.id))
+    );
+    const err = results.find(r => r.error);
+    if (err) throw _sanitizeError(err.error);
   },
 
   async getBomItems(processId, versionId = null) {

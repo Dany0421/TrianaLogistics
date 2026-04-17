@@ -192,11 +192,11 @@ function renderHeader() {
     dl.appendChild(document.createTextNode('\u00a0' + fmtDate(process.deadline)));
     meta.appendChild(dl);
   }
-  if (process.commercial?.name) {
+  if (process.commercial_name) {
     const cm = document.createElement('span');
     cm.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 9px";
     cm.title = 'Comercial responsável';
-    cm.textContent = process.commercial.name;
+    cm.textContent = process.commercial_name;
     meta.appendChild(cm);
   }
   if (assigneeName) {
@@ -360,22 +360,14 @@ async function openEditModal() {
   el.querySelector('#ep_cancel').addEventListener('click', closeModal);
   el.querySelector('#ep_save').addEventListener('click', saveEditProcess);
 
-  // Commercial responsible dropdown
+  // Commercial responsible text input
   const commRow = document.createElement('div'); commRow.className = 'form-row'; commRow.style.marginBottom = '12px';
   const commLbl = document.createElement('label'); commLbl.textContent = 'Comercial responsável';
-  const commSel = document.createElement('select'); commSel.id = 'ep_commercial'; commSel.style.width = '100%';
-  const noneOpt = document.createElement('option'); noneOpt.value = ''; noneOpt.textContent = '— Nenhum —'; commSel.appendChild(noneOpt);
-  commRow.appendChild(commLbl); commRow.appendChild(commSel);
+  const commInp = document.createElement('input'); commInp.type = 'text'; commInp.id = 'ep_commercial';
+  commInp.placeholder = 'Nome do comercial'; commInp.style.width = '100%';
+  commInp.value = p.commercial_name || '';
+  commRow.appendChild(commLbl); commRow.appendChild(commInp);
   el.querySelector('.modal-actions').before(commRow);
-
-  try {
-    const commercials = await API.getCommercialUsers();
-    commercials.forEach(u => {
-      const o = document.createElement('option'); o.value = u.id; o.textContent = u.name;
-      if (u.id === p.commercial?.id) o.selected = true;
-      commSel.appendChild(o);
-    });
-  } catch(_) { /* non-critical — dropdown stays empty */ }
 
   showModal(el);
   renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
@@ -389,7 +381,7 @@ async function saveEditProcess() {
     priority:        document.getElementById('ep_priority').value,
     notes:           document.getElementById('ep_notes').value.trim(),
     categories:      pendingProcessCategories,
-    commercial_id:   document.getElementById('ep_commercial')?.value || null,
+    commercial_name: document.getElementById('ep_commercial')?.value.trim() || null,
   };
   const epStatusVal = document.getElementById('ep_status').value;
   if (epStatusVal === '__custom__' || !STANDARD_STATUSES.includes(epStatusVal)) {

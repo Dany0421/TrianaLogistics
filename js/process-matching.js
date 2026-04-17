@@ -127,6 +127,14 @@ function renderMatchingTab() {
 }
 
 function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems) {
+  const includedByLookup = {};
+  for (const m of matches) {
+    if (m.match_type === 'included_in' && m.included_in_bom_item_id) {
+      const key = m.included_in_bom_item_id + '_' + m.supplier_id;
+      if (!includedByLookup[key]) includedByLookup[key] = [];
+      includedByLookup[key].push(m);
+    }
+  }
   // Stats bar
   const statsDiv = document.createElement('div');
   statsDiv.style.cssText = 'display:flex;align-items:center;gap:20px;margin-bottom:20px;flex-wrap:wrap';
@@ -297,6 +305,11 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
           priceDiv.appendChild(currSpan); cellDiv.appendChild(priceDiv);
           if (isSel) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px'; lbl.textContent = 'SELECIONADO'; cellDiv.appendChild(lbl); }
           else if (isLowest) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#4fc3f7;letter-spacing:1px'; lbl.textContent = 'MAIS BAIXO'; cellDiv.appendChild(lbl); }
+          const inclItems = includedByLookup[bi.id + '_' + s.id] || [];
+          for (const im of inclItems) {
+            const inclBi = bomItems.find(b => b.id === im.bom_item_id);
+            if (inclBi) { const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px'; d.textContent = '+ ' + (inclBi.description || '?'); cellDiv.appendChild(d); }
+          }
         }
       } else {
         cellDiv.textContent = '+';
@@ -329,6 +342,14 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
 
 function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems) {
   const hasServices = serviceItems.length > 0;
+  const includedByLookup = {};
+  for (const m of matches) {
+    if (m.match_type === 'included_in' && m.included_in_bom_item_id) {
+      const key = m.included_in_bom_item_id + '_' + m.supplier_id;
+      if (!includedByLookup[key]) includedByLookup[key] = [];
+      includedByLookup[key].push(m);
+    }
+  }
   const numCols = suppliers.length + (hasServices ? 1 : 0);
 
   const suppCoverage = {};
@@ -447,6 +468,11 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
             etaDiv.style.cssText = `font-size:10px;margin-top:2px;color:${isSel ? 'var(--accent)' : 'var(--muted)'};font-family:'IBM Plex Mono',monospace`;
             etaDiv.textContent = etaVal + ' ' + etaUnit;
             span.appendChild(etaDiv);
+          }
+          const inclItems = includedByLookup[bi.id + '_' + s.id] || [];
+          for (const im of inclItems) {
+            const inclBi = bomItems.find(b => b.id === im.bom_item_id);
+            if (inclBi) { const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px'; d.textContent = '+ ' + (inclBi.description || '?'); span.appendChild(d); }
           }
         } else {
           span.className = 'comp-cell comp-cell-none'; span.textContent = '—';
@@ -772,9 +798,9 @@ function openIncludedInModal(bomItemId, supplierId) {
   const selLbl = document.createElement('label'); selLbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);margin-bottom:4px'; selLbl.textContent = 'Coberto por';
   const sel = document.createElement('select'); sel.style.width = '100%';
   const hasSuppMatch = id => matches.some(m => m.bom_item_id === id && m.supplier_id === supplierId && m.match_type !== 'included_in');
-  bomItems.filter(b => !b.is_service && b.id !== bomItemId).forEach(b => {
+  bomItems.filter(b => !b.is_service && b.id !== bomItemId && hasSuppMatch(b.id)).forEach(b => {
     const o = document.createElement('option'); o.value = b.id;
-    o.textContent = (b.description || '—') + (b.part_number ? '  [' + b.part_number + ']' : '') + (hasSuppMatch(b.id) ? '  ✓' : '');
+    o.textContent = (b.description || '—') + (b.part_number ? '  [' + b.part_number + ']' : '');
     sel.appendChild(o);
   });
   selWrap.appendChild(selLbl); selWrap.appendChild(sel); el.appendChild(selWrap);
