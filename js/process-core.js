@@ -192,6 +192,13 @@ function renderHeader() {
     dl.appendChild(document.createTextNode('\u00a0' + fmtDate(process.deadline)));
     meta.appendChild(dl);
   }
+  if (process.commercial?.name) {
+    const cm = document.createElement('span');
+    cm.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 9px";
+    cm.title = 'Comercial responsável';
+    cm.textContent = process.commercial.name;
+    meta.appendChild(cm);
+  }
   if (assigneeName) {
     const as = document.createElement('span');
     as.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);border-radius:4px;padding:2px 9px";
@@ -278,7 +285,7 @@ async function loadDurationEstimate() {
 }
 
 // ── Edit process modal ──
-function openEditModal() {
+async function openEditModal() {
   const p = process;
   pendingProcessCategories = [...(p.categories || [])];
 
@@ -353,18 +360,36 @@ function openEditModal() {
   el.querySelector('#ep_cancel').addEventListener('click', closeModal);
   el.querySelector('#ep_save').addEventListener('click', saveEditProcess);
 
+  // Commercial responsible dropdown
+  const commRow = document.createElement('div'); commRow.className = 'form-row'; commRow.style.marginBottom = '12px';
+  const commLbl = document.createElement('label'); commLbl.textContent = 'Comercial responsável';
+  const commSel = document.createElement('select'); commSel.id = 'ep_commercial'; commSel.style.width = '100%';
+  const noneOpt = document.createElement('option'); noneOpt.value = ''; noneOpt.textContent = '— Nenhum —'; commSel.appendChild(noneOpt);
+  commRow.appendChild(commLbl); commRow.appendChild(commSel);
+  el.querySelector('.modal-actions').before(commRow);
+
+  try {
+    const commercials = await API.getCommercialUsers();
+    commercials.forEach(u => {
+      const o = document.createElement('option'); o.value = u.id; o.textContent = u.name;
+      if (u.id === p.commercial?.id) o.selected = true;
+      commSel.appendChild(o);
+    });
+  } catch(_) { /* non-critical — dropdown stays empty */ }
+
   showModal(el);
   renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
 }
 
 async function saveEditProcess() {
   const fields = {
-    client_name:  document.getElementById('ep_client').value.trim(),
-    project_name: document.getElementById('ep_project').value.trim(),
-    deadline:     document.getElementById('ep_deadline').value || null,
-    priority:     document.getElementById('ep_priority').value,
-    notes:        document.getElementById('ep_notes').value.trim(),
-    categories:   pendingProcessCategories,
+    client_name:     document.getElementById('ep_client').value.trim(),
+    project_name:    document.getElementById('ep_project').value.trim(),
+    deadline:        document.getElementById('ep_deadline').value || null,
+    priority:        document.getElementById('ep_priority').value,
+    notes:           document.getElementById('ep_notes').value.trim(),
+    categories:      pendingProcessCategories,
+    commercial_id:   document.getElementById('ep_commercial')?.value || null,
   };
   const epStatusVal = document.getElementById('ep_status').value;
   if (epStatusVal === '__custom__' || !STANDARD_STATUSES.includes(epStatusVal)) {

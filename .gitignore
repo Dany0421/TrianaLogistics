@@ -11,3 +11,5 @@ Thumbs.db
 # Editor
 .vscode/
 *.swp
+
+.env
