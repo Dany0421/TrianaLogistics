@@ -424,3 +424,33 @@ ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS eta_unit text DEFAULT 'dias
 
 -- ── item_matches: track last update time for last-write-wins propagation ──
 ALTER TABLE item_matches ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+-- ============================================================
+-- Updates applied 2026-04-17
+-- ============================================================
+
+-- ── rejected_automatch (criada via migration, aqui documentada) ──
+CREATE TABLE IF NOT EXISTS rejected_automatch (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  process_id uuid REFERENCES processes(id) ON DELETE CASCADE,
+  bom_item_id uuid REFERENCES bom_items(id) ON DELETE CASCADE,
+  supplier_id uuid REFERENCES suppliers(id) ON DELETE CASCADE,
+  quotation_item_id uuid REFERENCES quotation_items(id) ON DELETE CASCADE,
+  UNIQUE(process_id, bom_item_id, supplier_id, quotation_item_id)
+);
+ALTER TABLE rejected_automatch ENABLE ROW LEVEL SECURITY;
+-- RLS policies em security-patch-2.sql
+
+-- ── Custom description por item do BOM ──
+ALTER TABLE bom_items ADD COLUMN IF NOT EXISTS custom_description text;
+
+-- ── item_matches: suporte a match_type 'included_in' + referência ao item cobridor ──
+ALTER TABLE item_matches DROP CONSTRAINT IF EXISTS item_matches_match_type_check;
+ALTER TABLE item_matches ADD CONSTRAINT item_matches_match_type_check
+  CHECK (match_type IN ('auto', 'manual', 'included_in'));
+ALTER TABLE item_matches ADD COLUMN IF NOT EXISTS included_in_bom_item_id uuid
+  REFERENCES bom_items(id) ON DELETE SET NULL;
+
+-- ── Comercial responsável (texto livre, sem sistema de utilizadores) ──
+ALTER TABLE processes ADD COLUMN IF NOT EXISTS commercial_id uuid REFERENCES profiles(id) ON DELETE SET NULL;
+ALTER TABLE processes ADD COLUMN IF NOT EXISTS commercial_name text;
