@@ -579,12 +579,15 @@ const API = {
           const items = sourceQuotItems.filter(qi => qi.supplier_id === s.id);
           if (items.length) {
             const newQItems = items.map(qi => ({
-              supplier_id: newS.id,
-              part_number: qi.part_number,
-              price:       qi.price,
-              currency:    qi.currency,
-              unit:        qi.unit,
-              notes:       qi.notes,
+              supplier_id:      newS.id,
+              raw_part_number:  qi.raw_part_number,
+              raw_description:  qi.raw_description,
+              quantity:         qi.quantity,
+              price:            qi.price,
+              currency:         qi.currency,
+              discount:         qi.discount,
+              eta_value:        qi.eta_value,
+              eta_unit:         qi.eta_unit,
             }));
             const savedQ = await API.saveQuotationItems(newQItems);
             savedQ.forEach((nq, idx) => { quotItemMap[items[idx].id] = nq.id; });
