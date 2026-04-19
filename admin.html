@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:;">
 <title>Procurement System — Admin</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" integrity="sha384-Y1tzkgTMv0NgNIkhIaJiI9rqNrOLfosToPr6Bzp4XVIOvF1BUd7mNlUVPpo6G8lL" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js" integrity="sha384-+8nbzwDAyu5kAjqtR/XKxIgPHQD2TflvbZgeDZn5t3JP+OOogNH1jXnfel8ZAgzS" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="css/style.css">
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
@@ -103,15 +103,15 @@
 
     <!-- Tabs -->
     <div class="admin-tabs">
-      <button class="admin-tab active" id="tabUsers" onclick="switchTab('users')">Utilizadores</button>
-      <button class="admin-tab" id="tabLog" onclick="switchTab('log')">Registo de Atividade</button>
+      <button class="admin-tab active" id="tabUsers">Utilizadores</button>
+      <button class="admin-tab" id="tabLog">Registo de Atividade</button>
     </div>
 
     <!-- Section: Users -->
     <div id="sectionUsers">
       <div class="admin-header">
         <div class="admin-title">Utilizadores <span id="userCount"></span></div>
-        <button class="btn btn-ghost btn-sm" onclick="loadUsers()">Atualizar</button>
+        <button class="btn btn-ghost btn-sm" id="refreshUsersBtn">Atualizar</button>
       </div>
       <div class="user-table-header">
         <span>Nome</span><span>Email</span><span>Cargo</span><span>Último acesso</span><span></span>
@@ -125,11 +125,11 @@
         <div class="admin-title">Registo de Atividade <span id="logCount"></span></div>
       </div>
       <div class="log-filters">
-        <input type="text" id="filterProcess" placeholder="Pesquisar processo..." style="max-width:220px" oninput="onFilterChange()">
-        <select id="filterUser" onchange="onFilterChange()" style="max-width:200px">
+        <input type="text" id="filterProcess" placeholder="Pesquisar processo..." style="max-width:220px">
+        <select id="filterUser" style="max-width:200px">
           <option value="">Todos os utilizadores</option>
         </select>
-        <select id="filterType" onchange="onFilterChange()" style="max-width:200px">
+        <select id="filterType" style="max-width:200px">
           <option value="">Todos os eventos</option>
           <option value="process_changes">Processos</option>
           <option value="supplier_changes">Fornecedores</option>
@@ -137,7 +137,7 @@
           <option value="offer_selections">Ofertas</option>
           <option value="profile_changes">Perfis</option>
         </select>
-        <select id="filterDateRange" onchange="onDateRangeChange()" style="max-width:180px">
+        <select id="filterDateRange" style="max-width:180px">
           <option value="">Todo o período</option>
           <option value="week">Esta semana</option>
           <option value="month">Este mês</option>
@@ -145,22 +145,22 @@
           <option value="3months">Últimos 3 meses</option>
           <option value="custom">Personalizado...</option>
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="reloadLog()">Atualizar</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportPDF()" id="exportBtn"
+        <button class="btn btn-ghost btn-sm" id="refreshLogBtn">Atualizar</button>
+        <button class="btn btn-ghost btn-sm" id="exportBtn"
           style="border-color:rgba(16,185,129,.3);color:#34d399">Exportar PDF</button>
       </div>
       <div id="customDateWrap" style="display:none;margin-bottom:12px">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <input type="date" id="dateFrom" onchange="onFilterChange()" style="max-width:160px">
+          <input type="date" id="dateFrom" style="max-width:160px">
           <span style="color:var(--muted);font-size:12px">→</span>
-          <input type="date" id="dateTo" onchange="onFilterChange()" style="max-width:160px">
+          <input type="date" id="dateTo" style="max-width:160px">
         </div>
       </div>
       <div class="log-list" id="logList">
         <div class="empty-state"><span>A carregar...</span></div>
       </div>
       <div class="log-load-more" id="loadMoreWrap" style="display:none">
-        <button class="btn btn-ghost" onclick="loadMore()">Carregar mais</button>
+        <button class="btn btn-ghost" id="loadMoreBtn">Carregar mais</button>
       </div>
     </div>
 

@@ -669,3 +669,18 @@ window.addEventListener('load', async () => {
 
   loadUsers();
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('tabUsers').addEventListener('click', () => switchTab('users'));
+  document.getElementById('tabLog').addEventListener('click', () => switchTab('log'));
+  document.getElementById('refreshUsersBtn').addEventListener('click', loadUsers);
+  document.getElementById('filterProcess').addEventListener('input', onFilterChange);
+  document.getElementById('filterUser').addEventListener('change', onFilterChange);
+  document.getElementById('filterType').addEventListener('change', onFilterChange);
+  document.getElementById('filterDateRange').addEventListener('change', onDateRangeChange);
+  document.getElementById('refreshLogBtn').addEventListener('click', reloadLog);
+  document.getElementById('exportBtn').addEventListener('click', exportPDF);
+  document.getElementById('dateFrom').addEventListener('change', onFilterChange);
+  document.getElementById('dateTo').addEventListener('change', onFilterChange);
+  document.getElementById('loadMoreBtn').addEventListener('click', loadMore);
+});

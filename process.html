@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:; worker-src blob: https://unpkg.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:; worker-src blob: https://unpkg.com;">
 <title>Processo — Procurement System</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-<script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" integrity="sha384-Y1tzkgTMv0NgNIkhIaJiI9rqNrOLfosToPr6Bzp4XVIOvF1BUd7mNlUVPpo6G8lL" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js" integrity="sha384-+8nbzwDAyu5kAjqtR/XKxIgPHQD2TflvbZgeDZn5t3JP+OOogNH1jXnfel8ZAgzS" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" integrity="sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="css/style.css">
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
@@ -124,7 +124,7 @@
   <div class="main-area">
     <div class="page-content">
 
-    <div class="back-link" onclick="window.location.href='dashboard.html'">← Dashboard</div>
+    <div class="back-link">← Dashboard</div>
 
     <div class="process-header">
       <div class="process-title" id="procTitle">—</div>
@@ -140,9 +140,9 @@
       <div class="section-header">
         <span class="section-tag" id="bomVersionLabel">Sem BOM carregado</span>
         <div style="display:flex;gap:8px">
-          <input type="file" id="bomFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleBomUpload(this)">
-          <button class="btn btn-ghost btn-sm" onclick="openManualBomEntry()"><i data-lucide="pencil" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Manual</button>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bomFileInput').click()"><i data-lucide="folder-open" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Carregar BOM</button>
+          <input type="file" id="bomFileInput" accept=".xlsx,.xls" style="display:none">
+          <button class="btn btn-ghost btn-sm" id="openManualBomBtn"><i data-lucide="pencil" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Manual</button>
+          <button class="btn btn-ghost btn-sm" id="loadBomFileBtn"><i data-lucide="folder-open" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Carregar BOM</button>
         </div>
       </div>
       <div id="durationBanner" style="display:none"></div>
@@ -153,7 +153,7 @@
     <div id="tab-suppliers" class="tab-panel">
       <div class="section-header">
         <span class="section-tag" id="suppCount">0 fornecedores</span>
-        <button class="btn btn-ghost btn-sm" onclick="openSupplierModal()">+ Adicionar Fornecedor</button>
+        <button class="btn btn-ghost btn-sm" id="addSupplierBtn">+ Adicionar Fornecedor</button>
       </div>
       <div id="suggBanner"></div>
       <div id="suppliersContent"><div class="empty-state">Sem fornecedores.<br>Adiciona o primeiro fornecedor.</div></div>
@@ -169,8 +169,8 @@
       <div class="section-header">
         <span class="section-tag">Custos de Instalação / Técnicos / Serviços</span>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost btn-sm" onclick="generateReport()"><i data-lucide="file-text" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Relatório</button>
-          <button class="btn btn-primary btn-sm" onclick="generateExcel()">↓ Gerar Excel</button>
+          <button class="btn btn-ghost btn-sm" id="generateReportBtn"><i data-lucide="file-text" style="width:13px;height:13px;stroke-width:1.75;vertical-align:middle"></i> Relatório</button>
+          <button class="btn btn-primary btn-sm" id="generateExcelBtn">↓ Gerar Excel</button>
         </div>
       </div>
       <div id="install-content"></div>
@@ -181,7 +181,7 @@
 </div>
 
 <!-- hidden file input for quotation upload (shared) -->
-<input type="file" id="quotFileInput" accept=".xlsx,.xls,.pdf" style="display:none" onchange="handleQuotationUpload(this)">
+<input type="file" id="quotFileInput" accept=".xlsx,.xls,.pdf" style="display:none">
 
 <div id="toast"></div>
 <div id="modalRoot"></div>
@@ -192,6 +192,6 @@
 <script src="js/process-matching.js"></script>
 <script src="js/process-install.js"></script>
 <script src="js/process-excel.js"></script>
-<script>document.addEventListener('DOMContentLoaded', () => lucide.createIcons());</script>
+<script src="js/process-page.js"></script>
 </body>
 </html>
