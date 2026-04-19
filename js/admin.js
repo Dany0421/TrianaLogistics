@@ -412,8 +412,8 @@ function openPrintWindow(entries, { dateFrom, dateTo }) {
     const rowBg = i % 2 === 0 ? '#ffffff' : '#f8fafc';
     return '<tr style="background:' + rowBg + '">'
       + '<td style="padding:7px 10px;white-space:nowrap;color:#475569;font-size:10px">' + dateStr + '</td>'
-      + '<td style="padding:7px 10px;font-weight:600;color:#1e293b">' + actor + '</td>'
-      + '<td style="padding:7px 10px;color:#64748b;font-size:10px">' + role + '</td>'
+      + '<td style="padding:7px 10px;font-weight:600;color:#1e293b">' + esc(actor) + '</td>'
+      + '<td style="padding:7px 10px;color:#64748b;font-size:10px">' + esc(role) + '</td>'
       + '<td style="padding:7px 10px"><span style="display:inline-block;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:' + bc.bg + ';color:' + bc.color + '">' + bc.label + '</span></td>'
       + '<td style="padding:7px 10px;color:#334155">' + desc + '</td>'
       + '</tr>';

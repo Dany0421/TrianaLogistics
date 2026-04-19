@@ -750,7 +750,7 @@ function openCreateModal(id = null) {
       <div><label>Nome do Projeto</label><input id="f_project" value="" placeholder="Ex: Upgrade Server Room"></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Deadline</label><input type="date" id="f_deadline" value="${p?.deadline||''}"></div>
+      <div><label>Deadline</label><input type="date" id="f_deadline" value="${esc(p?.deadline||'')}"></div>
       <div><label>Prioridade</label>
         ${(p?.status === 'Closed' || p?.status === 'Cancelled')
           ? `<input type="hidden" id="f_priority" value=""><div style="padding:10px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:14px">\u2014</div>`
