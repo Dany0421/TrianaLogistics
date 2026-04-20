@@ -199,10 +199,11 @@ function renderHeader() {
     cm.textContent = process.commercial_name;
     meta.appendChild(cm);
   }
-  if (assigneeName) {
+  const procName = process.procurement_name || assigneeName;
+  if (procName) {
     const as = document.createElement('span');
     as.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);border-radius:4px;padding:2px 9px";
-    as.textContent = assigneeName;
+    as.textContent = procName;
     meta.appendChild(as);
   }
   const edBtn = document.createElement('button');
@@ -360,7 +361,7 @@ async function openEditModal() {
   el.querySelector('#ep_cancel').addEventListener('click', closeModal);
   el.querySelector('#ep_save').addEventListener('click', saveEditProcess);
 
-  // Commercial responsible text input
+  // Commercial + Procurement responsible text inputs
   const commRow = document.createElement('div'); commRow.className = 'form-row'; commRow.style.marginBottom = '12px';
   const commLbl = document.createElement('label'); commLbl.textContent = 'Comercial responsável';
   const commInp = document.createElement('input'); commInp.type = 'text'; commInp.id = 'ep_commercial';
@@ -368,6 +369,14 @@ async function openEditModal() {
   commInp.value = p.commercial_name || '';
   commRow.appendChild(commLbl); commRow.appendChild(commInp);
   el.querySelector('.modal-actions').before(commRow);
+
+  const procRow = document.createElement('div'); procRow.className = 'form-row'; procRow.style.marginBottom = '12px';
+  const procLbl = document.createElement('label'); procLbl.textContent = 'Procurement responsável';
+  const procInp = document.createElement('input'); procInp.type = 'text'; procInp.id = 'ep_procurement';
+  procInp.placeholder = 'Nome do responsável'; procInp.style.width = '100%';
+  procInp.value = p.procurement_name || p.assignee?.name || '';
+  procRow.appendChild(procLbl); procRow.appendChild(procInp);
+  el.querySelector('.modal-actions').before(procRow);
 
   showModal(el);
   renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
@@ -382,6 +391,7 @@ async function saveEditProcess() {
     notes:           document.getElementById('ep_notes').value.trim(),
     categories:      pendingProcessCategories,
     commercial_name: document.getElementById('ep_commercial')?.value.trim() || null,
+    procurement_name: document.getElementById('ep_procurement')?.value.trim() || null,
   };
   const epStatusVal = document.getElementById('ep_status').value;
   if (epStatusVal === '__custom__' || !STANDARD_STATUSES.includes(epStatusVal)) {
@@ -456,9 +466,9 @@ function fmtPrice(p) {
   return i.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + '.' + d;
 }
 function deadlineClass(d) { if (!d) return ''; const diff = (new Date(d)-new Date())/86400000; return diff < 0 ? 'overdue' : diff < 5 ? 'soon' : ''; }
-const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'];
+const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Closed','Cancelled'];
 function statusBadgeClass(s) {
-  const map = { 'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting','Partial responses':'badge-partial','Ready for Excel':'badge-ready','Closed':'badge-closed','Cancelled':'badge-cancelled' };
+  const map = { 'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting','Partial responses':'badge-partial','Ready for Excel':'badge-ready','Pending margin':'badge-pending-margin','Closed':'badge-closed','Cancelled':'badge-cancelled' };
   return map[s] || 'badge-active';
 }
 function applyStatusBadge(el, status, color) {

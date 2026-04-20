@@ -144,7 +144,8 @@ window.addEventListener('load', async () => {
   ]);
   renderStats();
   renderList();
-  if (hasRole('admin') && procUsers.length) {
+  const uniqueNames = [...new Set(allProcesses.map(p => p.procurement_name || p.assignee?.name).filter(Boolean))];
+  if (hasRole('admin') && uniqueNames.length) {
     const filterBar = document.querySelector('.filter-bar');
     const newBtn = filterBar?.querySelector('#createProcessBtn')?.parentElement;
     if (filterBar && newBtn) {
@@ -156,10 +157,10 @@ window.addEventListener('load', async () => {
       defaultOpt.value = '';
       defaultOpt.textContent = 'Todos os respons\u00e1veis';
       sel.appendChild(defaultOpt);
-      for (const u of procUsers) {
+      for (const name of uniqueNames) {
         const opt = document.createElement('option');
-        opt.value = u.id;
-        opt.textContent = u.name;
+        opt.value = name;
+        opt.textContent = name;
         sel.appendChild(opt);
       }
       filterBar.insertBefore(sel, newBtn);
@@ -197,8 +198,8 @@ function renderCharts(processes, topSuppliers) {
   Chart.defaults.borderColor = '#1a2235';
   Chart.defaults.font.family = "'Figtree', sans-serif";
 
-  const statuses = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'];
-  const statusColors = ['#2563eb','#f59e0b','#22d3ee','#10b981','#7c3aed','#64748b','#f87171'];
+  const statuses = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Closed','Cancelled'];
+  const statusColors = ['#2563eb','#f59e0b','#22d3ee','#10b981','#7c3aed','#f97316','#64748b','#f87171'];
   const statusCounts = statuses.map(s => processes.filter(p => p.status === s).length);
 
   const priorities = ['Low','Medium','High','Urgent'];
@@ -453,21 +454,24 @@ function renderStats() {
 
 function renderUserStats() {
   const section = document.getElementById('userStatsSection');
-  if (!section || !hasRole('admin') || !procUsers.length) { if (section) section.style.display = 'none'; return; }
+  const statNames = [...new Set(allProcesses.map(p => p.procurement_name || p.assignee?.name).filter(Boolean))];
+  if (!section || !hasRole('admin') || !statNames.length) { if (section) section.style.display = 'none'; return; }
 
   const openByUser = {};
   for (const p of allProcesses) {
-    if (!p.assigned_to || p.status === 'Closed' || p.status === 'Cancelled') continue;
-    openByUser[p.assigned_to] = (openByUser[p.assigned_to] || 0) + 1;
+    const name = p.procurement_name || p.assignee?.name;
+    if (!name || p.status === 'Closed' || p.status === 'Cancelled') continue;
+    openByUser[name] = (openByUser[name] || 0) + 1;
   }
 
   const avgByUser = {};
   for (const p of allProcesses) {
-    if (p.status !== 'Closed' || !p.closed_at || !p.assigned_to) continue;
+    const name = p.procurement_name || p.assignee?.name;
+    if (p.status !== 'Closed' || !p.closed_at || !name) continue;
     const hours = (new Date(p.closed_at) - new Date(p.created_at)) / 3600000;
     if (hours < 0 || hours > 730 * 24) continue;
-    if (!avgByUser[p.assigned_to]) avgByUser[p.assigned_to] = [];
-    avgByUser[p.assigned_to].push(hours);
+    if (!avgByUser[name]) avgByUser[name] = [];
+    avgByUser[name].push(hours);
   }
 
   section.style.display = '';
@@ -485,7 +489,7 @@ function renderUserStats() {
 
   const label = document.createElement('span');
   label.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.5px;text-transform:uppercase";
-  label.textContent = 'Carga por Respons\u00e1vel (' + procUsers.length + ')';
+  label.textContent = 'Carga por Respons\u00e1vel (' + statNames.length + ')';
 
   const grid = document.createElement('div');
   grid.className = 'stats-grid';
@@ -500,16 +504,16 @@ function renderUserStats() {
   toggleRow.appendChild(arrow);
   toggleRow.appendChild(label);
 
-  for (const u of procUsers) {
-    const open = openByUser[u.id] || 0;
-    const closedVals = avgByUser[u.id] || [];
+  for (const name of statNames) {
+    const open = openByUser[name] || 0;
+    const closedVals = avgByUser[name] || [];
     const card = document.createElement('div');
     card.className = 'stat-card';
     card.style.cursor = 'pointer';
-    card.title = 'Filtrar por ' + u.name;
+    card.title = 'Filtrar por ' + name;
     card.addEventListener('click', () => {
       const sel = document.getElementById('filterAssignee');
-      if (sel) { sel.value = u.id; renderList(); }
+      if (sel) { sel.value = name; renderList(); }
     });
 
     const numDiv = document.createElement('div');
@@ -519,7 +523,7 @@ function renderUserStats() {
 
     const labelDiv = document.createElement('div');
     labelDiv.className = 'stat-label';
-    labelDiv.textContent = u.name;
+    labelDiv.textContent = name;
 
     const subDiv = document.createElement('div');
     subDiv.style.cssText = "font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:4px";
@@ -583,11 +587,12 @@ function buildProcessRow(p) {
   const dl = document.createElement('span');
   dl.className = 'deadline-chip ' + deadlineClass(p.deadline);
   dl.textContent = p.deadline ? fmtDate(p.deadline) : '\u2014';
+  const procName = p.procurement_name || p.assignee?.name || null;
   let assigneeEl;
-  if (p.assignee) {
+  if (procName) {
     assigneeEl = document.createElement('span');
     assigneeEl.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);border-radius:4px;padding:2px 9px";
-    assigneeEl.textContent = p.assignee.name || '';
+    assigneeEl.textContent = procName;
   } else {
     assigneeEl = document.createElement('span');
     assigneeEl.style.cssText = 'font-size:11px;color:var(--muted)';
@@ -633,7 +638,7 @@ function renderList() {
   if (fs) list = list.filter(p => p.status === fs);
   if (fp) list = list.filter(p => p.priority === fp);
   const fa = document.getElementById('filterAssignee')?.value || '';
-  if (fa) list = list.filter(p => p.assigned_to === fa);
+  if (fa) list = list.filter(p => (p.procurement_name || p.assignee?.name || '') === fa);
 
   const activePart = list.filter(p => p.status !== 'Closed' && p.status !== 'Cancelled');
   const closedPart = list.filter(p => p.status === 'Closed' || p.status === 'Cancelled');
@@ -768,30 +773,7 @@ function openCreateModal(id = null) {
         <input type="text" id="f_custom_name" placeholder="Nome do estado" style="flex:1" value="${!STANDARD_STATUSES.includes(p.status)?esc(p.status):''}">
         <input type="color" id="f_custom_color" value="${p.status_color||'#2563eb'}" style="width:40px;height:36px;padding:2px;cursor:pointer">
       </div></div>` : ''}
-    ${(() => {
-      if (hasRole('admin')) {
-        return `<div class="form-row"><label>Respons\u00e1vel</label>
-          <select id="f_assigned">
-            <option value="">N\u00e3o atribu\u00eddo</option>
-            ${procUsers.map(u => `<option value="${u.id}" ${p?.assigned_to===u.id?'selected':''}>${esc(u.name||'')}</option>`).join('')}
-          </select></div>`;
-      }
-      if (p) {
-        const waited12h = !p.assigned_to && (Date.now() - new Date(p.created_at)) > 12 * 60 * 60 * 1000;
-        if (waited12h) {
-          return `<div class="form-row"><label>Respons\u00e1vel</label>
-            <select id="f_assigned">
-              <option value="">N\u00e3o atribu\u00eddo</option>
-              <option value="${currentUser.id}">Eu (${esc(currentProfile?.name || '')})</option>
-            </select></div>`;
-        }
-        if (p.assigned_to) {
-          return `<input type="hidden" id="f_assigned" value="">`;
-        }
-        return `<input type="hidden" id="f_assigned" value=""><div class="form-row" style="font-size:12px;color:var(--muted)">Respons\u00e1vel: <em>N\u00e3o atribu\u00eddo \u2014 auto-atribui\u00e7\u00e3o dispon\u00edvel ap\u00f3s 12h</em></div>`;
-      }
-      return `<input type="hidden" id="f_assigned" value="">`;
-    })()}
+    <div class="form-row"><label>Procurement respons\u00e1vel</label><input type="text" id="f_procurement" placeholder="Nome do respons\u00e1vel" value="${esc(p?.procurement_name || p?.assignee?.name || '')}"></div>
     <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto \u2014 opcional)</span></label><div class="tag-input-box" id="f_catBox"></div></div>
     <div class="form-row"><label>Comercial respons\u00e1vel</label><input type="text" id="f_commercial" placeholder="Nome do comercial" value="${esc(p?.commercial_name||'')}"></div>
     <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observa\u00e7\u00f5es..."></textarea></div>
@@ -808,8 +790,6 @@ function openCreateModal(id = null) {
   _fc('f_client', p?.client_name || '');
   _fc('f_project', p?.project_name || '');
   _fc('f_notes', p?.notes || '');
-  const fAssigned = document.getElementById('f_assigned');
-  if (fAssigned && p?.assigned_to && fAssigned.type === 'hidden') fAssigned.value = p.assigned_to;
   renderProcTagBox('f_catBox', pendingProcessCategories);
   const fStatusSel = document.getElementById('f_status');
   if (fStatusSel) {
@@ -827,6 +807,7 @@ async function saveProcess() {
     priority:     document.getElementById('f_priority').value || null,
     notes:        document.getElementById('f_notes').value.trim(),
     commercial_name: document.getElementById('f_commercial')?.value.trim() || null,
+    procurement_name: document.getElementById('f_procurement')?.value.trim() || null,
     categories:   pendingProcessCategories,
   };
   const statusEl = document.getElementById('f_status');
@@ -841,7 +822,6 @@ async function saveProcess() {
       fields.status_color = null;
     }
   }
-  fields.assigned_to = document.getElementById('f_assigned').value || null;
   if (fields.status === 'Closed' || fields.status === 'Cancelled') {
     if (fields.status === 'Closed') {
       const prev = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
@@ -850,29 +830,14 @@ async function saveProcess() {
     fields.priority = null;
   }
 
-  if (!editingProcessId) {
-    if (!fields.assigned_to) fields.status = 'Waiting for internal info';
-  } else {
-    const prev = allProcesses.find(x => x.id === editingProcessId);
-    if (!prev?.assigned_to && fields.assigned_to && !statusEl) {
-      fields.status = 'Active';
-    }
-  }
-
   if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto s\u00e3o obrigat\u00f3rios.', true); return; }
   if (fields.client_name.length > 200 || fields.project_name.length > 200) { showToast('Nome demasiado longo (m\u00e1x 200 caracteres).', true); return; }
   if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (m\u00e1x 5000 caracteres).', true); return; }
-  if (fields.assigned_to && !UUID_RE.test(fields.assigned_to)) { showToast('Erro interno: ID de utilizador inv\u00e1lido.', true); return; }
-  if (!hasRole('admin') && fields.assigned_to && fields.assigned_to !== currentUser.id) { showToast('N\u00e3o tens permiss\u00e3o para atribuir a outro utilizador.', true); return; }
 
   try {
     if (editingProcessId) {
-      const prevProc = allProcesses.find(x => x.id === editingProcessId);
       await API.updateProcess(editingProcessId, fields);
       showToast('Processo atualizado.');
-      if (fields.assigned_to && fields.assigned_to !== (prevProc?.assigned_to || null) && fields.assigned_to !== currentUser.id) {
-        try { await API.createNotification(fields.assigned_to, 'Processo atribu\u00eddo', `Foste atribu\u00eddo a "${fields.project_name}"`, editingProcessId); } catch(_) {}
-      }
     } else {
       const proc = await API.createProcess(fields);
       showToast('Processo criado.');
@@ -936,11 +901,8 @@ function openCloneModal(id) {
       </label>
     </div>
     <div class="form-row" style="margin-top:4px">
-      <label>Respons\u00e1vel (opcional)</label>
-      <select id="cl_assigned">
-        <option value="">N\u00e3o atribu\u00eddo</option>
-        ${procUsers.map(u => `<option value="${u.id}" ${p?.assigned_to===u.id?'selected':''}>${esc(u.name||'')}</option>`).join('')}
-      </select>
+      <label>Procurement respons\u00e1vel (opcional)</label>
+      <input type="text" id="cl_procurement" placeholder="Nome do respons\u00e1vel" value="${esc(p?.procurement_name || p?.assignee?.name || '')}">
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost">Cancelar</button>
@@ -987,7 +949,7 @@ async function doClone(sourceId) {
     status:   'Active',
     notes:    src.notes || null,
     deadline: null,
-    assigned_to: document.getElementById('cl_assigned').value || null,
+    procurement_name: document.getElementById('cl_procurement')?.value.trim() || null,
   };
 
   try {
@@ -1025,11 +987,11 @@ function deadlineClass(d) {
   if (diff < 5) return 'soon';
   return '';
 }
-const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Closed','Cancelled'];
+const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Closed','Cancelled'];
 function statusBadgeClass(s) {
   const map = {
     'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting',
-    'Partial responses':'badge-partial','Ready for Excel':'badge-ready','Closed':'badge-closed','Cancelled':'badge-cancelled'
+    'Partial responses':'badge-partial','Ready for Excel':'badge-ready','Pending margin':'badge-pending-margin','Closed':'badge-closed','Cancelled':'badge-cancelled'
   };
   return map[s] || 'badge-active';
 }

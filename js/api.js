@@ -49,7 +49,7 @@ const API = {
   async getProcesses() {
     const { data, error } = await supabase
       .from('processes')
-      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial_name')
+      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial_name, procurement_name')
       .order('created_at', { ascending: false });
     if (error) throw _sanitizeError(error);
     return data;
@@ -58,7 +58,7 @@ const API = {
   async getProcess(id) {
     const { data, error } = await supabase
       .from('processes')
-      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial_name')
+      .select('*, creator:profiles!created_by(name), assignee:profiles!assigned_to(name, id), commercial_name, procurement_name')
       .eq('id', id)
       .single();
     if (error) throw _sanitizeError(error);

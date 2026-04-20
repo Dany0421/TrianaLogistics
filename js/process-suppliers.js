@@ -1055,6 +1055,7 @@ async function confirmQuotation() {
       showToast(`${valid.length} itens de cotação guardados.`);
     }
     renderSuppliers();
+    await loadMatchData();
     renderMatchingTab();
   } catch(e) { showToast('Erro: ' + e.message, true); }
 }
