@@ -144,9 +144,9 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
   const priceTitle=document.createElement('div');priceTitle.className='section-title';priceTitle.style.cssText='margin-bottom:0;border-bottom:none;padding-bottom:0';priceTitle.textContent='Análise de Preços por Categoria';
 
   // Time filter
-  let _periodMonths=3;
+  let _periodMonths=1;
   const filterWrap=document.createElement('div');filterWrap.style.cssText='display:flex;gap:4px';
-  const _periodLabels=[['3M',3],['6M',6],['1A',12],['Todos',0]];
+  const _periodLabels=[['1M',1],['3M',3],['6M',6],['1A',12],['Todos',0]];
   const _filterBtns=[];
   function _applyPeriodFilter(){
     const cutoff=_periodMonths>0?new Date(Date.now()-_periodMonths*30*24*3600*1000):null;

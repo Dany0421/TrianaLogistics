@@ -454,3 +454,6 @@ ALTER TABLE item_matches ADD COLUMN IF NOT EXISTS included_in_bom_item_id uuid
 -- ── Comercial responsável (texto livre, sem sistema de utilizadores) ──
 ALTER TABLE processes ADD COLUMN IF NOT EXISTS commercial_id uuid REFERENCES profiles(id) ON DELETE SET NULL;
 ALTER TABLE processes ADD COLUMN IF NOT EXISTS commercial_name text;
+
+-- ── Procurement responsável (texto livre, sem FK a profiles) ──
+ALTER TABLE processes ADD COLUMN IF NOT EXISTS procurement_name text;
