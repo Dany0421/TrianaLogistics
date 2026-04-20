@@ -116,6 +116,10 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('load', async () => {
   const auth = await requireAuth('index.html');
   if (!auth) return;
+  // Bind early — do not wait for network; otherwise a hung/failed fetch blocks the button forever
+  const createBtn = document.getElementById('createProcessBtn');
+  if (createBtn) createBtn.addEventListener('click', () => openCreateModal());
+
   mountSidebar(document.getElementById('appSidebar'));
   const notifWrap = document.createElement('div');
   notifWrap.id = 'notifWrap';
@@ -167,9 +171,6 @@ window.addEventListener('load', async () => {
     try { renderFollowupAlerts(await API.getOverdueFollowups()); } catch(_) {}
   }
   try { await loadNotifications(); } catch(_) {}
-
-  // Bind + Novo Processo button (after DOM ready)
-  document.getElementById('createProcessBtn').addEventListener('click', openCreateModal);
 });
 
 async function loadProcesses() {
