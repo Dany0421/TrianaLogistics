@@ -405,6 +405,8 @@ function removeSupplierTag(type, idx) {
 
 // ── Supplier Modal ──
 function openSupplierModal(idx = null, prefill = {}) {
+  // If caller used addEventListener('click', openSupplierModal), idx is the MouseEvent — treat as new supplier
+  if (typeof idx === 'object' && idx !== null) idx = null;
   editingSupplierIdx = idx;
   const s = idx !== null ? suppliers[idx] : null;
   const gs = s ? globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase()) : null;

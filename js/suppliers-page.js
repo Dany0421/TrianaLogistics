@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const backLink = document.querySelector('.back-link');
   if (backLink) backLink.addEventListener('click', () => { window.location.href = 'dashboard.html'; });
   document.getElementById('reportBtn').addEventListener('click', exportSupplierReport);
-  document.getElementById('addBtn').addEventListener('click', openSupplierModal);
+  document.getElementById('addBtn').addEventListener('click', () => openSupplierModal());
   document.getElementById('searchInput').addEventListener('input', filterSuppliers);
   document.getElementById('clearBtn').addEventListener('click', clearSearch);
 });
