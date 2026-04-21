@@ -333,21 +333,20 @@ async function sendRFQ(supplierIdx) {
 
   const subject = 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
   const html = buildRFQHtml(selected, s.name);
-
-  try {
-    await navigator.clipboard.write([
-      new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })
-    ]);
-  } catch (e) {
-    showToast('Nao foi possivel copiar automaticamente.', true);
-    return;
-  }
-
   const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
   const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
+
+  // Kick off clipboard write but don't await — keeps user gesture fresh for mailto
+  // and avoids hang when document is not focused (Chrome behaviour).
+  const copyPromise = navigator.clipboard.write([
+    new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })
+  ]).then(() => true).catch(() => false);
+
   window.location.href = mailto;
   closeModal();
-  showToast('Email copiado — cola no body do email (Ctrl+V)');
+
+  const ok = await copyPromise;
+  showToast(ok ? 'Email copiado — cola no body do email (Ctrl+V)' : 'Email aberto, mas não foi possível copiar o conteúdo.', !ok);
 }
 
 function autoFillSupplierEmail(name) {
