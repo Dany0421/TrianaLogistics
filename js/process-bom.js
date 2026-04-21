@@ -1,3 +1,7 @@
+// Limits aligned with chk_bom_description_length / chk_bom_part_number_length (see sql/schema.sql & patches)
+const BOM_MAX_DESCRIPTION_LEN = 2000;
+const BOM_MAX_PART_LEN = 100;
+
 // ── BOM Diff ──
 function diffBom(oldItems, newItems) {
   const norm = s => (s||'').toLowerCase().replace(/\s+/g,' ').trim();
@@ -229,6 +233,7 @@ function renderBomValTable() {
     const tdPart = document.createElement('td');
     const inPart = document.createElement('input');
     inPart.type = 'text';
+    inPart.maxLength = BOM_MAX_PART_LEN;
     inPart.value = item.part_number == null ? '' : String(item.part_number);
     inPart.style.width = '100%';
     inPart.onchange = function() { pendingBomItems[i].part_number = this.value || null; };
@@ -238,6 +243,7 @@ function renderBomValTable() {
     const tdDesc = document.createElement('td');
     const inDesc = document.createElement('input');
     inDesc.type = 'text';
+    inDesc.maxLength = BOM_MAX_DESCRIPTION_LEN;
     inDesc.value = item.description || '';
     inDesc.style.width = '100%';
     inDesc.onchange = function() { pendingBomItems[i].description = this.value; };
@@ -323,6 +329,24 @@ function renderBomValTable() {
 
 async function confirmBom() {
   try {
+    for (let idx = 0; idx < pendingBomItems.length; idx++) {
+      const row = pendingBomItems[idx];
+      const desc = String(row.description ?? '');
+      if (desc.length > BOM_MAX_DESCRIPTION_LEN) {
+        showToast(`Linha ${idx + 1}: descrição com mais de ${BOM_MAX_DESCRIPTION_LEN} caracteres.`, true);
+        return;
+      }
+      const part = row.part_number != null ? String(row.part_number) : '';
+      if (part.length > BOM_MAX_PART_LEN) {
+        showToast(`Linha ${idx + 1}: referência com mais de ${BOM_MAX_PART_LEN} caracteres.`, true);
+        return;
+      }
+      const q = parseFloat(row.quantity);
+      if (!Number.isFinite(q) || q <= 0 || q >= 1000000) {
+        showToast(`Linha ${idx + 1}: quantidade inválida (use um número entre 0 e 1 000 000).`, true);
+        return;
+      }
+    }
 
     const versionNumber = (bomVersions[0]?.version_number || 0) + 1;
     let bomFilePath = null;
@@ -337,6 +361,10 @@ async function confirmBom() {
 
     const itemsToSave = pendingBomItems.map(({ _diffStatus, _oldId, _oldQty, ...item }, idx) => ({
       ...item,
+      description: String(item.description ?? '').slice(0, BOM_MAX_DESCRIPTION_LEN),
+      part_number: item.part_number != null && String(item.part_number).trim() !== ''
+        ? String(item.part_number).slice(0, BOM_MAX_PART_LEN)
+        : null,
       sort_order: idx,
       process_id: processId,
       bom_version_id: version.id,

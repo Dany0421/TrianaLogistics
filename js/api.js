@@ -24,8 +24,19 @@ function lbtn(el, name, label, size = 13) {
 function _sanitizeError(error) {
   if (!error) return new Error('Unknown error');
   const msg = error.message || String(error);
+  const lower = msg.toLowerCase();
+  // User-actionable BOM checks (Postgres check constraints — show real limit, not generic toast)
+  if (lower.includes('chk_bom_description_length')) {
+    return new Error('Descrição do item demasiado longa (máximo 2000 caracteres por linha do BOM).');
+  }
+  if (lower.includes('chk_bom_part_number_length')) {
+    return new Error('Referência (part number) demasiado longa (máximo 100 caracteres).');
+  }
+  if (lower.includes('chk_bom_quantity_range')) {
+    return new Error('Quantidade inválida (deve ser maior que 0 e inferior a 1 000 000).');
+  }
   const blocked = ['relation', 'column', 'constraint', 'pg_', 'auth.', 'storage.', 'schema'];
-  if (blocked.some(k => msg.toLowerCase().includes(k))) {
+  if (blocked.some(k => lower.includes(k))) {
     console.error('[API]', msg);
     return new Error('Operação não permitida.');
   }

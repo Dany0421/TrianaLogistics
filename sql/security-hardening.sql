@@ -102,7 +102,7 @@ DO $$ BEGIN
   ALTER TABLE suppliers ADD CONSTRAINT chk_direitos_range CHECK (direitos >= 0 AND direitos <= 100);
 
   ALTER TABLE bom_items DROP CONSTRAINT IF EXISTS chk_bom_description_length;
-  ALTER TABLE bom_items ADD CONSTRAINT chk_bom_description_length CHECK (char_length(description) <= 500);
+  ALTER TABLE bom_items ADD CONSTRAINT chk_bom_description_length CHECK (char_length(description) <= 2000);
   ALTER TABLE bom_items DROP CONSTRAINT IF EXISTS chk_bom_part_number_length;
   ALTER TABLE bom_items ADD CONSTRAINT chk_bom_part_number_length CHECK (part_number IS NULL OR char_length(part_number) <= 100);
   ALTER TABLE bom_items DROP CONSTRAINT IF EXISTS chk_bom_quantity_range;
