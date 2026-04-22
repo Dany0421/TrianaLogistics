@@ -455,6 +455,10 @@ ALTER TABLE item_matches ADD COLUMN IF NOT EXISTS included_in_bom_item_id uuid
 ALTER TABLE bom_items DROP CONSTRAINT IF EXISTS chk_bom_description_length;
 ALTER TABLE bom_items ADD CONSTRAINT chk_bom_description_length CHECK (char_length(description) <= 2000);
 
+-- ── Quotation line description (align with BOM / long supplier quote lines) ──
+ALTER TABLE quotation_items DROP CONSTRAINT IF EXISTS chk_quot_description_length;
+ALTER TABLE quotation_items ADD CONSTRAINT chk_quot_description_length CHECK (char_length(raw_description) <= 2000);
+
 -- ── Comercial responsável (texto livre, sem sistema de utilizadores) ──
 ALTER TABLE processes ADD COLUMN IF NOT EXISTS commercial_id uuid REFERENCES profiles(id) ON DELETE SET NULL;
 ALTER TABLE processes ADD COLUMN IF NOT EXISTS commercial_name text;

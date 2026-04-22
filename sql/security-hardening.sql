@@ -109,7 +109,7 @@ DO $$ BEGIN
   ALTER TABLE bom_items ADD CONSTRAINT chk_bom_quantity_range CHECK (quantity > 0 AND quantity < 1000000);
 
   ALTER TABLE quotation_items DROP CONSTRAINT IF EXISTS chk_quot_description_length;
-  ALTER TABLE quotation_items ADD CONSTRAINT chk_quot_description_length CHECK (char_length(raw_description) <= 500);
+  ALTER TABLE quotation_items ADD CONSTRAINT chk_quot_description_length CHECK (char_length(raw_description) <= 2000);
   ALTER TABLE quotation_items DROP CONSTRAINT IF EXISTS chk_quot_price_range;
   ALTER TABLE quotation_items ADD CONSTRAINT chk_quot_price_range CHECK (price >= 0 AND price < 1000000000);
   ALTER TABLE quotation_items DROP CONSTRAINT IF EXISTS chk_quot_currency;

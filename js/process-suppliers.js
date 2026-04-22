@@ -2,6 +2,8 @@
 let editingSupplierIdx = null;
 let pendingSupplierCategories = [];
 let pendingSupplierBrands = [];
+/** Aligned with chk_quot_description_length (see sql / security-hardening) */
+const QUOT_MAX_RAW_DESC_LEN = 2000;
 
 // ── Price Anomaly Detection ──
 async function checkPriceAnomalies(items) {
@@ -901,7 +903,9 @@ function renderQuotValTable() {
     // Descrição
     const tdDesc = document.createElement('td');
     const inDesc = document.createElement('input');
-    inDesc.type = 'text'; inDesc.value = item.raw_description; inDesc.style.width = '100%';
+    inDesc.type = 'text';
+    inDesc.maxLength = QUOT_MAX_RAW_DESC_LEN;
+    inDesc.value = item.raw_description; inDesc.style.width = '100%';
     inDesc.onchange = function() { pendingQuotItems[i].raw_description = this.value; };
     tdDesc.appendChild(inDesc);
 
@@ -1005,6 +1009,12 @@ function addQuotRow() {
 async function confirmQuotation() {
   const valid = pendingQuotItems.filter(i => i.raw_description.trim() && i.price > 0);
   if (!valid.length) { showToast('Adiciona pelo menos um item com preço.', true); return; }
+  for (let v = 0; v < valid.length; v++) {
+    if (String(valid[v].raw_description).length > QUOT_MAX_RAW_DESC_LEN) {
+      showToast(`Descrição com mais de ${QUOT_MAX_RAW_DESC_LEN} caracteres (linha ${v + 1} com preço).`, true);
+      return;
+    }
+  }
   try {
     const existingQ = quotationMap[currentQuotSuppId] || [];
     const existingIds = new Set(existingQ.map(e => e.id).filter(Boolean));
@@ -1013,7 +1023,11 @@ async function confirmQuotation() {
     await API.updateQuotationItems(
       valid.map(i => {
         const { _discountManual, _etaManual, ...rest } = i;
-        return { ...rest, supplier_id: currentQuotSuppId };
+        return {
+          ...rest,
+          supplier_id: currentQuotSuppId,
+          raw_description: String(rest.raw_description).slice(0, QUOT_MAX_RAW_DESC_LEN),
+        };
       }),
       idsToDelete
     );
