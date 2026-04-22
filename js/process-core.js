@@ -30,6 +30,7 @@ let currentQuotSuppId = null;
 let matchingView = 'matching'; // 'matching' | 'comparacao'
 let matchingFilter = 'all';   // 'all' | 'unmatched'
 let matchingSearch = '';       // text filter
+let showSupplierDescs = false; // comparação: toggle supplier raw_description under each price
 let supplierHistory = {}; // normalised name → { email, email_cc }
 let globalSuppliersList = [];
 let priceAnomalies = {};   // modal: itemIndex → { type, median, ratio }

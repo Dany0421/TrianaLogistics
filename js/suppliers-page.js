@@ -517,14 +517,18 @@ async function exportSupplierReport() {
     const rn = 5 + idx;
     const bg = idx % 2 === 0 ? 'FF111827' : 'FF0D1520';
     const row = ws.getRow(rn);
+    let maxLines = 1;
     vals.forEach((v, i) => {
       const c = row.getCell(i + 1);
       c.value = v;
       c.font = { size: 11, color: { argb: 'FFCDD5E0' } };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-      c.alignment = { vertical: 'middle', wrapText: false };
+      c.alignment = { vertical: 'middle', wrapText: true };
+      const colW = Math.max(colWidths[i] - 2, 1);
+      const lines = Math.max(1, Math.ceil(String(v || '').length / colW));
+      if (lines > maxLines) maxLines = lines;
     });
-    row.height = 20;
+    row.height = Math.max(20, maxLines * 15);
   });
 
   try {
