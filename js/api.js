@@ -35,6 +35,9 @@ function _sanitizeError(error) {
   if (lower.includes('chk_bom_quantity_range')) {
     return new Error('Quantidade inválida (deve ser maior que 0 e inferior a 1 000 000).');
   }
+  if (lower.includes('chk_quot_description_length')) {
+    return new Error('Descrição da linha de cotação demasiado longa (máximo 2000 caracteres).');
+  }
   const blocked = ['relation', 'column', 'constraint', 'pg_', 'auth.', 'storage.', 'schema'];
   if (blocked.some(k => lower.includes(k))) {
     console.error('[API]', msg);
@@ -43,6 +46,8 @@ function _sanitizeError(error) {
   return error;
 }
 
+const QUOT_MAX_RAW_DESC_LEN = 2000; // must match chk_quot_description_length in DB
+
 /** Strip client-only fields before quotation_items insert/upsert (PostgREST rejects unknown columns). */
 function _quotationItemRowForDb(row) {
   if (!row || typeof row !== 'object') return row;
@@ -50,6 +55,9 @@ function _quotationItemRowForDb(row) {
   for (const k of Object.keys(row)) {
     if (k.startsWith('_')) continue;
     out[k] = row[k];
+  }
+  if (out.raw_description != null) {
+    out.raw_description = String(out.raw_description).slice(0, QUOT_MAX_RAW_DESC_LEN);
   }
   return out;
 }
