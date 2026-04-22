@@ -407,6 +407,16 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   if (serviceTotal > 0) statsDiv.appendChild(makeStatBlock('SERVIÇOS TRIANA', fmtPrice(serviceTotal), 'var(--warn)'));
   el.appendChild(statsDiv);
 
+  // ── Controls: toggle supplier descriptions ──
+  const controlsRow = document.createElement('div');
+  controlsRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap';
+  const descBtn = document.createElement('button');
+  descBtn.className = 'btn btn-sm' + (showSupplierDescs ? ' btn-primary' : ' btn-ghost');
+  descBtn.textContent = (showSupplierDescs ? '✓ ' : '') + 'Mostrar descrições';
+  descBtn.addEventListener('click', () => { showSupplierDescs = !showSupplierDescs; renderMatchingTab(); });
+  controlsRow.appendChild(descBtn);
+  el.appendChild(controlsRow);
+
   // Comp table
   const compWrap = document.createElement('div'); compWrap.className = 'comp-wrap';
   const table = document.createElement('table'); table.className = 'comp-table';
@@ -473,6 +483,20 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
           for (const im of inclItems) {
             const inclBi = bomItems.find(b => b.id === im.bom_item_id);
             if (inclBi) { const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px'; d.textContent = '+ ' + (inclBi.description || '?'); span.appendChild(d); }
+          }
+          if (showSupplierDescs) {
+            const rawText = (m?.quotation_items?.raw_description || '').trim();
+            if (rawText) {
+              const rawDiv = document.createElement('div');
+              rawDiv.className = 'comp-raw-desc';
+              rawDiv.textContent = rawText;
+              rawDiv.title = 'Clicar para expandir/colapsar';
+              rawDiv.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                rawDiv.classList.toggle('expanded');
+              });
+              span.appendChild(rawDiv);
+            }
           }
         } else {
           span.className = 'comp-cell comp-cell-none'; span.textContent = '—';
@@ -1084,7 +1108,12 @@ async function exportMissingItems() {
 
     items.forEach((bi, idx) => {
       const r = 3 + idx;
-      ws.getRow(r).height = 18;
+      const descStr = String(bi.description || '');
+      const catStr = String(bi.category || '');
+      // col widths: Part=16, Desc=52, Qty=8, Unidade=12, Categoria=22
+      const descLines = Math.max(1, Math.ceil(descStr.length / 50));
+      const catLines = Math.max(1, Math.ceil(catStr.length / 20));
+      ws.getRow(r).height = Math.max(18, Math.max(descLines, catLines) * 15);
       const altFill = idx % 2 === 1
         ? { type: 'pattern', pattern: 'solid', fgColor: { argb: ROW_ALT } }
         : undefined;

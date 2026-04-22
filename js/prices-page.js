@@ -176,16 +176,16 @@ function renderResults(data, query) {
     const tdDesc = document.createElement('td');
     const bomItem = row.item_matches?.[0]?.bom_items;
     const displayDesc = bomItem?.custom_description || bomItem?.description || row.raw_description || '';
-    const displayPart = bomItem?.part_number || row.raw_part_number || null;
+    const supplierDesc = row.raw_description || '';
     const descDiv = document.createElement('div');
     descDiv.className = 'price-desc';
     appendHighlightedDesc(descDiv, displayDesc, query);
     tdDesc.appendChild(descDiv);
-    if (displayPart) {
-      const part = document.createElement('div');
-      part.className = 'price-part';
-      part.textContent = displayPart;
-      tdDesc.appendChild(part);
+    if (supplierDesc && supplierDesc.trim() !== displayDesc.trim()) {
+      const sub = document.createElement('div');
+      sub.className = 'price-raw';
+      appendHighlightedDesc(sub, supplierDesc, query);
+      tdDesc.appendChild(sub);
     }
     const tdSupp = document.createElement('td');
     const supSpan = document.createElement('span');

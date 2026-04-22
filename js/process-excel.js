@@ -34,7 +34,9 @@ function buildSupSheet(wb, supplier) {
   const NF='#,##0.00',NFD='#,##0.00;-#,##0.00;"-"';
   items.forEach((item,idx)=>{
     const r=DS+idx,qty=parseFloat(item.qty)||1,up=parseFloat(item.price)||0;
-    ws.getRow(r).height=18.5;
+    const modelStr=String(item.model||'');
+    const modelLines=Math.max(1,Math.ceil(modelStr.length/Math.max(wModel-2,1)));
+    ws.getRow(r).height=Math.max(18.5,modelLines*15);
     sc2(ws.getCell(r,1),{value:item.part||'',font:dF,border:TB,alignment:dA});
     sc2(ws.getCell(r,2),{value:item.model,font:dF,border:TB,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
     sc2(ws.getCell(r,3),{value:direitos,font:dF,border:TB,alignment:dA,numFmt:'0.0%'});
