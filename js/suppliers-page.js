@@ -513,6 +513,10 @@ async function exportSupplierReport() {
   });
   colWidths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
+  // Column width in Excel ≈ max chars of default font; wrapped lines need a conservative divisor + enough pt/line
+  const approxCharsPerLine = (colIdx) => Math.max(10, Math.floor(colWidths[colIdx] * 0.75));
+  const ptPerWrappedLine = 19;
+
   allRows.forEach((vals, idx) => {
     const rn = 5 + idx;
     const bg = idx % 2 === 0 ? 'FF111827' : 'FF0D1520';
@@ -523,12 +527,16 @@ async function exportSupplierReport() {
       c.value = v;
       c.font = { size: 11, color: { argb: 'FFCDD5E0' } };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-      c.alignment = { vertical: 'middle', wrapText: true };
-      const colW = Math.max(colWidths[i] - 2, 1);
-      const lines = Math.max(1, Math.ceil(String(v || '').length / colW));
-      if (lines > maxLines) maxLines = lines;
+      c.alignment = { vertical: 'top', wrapText: true };
+      const cpl = approxCharsPerLine(i);
+      let cellLines = 0;
+      for (const para of String(v ?? '').split(/\r?\n/)) {
+        const len = para.length;
+        cellLines += len === 0 ? 1 : Math.ceil(len / cpl);
+      }
+      if (cellLines > maxLines) maxLines = cellLines;
     });
-    row.height = Math.max(20, maxLines * 15);
+    row.height = Math.max(28, maxLines * ptPerWrappedLine + 8);
   });
 
   try {
