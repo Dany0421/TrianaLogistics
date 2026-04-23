@@ -462,38 +462,69 @@ async function exportSupplierReport() {
   selected.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Fornecedores');
+  wb.creator = 'Triana Procurement';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Fornecedores', {
+    views: [{ state: 'frozen', ySplit: 4 }],
+  });
+
+  const FONT = 'Calibri';
+  const FONT_DATA = 11;
+  const FONT_HEADER = 11;
+
+  const TITLE_BG = 'FF0F1E2E';
+  const TITLE_FG = 'FFFFFFFF';
+  const TITLE_SUB = 'FFB3C0D1';
+  const HDR_BG = 'FF1D2D44';
+  const HDR_FG = 'FFFFFFFF';
+  const ROW_WHITE = 'FFFFFFFF';
+  const ROW_ZEBRA = 'FFF3F4F6';
+  const TEXT = 'FF111827';
+  const BORDER = 'FFE5E7EB';
 
   ws.mergeCells('A1:G1');
   const title = ws.getCell('A1');
   title.value = 'Relat\u00f3rio de Fornecedores \u2014 Triana';
-  title.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
-  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F1E2E' } };
-  title.alignment = { horizontal: 'left', vertical: 'middle' };
-  ws.getRow(1).height = 28;
+  title.font = { name: FONT, bold: true, size: 16, color: { argb: TITLE_FG } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TITLE_BG } };
+  title.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  ws.getRow(1).height = 32;
 
   ws.mergeCells('A2:G2');
-  const dateCell = ws.getCell('A2');
-  dateCell.value = 'Gerado em: ' + new Date().toLocaleDateString('pt-PT');
-  dateCell.font = { size: 10, color: { argb: 'FF6B7280' } };
-  dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F1E2E' } };
-  ws.getRow(2).height = 16;
-
+  const sub = ws.getCell('A2');
+  const countLabel = selected.length + ' fornecedor' + (selected.length === 1 ? '' : 'es');
+  sub.value = 'Gerado em ' + new Date().toLocaleDateString('pt-PT') + '  \u2022  ' + countLabel;
+  sub.font = { name: FONT, size: 10, color: { argb: TITLE_SUB } };
+  sub.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TITLE_BG } };
+  sub.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  ws.getRow(2).height = 18;
   ws.getRow(3).height = 6;
 
-  const hdrs = ['Nome', 'Email', 'Email CC', 'Categorias', 'Marcas', 'N\u00ba Processos', 'Tempo M\u00e9dio'];
-  const hRow = ws.getRow(4);
-  hdrs.forEach((h, i) => {
-    const c = hRow.getCell(i + 1);
-    c.value = h;
-    c.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D2D44' } };
-    c.alignment = { vertical: 'middle' };
-    c.border = { bottom: { style: 'thin', color: { argb: 'FF2D4A6A' } } };
-  });
-  hRow.height = 22;
+  const cols = [
+    { h: 'Nome',           min: 22, max: 32, align: 'left'   },
+    { h: 'Email',          min: 26, max: 36, align: 'left'   },
+    { h: 'Email CC',       min: 22, max: 34, align: 'left'   },
+    { h: 'Categorias',     min: 22, max: 42, align: 'left'   },
+    { h: 'Marcas',         min: 16, max: 30, align: 'left'   },
+    { h: 'N\u00ba Processos', min: 13, max: 15, align: 'center' },
+    { h: 'Tempo M\u00e9dio',  min: 14, max: 18, align: 'center' },
+  ];
 
-  const allRows = selected.map(s => {
+  const hRow = ws.getRow(4);
+  cols.forEach((cfg, i) => {
+    const c = hRow.getCell(i + 1);
+    c.value = cfg.h;
+    c.font = { name: FONT, bold: true, size: FONT_HEADER, color: { argb: HDR_FG } };
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HDR_BG } };
+    c.alignment = {
+      horizontal: cfg.align,
+      vertical: 'middle',
+      indent: cfg.align === 'left' ? 1 : 0,
+    };
+  });
+  hRow.height = 26;
+
+  const rows = selected.map(s => {
     const key = (s.name || '').trim().toLowerCase();
     const st = supplierStatsMap[key] || { processCount: 0, avgHours: 0 };
     return [
@@ -507,37 +538,98 @@ async function exportSupplierReport() {
     ];
   });
 
-  const colWidths = hdrs.map((h, i) => {
-    const maxData = allRows.reduce((m, r) => Math.max(m, String(r[i] || '').length), 0);
-    return Math.min(60, Math.max(h.length, maxData) + 4);
+  const colWidths = cols.map((cfg, i) => {
+    let longest = cfg.h.length;
+    for (const r of rows) {
+      const v = String(r[i] ?? '');
+      for (const line of v.split(/\r?\n/)) {
+        if (line.length > longest) longest = line.length;
+      }
+    }
+    const proposed = Math.ceil(longest * 0.55) + 3;
+    return Math.min(cfg.max, Math.max(cfg.min, proposed));
   });
   colWidths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-  // Column width in Excel ≈ max chars of default font; wrapped lines need a conservative divisor + enough pt/line
-  const approxCharsPerLine = (colIdx) => Math.max(10, Math.floor(colWidths[colIdx] * 0.75));
-  const ptPerWrappedLine = 19;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = FONT_DATA + 'pt Calibri, "Segoe UI", Arial, sans-serif';
+  const measure = (t) => ctx.measureText(t).width;
+  const colToPx = (chars) => Math.trunc(chars * 7 + 5);
 
-  allRows.forEach((vals, idx) => {
+  const wrapCount = (text, widthPx) => {
+    const str = String(text ?? '');
+    if (!str) return 1;
+    let total = 0;
+    for (const para of str.split(/\r?\n/)) {
+      if (!para) { total += 1; continue; }
+      const tokens = para.split(/(\s+)/).filter(t => t !== '');
+      let line = '';
+      let lines = 0;
+      for (const tok of tokens) {
+        const test = line + tok;
+        if (measure(test) <= widthPx) {
+          line = test;
+        } else {
+          if (line) { lines += 1; line = tok.replace(/^\s+/, ''); }
+          else { line = tok; }
+          if (measure(line) > widthPx) {
+            let cur = '';
+            for (const ch of line) {
+              if (!cur || measure(cur + ch) <= widthPx) cur += ch;
+              else { lines += 1; cur = ch; }
+            }
+            line = cur;
+          }
+        }
+      }
+      if (line) lines += 1;
+      total += Math.max(1, lines);
+    }
+    return total;
+  };
+
+  const PT_PER_LINE = 14;
+  const V_PADDING = 8;
+
+  rows.forEach((vals, idx) => {
     const rn = 5 + idx;
-    const bg = idx % 2 === 0 ? 'FF111827' : 'FF0D1520';
+    const bg = idx % 2 === 0 ? ROW_WHITE : ROW_ZEBRA;
     const row = ws.getRow(rn);
     let maxLines = 1;
     vals.forEach((v, i) => {
       const c = row.getCell(i + 1);
       c.value = v;
-      c.font = { size: 11, color: { argb: 'FFCDD5E0' } };
+      c.font = { name: FONT, size: FONT_DATA, color: { argb: TEXT } };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-      c.alignment = { vertical: 'top', wrapText: true };
-      const cpl = approxCharsPerLine(i);
-      let cellLines = 0;
-      for (const para of String(v ?? '').split(/\r?\n/)) {
-        const len = para.length;
-        cellLines += len === 0 ? 1 : Math.ceil(len / cpl);
-      }
-      if (cellLines > maxLines) maxLines = cellLines;
+      c.alignment = {
+        horizontal: cols[i].align,
+        vertical: 'middle',
+        wrapText: true,
+        indent: cols[i].align === 'left' ? 1 : 0,
+      };
+      c.border = { bottom: { style: 'hair', color: { argb: BORDER } } };
+      const widthPx = colToPx(colWidths[i]) - 12;
+      const lines = wrapCount(v, widthPx);
+      if (lines > maxLines) maxLines = lines;
     });
-    row.height = Math.max(28, maxLines * ptPerWrappedLine + 8);
+    row.height = Math.max(22, maxLines * PT_PER_LINE + V_PADDING);
   });
+
+  ws.autoFilter = {
+    from: { row: 4, column: 1 },
+    to:   { row: 4 + rows.length, column: cols.length },
+  };
+
+  ws.pageSetup = {
+    orientation: 'landscape',
+    paperSize: 9,
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
+    printTitlesRow: '4:4',
+  };
 
   try {
     const buf = await wb.xlsx.writeBuffer();
