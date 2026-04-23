@@ -832,6 +832,27 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  // ── Pending Margin Alerts ──
+  async getPendingMarginAlerts() {
+    const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('processes')
+      .select('id, project_name, client_name, last_margin_followup_at')
+      .eq('status', 'Pending margin')
+      .or(`last_margin_followup_at.is.null,last_margin_followup_at.lt.${cutoff}`)
+      .order('last_margin_followup_at', { ascending: true, nullsFirst: true });
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async markMarginFollowup(processId) {
+    const { error } = await supabase
+      .from('processes')
+      .update({ last_margin_followup_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', processId);
+    if (error) throw _sanitizeError(error);
+  },
+
   // ── Follow-up Alerts ──
   async getOverdueFollowups() {
     const today = new Date().toISOString().split('T')[0];

@@ -44,6 +44,34 @@
   padding: 14px 18px;
   margin-bottom: 20px;
 }
+.margin-alert-banner {
+  background: rgba(249,115,22,.06);
+  border: 1px solid rgba(249,115,22,.2);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.margin-alert-title {
+  font-family: 'DM Mono', monospace; font-size: 11px;
+  color: #f97316; letter-spacing: .6px; text-transform: uppercase;
+  display: flex; align-items: center; gap: 8px;
+}
+.margin-alert-count {
+  background: rgba(249,115,22,.2); color: #f97316;
+  border-radius: 10px; padding: 1px 8px;
+  font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 700;
+}
+.margin-alert-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; background: rgba(249,115,22,.04);
+  border: 1px solid rgba(249,115,22,.12); border-radius: 6px;
+  transition: border-color .15s;
+}
+.margin-alert-row:hover { border-color: rgba(249,115,22,.35); }
+.margin-alert-name { font-size: 13px; font-weight: 600; color: #fff; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.margin-alert-age { font-family: 'DM Mono', monospace; font-size: 10px; color: #f97316; white-space: nowrap; }
+.margin-followup-btn { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 3px 10px; cursor: pointer; white-space: nowrap; transition: .15s; flex-shrink: 0; }
+.margin-followup-btn:hover { color: #f97316; border-color: rgba(249,115,22,.4); }
 .followup-banner-header {
   display: flex; align-items: center; justify-content: space-between;
   cursor: pointer; user-select: none;
@@ -109,6 +137,9 @@
     <!-- Follow-up alerts -->
     <div id="followupBanner" style="display:none"></div>
 
+    <!-- Pending Margin alerts -->
+    <div id="marginAlertBanner" style="display:none"></div>
+
     <!-- Charts -->
     <div id="chartsToggleRow" style="display:none;align-items:center;gap:8px;padding:10px 6px;cursor:pointer;color:var(--muted);border-bottom:1px solid var(--border);user-select:none;margin-bottom:4px">
       <span id="chartsArrow" style="font-size:10px">▶</span>
@@ -143,6 +174,7 @@
         <option>Waiting for internal info</option>
         <option>Partial responses</option>
         <option>Ready for Excel</option>
+        <option>Pending margin</option>
         <option>Closed</option>
         <option>Cancelled</option>
       </select>
