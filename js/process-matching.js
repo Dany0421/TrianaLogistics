@@ -1060,6 +1060,49 @@ async function runAutoMatch() {
   }
 }
 
+function makeRowHeightCalc(fontPtSize) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = fontPtSize + 'pt Calibri, "Segoe UI", Arial, sans-serif';
+  const measure = (t) => ctx.measureText(t).width;
+  // Excel column "width" unit ≈ 7px per unit of default 11pt Calibri
+  const colToPx = (chars) => Math.trunc(chars * 7 + 5);
+
+  const wrapCount = (text, widthPx) => {
+    const str = String(text ?? '');
+    if (!str) return 1;
+    let total = 0;
+    for (const para of str.split(/\r?\n/)) {
+      if (!para) { total += 1; continue; }
+      const tokens = para.split(/(\s+)/).filter(t => t !== '');
+      let line = '';
+      let lines = 0;
+      for (const tok of tokens) {
+        const test = line + tok;
+        if (measure(test) <= widthPx) {
+          line = test;
+        } else {
+          if (line) { lines += 1; line = tok.replace(/^\s+/, ''); }
+          else { line = tok; }
+          if (measure(line) > widthPx) {
+            let cur = '';
+            for (const ch of line) {
+              if (!cur || measure(cur + ch) <= widthPx) cur += ch;
+              else { lines += 1; cur = ch; }
+            }
+            line = cur;
+          }
+        }
+      }
+      if (line) lines += 1;
+      total += Math.max(1, lines);
+    }
+    return total;
+  };
+
+  return { wrapCount, colToPx };
+}
+
 async function exportMissingItems() {
   const missing = bomItems.filter(bi => !bi.is_service && (!matches.some(m => m.bom_item_id === bi.id)));
   if (!missing.length) { showToast('Sem itens em falta — cobertura a 100%!'); return; }
@@ -1075,54 +1118,127 @@ async function exportMissingItems() {
   wb.creator = 'Triana Procurement';
   wb.created = new Date();
 
-  const HDR_BG  = 'FF1E293B';
+  const FONT = 'Calibri';
+  const FONT_DATA = 11;
+  const TITLE_BG = 'FF0F1E2E';
+  const TITLE_FG = 'FFFFFFFF';
+  const TITLE_SUB = 'FFB3C0D1';
+  const HDR_BG  = 'FF1D2D44';
   const HDR_FG  = 'FFFFFFFF';
-  const ROW_ALT = 'FFF8FAFC';
-  const ACCENT  = 'FF3B82F6';
+  const ROW_WHITE = 'FFFFFFFF';
+  const ROW_ZEBRA = 'FFF3F4F6';
+  const TEXT = 'FF111827';
+  const BORDER = 'FFE5E7EB';
+  const ACCENT = 'FF3B82F6';
 
-  const hFont   = { bold: true, size: 10, name: 'Calibri', color: { argb: HDR_FG } };
-  const hFill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: HDR_BG } };
-  const hAlign  = { horizontal: 'center', vertical: 'middle' };
-  const dFont   = { size: 10, name: 'Calibri' };
-  const dAlignL = { horizontal: 'left',   vertical: 'middle', wrapText: true };
-  const dAlignC = { horizontal: 'center', vertical: 'middle' };
+  const { wrapCount, colToPx } = makeRowHeightCalc(FONT_DATA);
+  const PT_PER_LINE = 14;
+  const V_PADDING = 8;
+
+  const cols = [
+    { h: 'Part #',      min: 14, max: 24, align: 'left'   },
+    { h: 'Descri\u00e7\u00e3o', min: 40, max: 70, align: 'left'   },
+    { h: 'Qty',         min: 7,  max: 10, align: 'center' },
+    { h: 'Unidade',     min: 10, max: 14, align: 'center' },
+    { h: 'Categoria',   min: 18, max: 30, align: 'left'   },
+  ];
 
   for (const [sheetName, items] of Object.entries(sheets)) {
     const ws = wb.addWorksheet(sheetName.substring(0, 31), {
       properties: { tabColor: { argb: ACCENT } },
-      views: [{ showGridLines: false }],
+      views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
     });
 
-    ws.columns = [{ width: 16 }, { width: 52 }, { width: 8 }, { width: 12 }, { width: 22 }];
+    const rows = items.map(bi => [
+      bi.part_number || '\u2014',
+      bi.description || '',
+      bi.quantity ?? '',
+      bi.unit || '',
+      bi.category || '',
+    ]);
 
-    ws.getRow(1).height = 14;
-    const labelCell = ws.getCell(1, 1);
-    labelCell.value = `Itens em falta — ${sheetName}  (${items.length} item${items.length !== 1 ? 's' : ''})`;
-    labelCell.font = { size: 8, name: 'Calibri', color: { argb: 'FF64748B' }, italic: true };
-    ws.mergeCells(1, 1, 1, 5);
+    const colWidths = cols.map((cfg, i) => {
+      let longest = cfg.h.length;
+      for (const r of rows) {
+        const v = String(r[i] ?? '');
+        for (const line of v.split(/\r?\n/)) {
+          if (line.length > longest) longest = line.length;
+        }
+      }
+      const proposed = Math.ceil(longest * 0.55) + 3;
+      return Math.min(cfg.max, Math.max(cfg.min, proposed));
+    });
+    ws.columns = colWidths.map(w => ({ width: w }));
 
-    ws.getRow(2).height = 22;
-    ['Part #', 'Descrição', 'Qty', 'Unidade', 'Categoria'].forEach((lbl, i) => {
-      sc2(ws.getCell(2, i + 1), { value: lbl, font: hFont, fill: hFill, alignment: hAlign });
+    ws.mergeCells(1, 1, 1, cols.length);
+    const title = ws.getCell(1, 1);
+    title.value = 'Itens em Falta \u2014 ' + sheetName;
+    title.font = { name: FONT, bold: true, size: 16, color: { argb: TITLE_FG } };
+    title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TITLE_BG } };
+    title.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    ws.getRow(1).height = 32;
+
+    ws.mergeCells(2, 1, 2, cols.length);
+    const sub = ws.getCell(2, 1);
+    sub.value = 'Gerado em ' + new Date().toLocaleDateString('pt-PT') + '  \u2022  ' + items.length + ' item' + (items.length === 1 ? '' : 's') + ' em falta';
+    sub.font = { name: FONT, size: 10, color: { argb: TITLE_SUB } };
+    sub.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TITLE_BG } };
+    sub.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    ws.getRow(2).height = 18;
+    ws.getRow(3).height = 6;
+
+    const hRow = ws.getRow(4);
+    cols.forEach((cfg, i) => {
+      const c = hRow.getCell(i + 1);
+      c.value = cfg.h;
+      c.font = { name: FONT, bold: true, size: FONT_DATA, color: { argb: HDR_FG } };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HDR_BG } };
+      c.alignment = {
+        horizontal: cfg.align,
+        vertical: 'middle',
+        indent: cfg.align === 'left' ? 1 : 0,
+      };
+    });
+    hRow.height = 26;
+
+    rows.forEach((vals, idx) => {
+      const rn = 5 + idx;
+      const bg = idx % 2 === 0 ? ROW_WHITE : ROW_ZEBRA;
+      const row = ws.getRow(rn);
+      let maxLines = 1;
+      vals.forEach((v, i) => {
+        const c = row.getCell(i + 1);
+        c.value = v;
+        c.font = { name: FONT, size: FONT_DATA, color: { argb: TEXT } };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+        c.alignment = {
+          horizontal: cols[i].align,
+          vertical: 'middle',
+          wrapText: true,
+          indent: cols[i].align === 'left' ? 1 : 0,
+        };
+        c.border = { bottom: { style: 'hair', color: { argb: BORDER } } };
+        const widthPx = colToPx(colWidths[i]) - 12;
+        const lines = wrapCount(v, widthPx);
+        if (lines > maxLines) maxLines = lines;
+      });
+      row.height = Math.max(22, maxLines * PT_PER_LINE + V_PADDING);
     });
 
-    items.forEach((bi, idx) => {
-      const r = 3 + idx;
-      const descStr = String(bi.description || '');
-      const catStr = String(bi.category || '');
-      // col widths: Part=16, Desc=52, Qty=8, Unidade=12, Categoria=22
-      const descLines = Math.max(1, Math.ceil(descStr.length / 50));
-      const catLines = Math.max(1, Math.ceil(catStr.length / 20));
-      ws.getRow(r).height = Math.max(18, Math.max(descLines, catLines) * 15);
-      const altFill = idx % 2 === 1
-        ? { type: 'pattern', pattern: 'solid', fgColor: { argb: ROW_ALT } }
-        : undefined;
-      sc2(ws.getCell(r, 1), { value: bi.part_number || '—', font: dFont, fill: altFill, alignment: dAlignC });
-      sc2(ws.getCell(r, 2), { value: bi.description  || '',  font: dFont, fill: altFill, alignment: dAlignL });
-      sc2(ws.getCell(r, 3), { value: bi.quantity      ?? '',  font: dFont, fill: altFill, alignment: dAlignC });
-      sc2(ws.getCell(r, 4), { value: bi.unit          || '',  font: dFont, fill: altFill, alignment: dAlignC });
-      sc2(ws.getCell(r, 5), { value: bi.category      || '',  font: dFont, fill: altFill, alignment: dAlignL });
-    });
+    ws.autoFilter = {
+      from: { row: 4, column: 1 },
+      to:   { row: 4 + rows.length, column: cols.length },
+    };
+
+    ws.pageSetup = {
+      orientation: 'landscape',
+      paperSize: 9,
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
+      printTitlesRow: '4:4',
+    };
   }
 
   const buf  = await wb.xlsx.writeBuffer();
