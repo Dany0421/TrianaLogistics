@@ -6,6 +6,44 @@ const YF={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};
 function sc2(cell,opts={}){const{value,font,fill,border,alignment,numFmt}=opts;if(value!==undefined)cell.value=value;if(font)cell.font=font;if(fill)cell.fill=fill;if(border)cell.border=border;if(alignment)cell.alignment=alignment;if(numFmt)cell.numFmt=numFmt;}
 function col2l(n){let s='';while(n>0){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);}return s;}
 
+// Mede wrap real usando canvas para evitar texto cortado em células com wrapText.
+// NÃO altera cores, fills, bordas, fonts, larguras de coluna ou alinhamentos — só a altura mínima da linha.
+const __rhCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+const __rhCtx = __rhCanvas ? __rhCanvas.getContext('2d') : null;
+if (__rhCtx) __rhCtx.font = '11pt Calibri, "Segoe UI", Arial, sans-serif';
+function __colWidthToPx(chars){ return Math.trunc(chars * 7 + 5); }
+function __wrappedLineCount(text, widthPx){
+  if (!__rhCtx) return 1;
+  const str = String(text ?? '');
+  if (!str) return 1;
+  const m = (t) => __rhCtx.measureText(t).width;
+  let total = 0;
+  for (const para of str.split(/\r?\n/)) {
+    if (!para) { total += 1; continue; }
+    const tokens = para.split(/(\s+)/).filter(t => t !== '');
+    let line = '', lines = 0;
+    for (const tok of tokens) {
+      const test = line + tok;
+      if (m(test) <= widthPx) line = test;
+      else {
+        if (line) { lines += 1; line = tok.replace(/^\s+/, ''); }
+        else line = tok;
+        if (m(line) > widthPx) {
+          let cur = '';
+          for (const ch of line) {
+            if (!cur || m(cur + ch) <= widthPx) cur += ch;
+            else { lines += 1; cur = ch; }
+          }
+          line = cur;
+        }
+      }
+    }
+    if (line) lines += 1;
+    total += Math.max(1, lines);
+  }
+  return total;
+}
+
 function buildSupSheet(wb, supplier) {
   const items = supplier.items.filter(i => i.model && i.model.trim());
   const isForeign = supplier.isForeign;
@@ -35,8 +73,11 @@ function buildSupSheet(wb, supplier) {
   items.forEach((item,idx)=>{
     const r=DS+idx,qty=parseFloat(item.qty)||1,up=parseFloat(item.price)||0;
     const modelStr=String(item.model||'');
-    const modelLines=Math.max(1,Math.ceil(modelStr.length/Math.max(wModel-2,1)));
-    ws.getRow(r).height=Math.max(18.5,modelLines*15);
+    const partStr=String(item.part||'');
+    const modelLines=__wrappedLineCount(modelStr,__colWidthToPx(wModel)-12);
+    const partLines=__wrappedLineCount(partStr,__colWidthToPx(wPart)-8);
+    const dataLines=Math.max(1,modelLines,partLines);
+    ws.getRow(r).height=Math.max(18.5,dataLines*15+3);
     sc2(ws.getCell(r,1),{value:item.part||'',font:dF,border:TB,alignment:dA});
     sc2(ws.getCell(r,2),{value:item.model,font:dF,border:TB,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
     sc2(ws.getCell(r,3),{value:direitos,font:dF,border:TB,alignment:dA,numFmt:'0.0%'});
@@ -105,6 +146,10 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
       row++;
     }
     for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
+
+    const modelStr = String(item.model || '');
+    const modelLines = __wrappedLineCount(modelStr, __colWidthToPx(wMainModel) - 12);
+    if (modelLines > 1) ws.getRow(row).height = Math.max(18.5, modelLines * 15 + 3);
 
     if (item.type === 'equip') {
       const si=suppliers.findIndex(s=>s.id===item.suppId);
