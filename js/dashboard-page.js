@@ -170,6 +170,7 @@ window.addEventListener('load', async () => {
   renderCharts(allProcesses, topSuppliers);
   if (!hasRole('commercial')) {
     try { renderFollowupAlerts(await API.getOverdueFollowups()); } catch(_) {}
+    try { renderMarginAlerts(await API.getPendingMarginAlerts()); } catch(_) {}
   }
   try { await loadNotifications(); } catch(_) {}
 });
@@ -404,6 +405,90 @@ function renderFollowupAlerts(data) {
 
     rowsEl.appendChild(procRow);
     rowsEl.appendChild(suppList);
+  }
+
+  wrap.appendChild(hdr);
+  wrap.appendChild(rowsEl);
+  banner.appendChild(wrap);
+}
+
+// ── Pending Margin Alerts ──
+let marginAlertCollapsed = false;
+function renderMarginAlerts(data) {
+  const banner = document.getElementById('marginAlertBanner');
+  if (!data.length) { banner.style.display = 'none'; return; }
+  banner.style.display = '';
+  banner.replaceChildren();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'margin-alert-banner';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'followup-banner-header';
+  hdr.addEventListener('click', () => {
+    marginAlertCollapsed = !marginAlertCollapsed;
+    rowsEl.style.display = marginAlertCollapsed ? 'none' : '';
+  });
+
+  const title = document.createElement('div');
+  title.className = 'margin-alert-title';
+  title.appendChild(document.createTextNode('⏳ Margin pendente — follow-up '));
+  const cnt = document.createElement('span');
+  cnt.className = 'margin-alert-count';
+  cnt.textContent = String(data.length);
+  title.appendChild(cnt);
+
+  const caret = document.createElement('span');
+  caret.style.cssText = "font-size:11px;color:var(--muted);font-family:'DM Mono',monospace";
+  caret.textContent = '▾';
+
+  hdr.appendChild(title);
+  hdr.appendChild(caret);
+
+  const rowsEl = document.createElement('div');
+  rowsEl.className = 'followup-rows';
+
+  for (const p of data) {
+    const row = document.createElement('div');
+    row.className = 'margin-alert-row';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'margin-alert-name';
+    nameEl.textContent = (p.project_name || '—') + (p.client_name ? ' · ' + p.client_name : '');
+
+    const ageEl = document.createElement('span');
+    ageEl.className = 'margin-alert-age';
+    const ref = p.last_margin_followup_at ? new Date(p.last_margin_followup_at) : null;
+    if (ref) {
+      const hours = Math.floor((Date.now() - ref) / 3600000);
+      ageEl.textContent = hours >= 48 ? Math.floor(hours / 24) + 'd sem follow-up' : hours + 'h sem follow-up';
+    } else {
+      ageEl.textContent = 'sem follow-up';
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'margin-followup-btn';
+    btn.type = 'button';
+    btn.textContent = 'Já fiz follow-up';
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      btn.disabled = true;
+      btn.textContent = '✓ Registado';
+      try {
+        await API.markMarginFollowup(p.id);
+        const fresh = await API.getPendingMarginAlerts();
+        renderMarginAlerts(fresh);
+      } catch(_) { btn.disabled = false; btn.textContent = 'Já fiz follow-up'; }
+    });
+
+    row.addEventListener('click', () => {
+      if (UUID_RE.test(p.id)) window.location.href = 'process.html?id=' + p.id;
+    });
+
+    row.appendChild(nameEl);
+    row.appendChild(ageEl);
+    row.appendChild(btn);
+    rowsEl.appendChild(row);
   }
 
   wrap.appendChild(hdr);
@@ -828,6 +913,10 @@ async function saveProcess() {
       if (!prev || prev.status !== 'Closed') fields.closed_at = new Date().toISOString();
     }
     fields.priority = null;
+  }
+  if (fields.status === 'Pending margin') {
+    const prev = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
+    if (!prev || prev.status !== 'Pending margin') fields.last_margin_followup_at = new Date().toISOString();
   }
 
   if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto s\u00e3o obrigat\u00f3rios.', true); return; }
