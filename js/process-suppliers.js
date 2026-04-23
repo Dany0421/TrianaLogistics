@@ -326,6 +326,40 @@ function buildRFQHtml(selected, supplierName) {
     + '</div>';
 }
 
+function _rfqHtmlToPlain(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\r?\n\r?\n+/g, '\n\n').trim();
+}
+
+async function _copyRfqToClipboard(html) {
+  const plain = _rfqHtmlToPlain(html);
+  try {
+    if (navigator.clipboard && window.ClipboardItem) {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+        }),
+      ]);
+      return true;
+    }
+  } catch (_) { /* fall through */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = plain;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function sendRFQ(supplierIdx) {
   const s = suppliers[supplierIdx];
   const selected = [...document.querySelectorAll('.rfq-item-cb:checked')]
@@ -338,17 +372,14 @@ async function sendRFQ(supplierIdx) {
   const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
   const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
-  // Kick off clipboard write but don't await — keeps user gesture fresh for mailto
-  // and avoids hang when document is not focused (Chrome behaviour).
-  const copyPromise = navigator.clipboard.write([
-    new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })
-  ]).then(() => true).catch(() => false);
-
+  // Copy must complete before mailto — navigating away cancels in-flight clipboard writes.
+  const copied = await _copyRfqToClipboard(html);
   window.location.href = mailto;
   closeModal();
-
-  const ok = await copyPromise;
-  showToast(ok ? 'Email copiado — cola no body do email (Ctrl+V)' : 'Email aberto, mas não foi possível copiar o conteúdo.', !ok);
+  showToast(
+    copied ? 'Corpo do email copiado — cola no corpo (Ctrl+V / Cmd+V).' : 'Email aberto; copia o corpo manualmente se o paste não funcionar.',
+    !copied
+  );
 }
 
 function autoFillSupplierEmail(name) {
