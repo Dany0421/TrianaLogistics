@@ -84,9 +84,13 @@ function renderMatchingTab() {
     return;
   }
 
-  // If no suppliers but has services, force comparação view
+  // If no suppliers but has services, force resumo view (only place services are shown)
   if (!hasSuppliers && serviceItems.length) {
-    matchingView = 'comparacao';
+    matchingView = 'resumo';
+  }
+  // If user was on resumo but there are no services anymore, fall back to comparacao
+  if (matchingView === 'resumo' && !serviceItems.length) {
+    matchingView = hasSuppliers ? 'comparacao' : 'matching';
   }
 
   // Build lookups (shared by both views)
@@ -107,20 +111,27 @@ function renderMatchingTab() {
   toggleBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:16px';
 
   if (needsSuppliers && hasSuppliers) {
-    ['matching', 'comparacao'].forEach(v => {
+    const views = [
+      { id: 'matching',   label: 'Matching',   show: true },
+      { id: 'comparacao', label: 'Compara\u00e7\u00e3o', show: true },
+      { id: 'resumo',     label: 'Resumo',     show: serviceItems.length > 0 },
+    ];
+    for (const v of views) {
+      if (!v.show) continue;
       const btn = document.createElement('button');
-      btn.className = 'btn btn-sm' + (matchingView === v ? ' btn-primary' : ' btn-ghost');
-      btn.textContent = v === 'matching' ? 'Matching' : 'Comparação';
-      btn.addEventListener('click', () => switchMatchingView(v));
+      btn.className = 'btn btn-sm' + (matchingView === v.id ? ' btn-primary' : ' btn-ghost');
+      btn.textContent = v.label;
+      btn.addEventListener('click', () => switchMatchingView(v.id));
       toggleBar.appendChild(btn);
-    });
+    }
   }
   el.appendChild(toggleBar);
 
   if (matchingView === 'matching' && hasSuppliers) {
     _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems);
   } else {
-    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems);
+    const mode = matchingView === 'resumo' ? 'resumo' : 'itens';
+    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems, mode);
   }
 
   scheduleRestoreScroll();
@@ -340,8 +351,9 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   el.appendChild(scrollWrap);
 }
 
-function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems) {
-  const hasServices = serviceItems.length > 0;
+function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems, mode) {
+  mode = mode || 'itens';
+  const includeServices = mode === 'resumo' && serviceItems.length > 0;
   const includedByLookup = {};
   for (const m of matches) {
     if (m.match_type === 'included_in' && m.included_in_bom_item_id) {
@@ -350,7 +362,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       includedByLookup[key].push(m);
     }
   }
-  const numCols = suppliers.length + (hasServices ? 1 : 0);
+  const numCols = suppliers.length + (includeServices ? 1 : 0);
 
   const suppCoverage = {};
   for (const s of suppliers) suppCoverage[s.id] = equipItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
@@ -404,7 +416,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   statsDiv.appendChild(makeStatBlock('COBERTURA', pct + '%', pctColor, `${covered}/${equipItems.length} itens`));
   if (topSupp) statsDiv.appendChild(makeStatBlock('MAIS COBERTURA', topSupp.name, '#fff', suppCoverage[topSupp.id] + ' itens'));
   if (totalCovered > 0) statsDiv.appendChild(makeStatBlock('TOTAL COBERTO', fmtPrice(totalCovered), 'var(--accent)'));
-  if (serviceTotal > 0) statsDiv.appendChild(makeStatBlock('SERVIÇOS TRIANA', fmtPrice(serviceTotal), 'var(--warn)'));
+  if (includeServices && serviceTotal > 0) statsDiv.appendChild(makeStatBlock('SERVIÇOS TRIANA', fmtPrice(serviceTotal), 'var(--warn)'));
   el.appendChild(statsDiv);
 
   // ── Controls: toggle supplier descriptions ──
@@ -425,12 +437,13 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   const thead = table.createTHead(); const hrow = thead.insertRow();
   const th0 = document.createElement('th'); th0.textContent = 'Item BOM'; hrow.appendChild(th0);
   for (const s of suppliers) { const th = document.createElement('th'); th.textContent = s.name; hrow.appendChild(th); }
-  if (hasServices) { const thSvc = document.createElement('th'); thSvc.style.color = 'var(--warn)'; thSvc.textContent = 'Triana'; hrow.appendChild(thSvc); }
+  if (includeServices) { const thSvc = document.createElement('th'); thSvc.style.color = 'var(--warn)'; thSvc.textContent = 'Triana'; hrow.appendChild(thSvc); }
 
   // Tbody
   const tbody = table.createTBody();
+  const visibleItems = includeServices ? bomItems : bomItems.filter(bi => !bi.is_service);
   let lastCat = null;
-  for (const bi of bomItems) {
+  for (const bi of visibleItems) {
     if (bi.category && bi.category !== lastCat) {
       const catRow = tbody.insertRow(); catRow.className = 'comp-cat-row';
       const td = catRow.insertCell(); td.colSpan = 1 + numCols; td.textContent = bi.category;
@@ -503,7 +516,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
         }
         td.appendChild(span);
       }
-      if (hasServices) row.insertCell();
+      if (includeServices) row.insertCell();
     }
   }
 
@@ -516,11 +529,11 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
     if (colTotals[s.id] > 0) { td.textContent = fmtPrice(colTotals[s.id]); }
     else { const dash = document.createElement('span'); dash.style.color = '#334'; dash.textContent = '—'; td.appendChild(dash); }
   }
-  if (hasServices) { const td = totalRow.insertCell(); td.style.cssText = "font-family:'DM Mono',monospace;font-size:12px;color:var(--warn);font-weight:600"; td.textContent = serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'; }
+  if (includeServices) { const td = totalRow.insertCell(); td.style.cssText = "font-family:'DM Mono',monospace;font-size:12px;color:var(--warn);font-weight:600"; td.textContent = serviceTotal > 0 ? fmtPrice(serviceTotal) : '—'; }
 
   const namesRow = tfoot.insertRow(); namesRow.insertCell();
   for (const s of suppliers) { const td = namesRow.insertCell(); td.style.cssText = "text-align:center;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;padding:6px 12px;white-space:nowrap"; td.textContent = s.name; }
-  if (hasServices) { const td = namesRow.insertCell(); td.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--warn);letter-spacing:.6px;text-transform:uppercase;text-align:center;padding:6px 12px"; td.textContent = 'Triana'; }
+  if (includeServices) { const td = namesRow.insertCell(); td.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--warn);letter-spacing:.6px;text-transform:uppercase;text-align:center;padding:6px 12px"; td.textContent = 'Triana'; }
 
   compWrap.appendChild(table);
   el.appendChild(compWrap);
