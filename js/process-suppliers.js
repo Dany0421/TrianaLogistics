@@ -326,14 +326,45 @@ function buildRFQHtml(selected, supplierName) {
     + '</div>';
 }
 
-function _rfqHtmlToPlain(html) {
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-  return (tmp.textContent || tmp.innerText || '').replace(/\r?\n\r?\n+/g, '\n\n').trim();
+/** Plain body for clipboard — must stay readable: DOM textContent strips ALL breaks and tables become mush. */
+function buildRFQPlainText(selected) {
+  const hasPartNum = selected.some(bi => bi.part_number);
+  const lines = [
+    'Boa tarde, Prezados,',
+    '',
+    'Espero que este e-mail os encontre bem.',
+    '',
+    'Queria solicitar uma cotação para o equipamento abaixo:',
+    '',
+  ];
+  const header = hasPartNum
+    ? ['Artigo', 'Descrição', 'Qtd.', 'Unidade'].join('\t')
+    : ['Descrição', 'Qtd.', 'Unidade'].join('\t');
+  lines.push(header);
+  lines.push(hasPartNum ? '----\t----\t----\t----' : '----\t----\t----');
+  let lastCat = undefined;
+  for (const bi of selected) {
+    if (bi.category !== lastCat) {
+      if (bi.category) {
+        lines.push('');
+        lines.push('— ' + String(bi.category).toUpperCase() + ' —');
+      }
+      lastCat = bi.category;
+    }
+    const desc = String(bi.description || '-').replace(/\r?\n/g, ' ');
+    const qty = String(bi.quantity != null ? bi.quantity : 1);
+    const unit = String(bi.unit || 'Unidade').replace(/\r?\n/g, ' ');
+    if (hasPartNum) {
+      lines.push([String(bi.part_number || '-').replace(/\r?\n/g, ' '), desc, qty, unit].join('\t'));
+    } else {
+      lines.push([desc, qty, unit].join('\t'));
+    }
+  }
+  lines.push('');
+  return lines.join('\n');
 }
 
-async function _copyRfqToClipboard(html) {
-  const plain = _rfqHtmlToPlain(html);
+async function _copyRfqToClipboard(html, plain) {
   try {
     if (navigator.clipboard && window.ClipboardItem) {
       await navigator.clipboard.write([
@@ -369,11 +400,12 @@ async function sendRFQ(supplierIdx) {
 
   const subject = 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
   const html = buildRFQHtml(selected, s.name);
+  const plain = buildRFQPlainText(selected);
   const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
   const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
   // Copy must complete before mailto — navigating away cancels in-flight clipboard writes.
-  const copied = await _copyRfqToClipboard(html);
+  const copied = await _copyRfqToClipboard(html, plain);
   window.location.href = mailto;
   closeModal();
   showToast(
