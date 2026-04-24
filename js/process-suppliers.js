@@ -500,11 +500,6 @@ function openSupplierModal(idx = null, prefill = {}) {
         </label>
       </div>
     </div>
-    <div id="sf_foreignBox" class="foreign-box">
-      <div><label>Câmbio (MZN)</label><input type="number" step="0.01" id="sf_cambio" placeholder="63.5"></div>
-      <div><label>Transporte</label><input type="number" step="0.01" id="sf_transport" placeholder="1500.00"></div>
-      <div><label>Direitos (%)</label><input type="number" step="0.1" id="sf_direitos" placeholder="7.5"></div>
-    </div>
     <div class="form-grid-2">
       <div><label>Último Contacto</label><input type="date" id="sf_last"></div>
       <div><label>Próximo Follow-up</label><input type="date" id="sf_followup"></div>
@@ -541,7 +536,7 @@ function openSupplierModal(idx = null, prefill = {}) {
 
   // Foreign checkbox
   const foreignCb = el.querySelector('#sf_foreign');
-  if (s?.is_foreign) { foreignCb.checked = true; el.querySelector('#sf_foreignBox').className = 'foreign-box show'; }
+  if (s?.is_foreign) foreignCb.checked = true;
   foreignCb.addEventListener('change', function() { toggleForeignBox(this.checked); });
 
   // Input values
@@ -552,9 +547,6 @@ function openSupplierModal(idx = null, prefill = {}) {
   _sf('sf_notes', s?.notes || '');
   _sf('sf_last', s?.last_contact_at || '');
   _sf('sf_followup', s?.next_followup_at || '');
-  _sf('sf_cambio', s?.cambio || '');
-  _sf('sf_transport', s?.transport || '');
-  _sf('sf_direitos', s?.direitos || '');
 
   el.querySelector('#sf_name').addEventListener('input', function() { autoFillSupplierEmail(this.value); });
   el.querySelector('#sf_cancel').addEventListener('click', closeModal);
@@ -566,9 +558,7 @@ function openSupplierModal(idx = null, prefill = {}) {
   if (document.getElementById('ep_catBox')) renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
 }
 
-function toggleForeignBox(val) {
-  document.getElementById('sf_foreignBox').className = val ? 'foreign-box show' : 'foreign-box';
-}
+function toggleForeignBox(_val) { /* sf_foreignBox removed — cambio/transport/direitos moved to quotation modal */ }
 
 async function saveSupplier() {
   const fields = {
@@ -577,9 +567,6 @@ async function saveSupplier() {
     email:            document.getElementById('sf_email').value.trim() || null,
     status:           document.getElementById('sf_status').value,
     is_foreign:       document.getElementById('sf_foreign').checked,
-    cambio:           parseFloat(document.getElementById('sf_cambio')?.value) || null,
-    transport:        parseFloat(document.getElementById('sf_transport')?.value) || null,
-    direitos:         parseFloat(document.getElementById('sf_direitos')?.value) || 0,
     last_contact_at:  document.getElementById('sf_last').value || null,
     next_followup_at: document.getElementById('sf_followup').value || null,
     notes:            document.getElementById('sf_notes').value.trim() || null,
@@ -678,6 +665,7 @@ function openManualQuotEntry(supplierId) {
     price: qi.price,
     currency: qi.currency,
     discount: qi.discount || 0,
+    _enteredPrice: (qi.price || 0) * (1 - (qi.discount || 0) / 100),
     eta_value: qi.eta_value || '',
     eta_unit: qi.eta_unit || 'dias',
   }));
@@ -884,6 +872,32 @@ function openQuotationValModal(fileName, rawPdfText) {
   etaBar.appendChild(etaLabel); etaBar.appendChild(etaValIn); etaBar.appendChild(etaGlobalUnitBtn); etaBar.appendChild(resetEtaBtn);
   el.appendChild(etaBar);
 
+  // Rates block — shown only when any item has currency != MZN
+  const ratesBlock = document.createElement('div');
+  ratesBlock.id = 'quotRatesBlock';
+  ratesBlock.style.cssText = 'display:none;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;padding:10px 14px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.2);border-radius:8px';
+  const ratesLabel = document.createElement('span');
+  ratesLabel.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:#f97316;letter-spacing:.5px;text-transform:uppercase;flex-shrink:0";
+  ratesLabel.textContent = 'Câmbio / custos importação';
+  ratesBlock.appendChild(ratesLabel);
+  function _makeRateField(id, label, placeholder) {
+    const wrap = document.createElement('div'); wrap.style.cssText = 'display:flex;align-items:center;gap:6px';
+    const lbl = document.createElement('label'); lbl.style.cssText = 'font-size:12px;color:var(--muted);white-space:nowrap;margin:0'; lbl.textContent = label;
+    const inp = document.createElement('input'); inp.type = 'number'; inp.min = '0'; inp.step = '0.01'; inp.id = id; inp.placeholder = placeholder;
+    inp.style.cssText = 'width:90px;padding:4px 6px;font-size:12px';
+    wrap.appendChild(lbl); wrap.appendChild(inp);
+    return wrap;
+  }
+  ratesBlock.appendChild(_makeRateField('qf_cambio', 'Câmbio (MZN)', '64.00'));
+  ratesBlock.appendChild(_makeRateField('qf_transport', 'Transporte (MZN)', '1500.00'));
+  ratesBlock.appendChild(_makeRateField('qf_direitos', 'Direitos (%)', '7.5'));
+  el.appendChild(ratesBlock);
+  // Pre-populate with existing supplier values (el not in DOM yet — use el.querySelector)
+  const _setRate = (id, v) => { const inp = el.querySelector('#' + id); if (inp && v) inp.value = v; };
+  _setRate('qf_cambio', s?.cambio);
+  _setRate('qf_transport', s?.transport);
+  _setRate('qf_direitos', s?.direitos);
+
   // Table (static thead, dynamic tbody populated by renderQuotValTable)
   const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
   const table = document.createElement('table'); table.className = 'bom-validate-table';
@@ -946,6 +960,9 @@ function renderQuotValTable() {
   const tbody = document.getElementById('quotValTbody');
   if (!tbody) return;
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+  const hasNonMzn = pendingQuotItems.some(i => i.currency && i.currency !== 'MZN');
+  const ratesBlock = document.getElementById('quotRatesBlock');
+  if (ratesBlock) ratesBlock.style.display = hasNonMzn ? 'flex' : 'none';
   const _norm = s => (s || '').toLowerCase();
   const _tokens = _norm(_quotValFilter).split(/\s+/).filter(Boolean);
 
@@ -988,11 +1005,10 @@ function renderQuotValTable() {
       const d = parseFloat(this.value) || 0;
       pendingQuotItems[i].discount = d;
       pendingQuotItems[i]._discountManual = true;
-      // Back-calculate to pre-discount unit price (only for PDF items where price = net unit price)
-      if (d > 0 && d < 100 && pendingQuotItems[i].price > 0 && pendingQuotItems[i]._fromPdf) {
-        pendingQuotItems[i].price = Math.round((pendingQuotItems[i].price / (1 - d / 100)) * 100) / 100;
-        pendingQuotItems[i]._fromPdf = false; // applied once — prevent double back-calc if discount changed again
-      }
+      const entered = pendingQuotItems[i]._enteredPrice ?? pendingQuotItems[i].price;
+      pendingQuotItems[i].price = d > 0 && d < 100
+        ? Math.round((entered / (1 - d / 100)) * 100) / 100
+        : entered;
       renderQuotValTable();
     };
     tdDisc.appendChild(inDisc);
@@ -1003,8 +1019,12 @@ function renderQuotValTable() {
     inPrice.type = 'text'; inPrice.value = item.price > 0 ? fmtPrice(item.price) : ''; inPrice.style.width = '80px';
     inPrice.oninput = function() { /* allow formatted input — parseNum handles it on change */ };
     inPrice.onchange = function() {
-      pendingQuotItems[i].price = parseNum(this.value) || 0;
-      pendingQuotItems[i]._fromPdf = false; // user manually set price — no back-calculation on discount
+      const entered = parseNum(this.value) || 0;
+      pendingQuotItems[i]._enteredPrice = entered;
+      const d = pendingQuotItems[i].discount || 0;
+      pendingQuotItems[i].price = d > 0 && d < 100
+        ? Math.round((entered / (1 - d / 100)) * 100) / 100
+        : entered;
       checkPriceAnomalies(pendingQuotItems).then(a => { priceAnomalies = a; renderQuotValTable(); });
     };
     tdPrice.appendChild(inPrice);
@@ -1085,7 +1105,7 @@ async function confirmQuotation() {
     const idsToDelete = [...existingIds].filter(id => !keepIds.has(id));
     await API.updateQuotationItems(
       valid.map(i => {
-        const { _discountManual, _etaManual, ...rest } = i;
+        const { _discountManual, _etaManual, _enteredPrice, ...rest } = i;
         return {
           ...rest,
           supplier_id: currentQuotSuppId,
@@ -1095,6 +1115,17 @@ async function confirmQuotation() {
       idsToDelete
     );
     quotationMap[currentQuotSuppId] = await API.getQuotationItems(currentQuotSuppId);
+
+    // Save or clear exchange rates on the supplier record
+    const hasNonMzn = valid.some(i => i.currency && i.currency !== 'MZN');
+    const rateFields = hasNonMzn ? {
+      cambio:    parseFloat(document.getElementById('qf_cambio')?.value) || null,
+      transport: parseFloat(document.getElementById('qf_transport')?.value) || null,
+      direitos:  parseFloat(document.getElementById('qf_direitos')?.value) || 0,
+    } : { cambio: null, transport: null, direitos: 0 };
+    await API.updateSupplier(currentQuotSuppId, rateFields);
+    const suppIdx = suppliers.findIndex(s => s.id === currentQuotSuppId);
+    if (suppIdx !== -1) Object.assign(suppliers[suppIdx], rateFields);
 
     if (pendingQuotFile) {
       const ext = pendingQuotFile.name.split('.').pop();
@@ -1192,7 +1223,7 @@ async function handlePdfQuotation(file) {
       const qty = parseFloat(item.qty) || 1;
       const total = parseFloat(item.price) || 0;
       const unitPrice = total > 0 ? Math.round((total / qty) * 100) / 100 : 0;
-      return { raw_part_number: item.part || null, raw_description: item.model, quantity: qty, price: unitPrice, currency: 'MZN', _fromPdf: true };
+      return { raw_part_number: item.part || null, raw_description: item.model, quantity: qty, price: unitPrice, currency: 'MZN', discount: 0, _enteredPrice: unitPrice };
     });
     if (!newPdfItems.length) showToast('Nenhum item detetado no PDF — adiciona manualmente.', true);
     const existingPdf = (quotationMap[currentQuotSuppId] || []).map(qi => ({

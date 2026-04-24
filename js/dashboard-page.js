@@ -893,6 +893,7 @@ async function saveProcess() {
     notes:        document.getElementById('f_notes').value.trim(),
     commercial_name: document.getElementById('f_commercial')?.value.trim() || null,
     procurement_name: document.getElementById('f_procurement')?.value.trim() || null,
+    assigned_to: null,
     categories:   pendingProcessCategories,
   };
   const statusEl = document.getElementById('f_status');

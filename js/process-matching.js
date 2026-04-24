@@ -258,7 +258,8 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       const _m = matchLookup[bi.id]?.[s.id];
       if (_m?.match_type === 'included_in') continue;
       const p = effPrice(_m?.quotation_items);
-      const rate = (s.is_foreign && s.cambio) ? s.cambio : 1;
+      const _cur = _m?.quotation_items?.currency;
+      const rate = (_cur && _cur !== 'MZN') ? (s.cambio || 1) : 1;
       const pMZN = p != null ? p * rate : null;
       if (pMZN != null && pMZN < lowestPriceMZN) lowestPriceMZN = pMZN;
     }
@@ -294,7 +295,8 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       const isIncludedIn = m?.match_type === 'included_in';
       const isSel = selectedSuppId === s.id;
       const price = effPrice(m?.quotation_items);
-      const rate = (s.is_foreign && s.cambio) ? s.cambio : 1;
+      const _cur2 = m?.quotation_items?.currency;
+      const rate = (_cur2 && _cur2 !== 'MZN') ? (s.cambio || 1) : 1;
       const priceMZN = price != null ? price * rate : null;
       const isLowest = !isIncludedIn && priceMZN != null && priceMZN === lowestPriceMZN && lowestPriceMZN < Infinity;
       const tdSupp = row.insertCell();
@@ -367,6 +369,26 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   const suppCoverage = {};
   for (const s of suppliers) suppCoverage[s.id] = equipItems.filter(bi => matchLookup[bi.id]?.[s.id] != null).length;
   const topSupp = suppliers.reduce((best, s) => suppCoverage[s.id] > (suppCoverage[best?.id] || 0) ? s : best, null);
+  // For items with multiple matches and no selection: track which supplier has the lowest price
+  const lowestSuppForItem = {};
+  for (const bi of equipItems) {
+    if (selLookup[bi.id]) continue;
+    const matchCount = Object.keys(matchLookup[bi.id] || {}).length;
+    if (matchCount <= 1) continue;
+    let lowestMZN = null, lowestSuppId = null, lowestRawP = null, lowestRate = 1;
+    for (const s of suppliers) {
+      const m = matchLookup[bi.id]?.[s.id];
+      if (!m || m.match_type === 'included_in') continue;
+      const p = effPrice(m.quotation_items);
+      if (p == null) continue;
+      const cur = m.quotation_items?.currency;
+      const rate = (cur && cur !== 'MZN') ? (s.cambio || 1) : 1;
+      const pMZN = p * rate;
+      if (lowestMZN === null || pMZN < lowestMZN) { lowestMZN = pMZN; lowestRawP = p; lowestRate = rate; lowestSuppId = s.id; }
+    }
+    if (lowestSuppId !== null) lowestSuppForItem[bi.id] = { suppId: lowestSuppId, price: lowestRawP, rate: lowestRate };
+  }
+
   const colTotals = {};
   for (const s of suppliers) {
     colTotals[s.id] = equipItems.reduce((sum, bi) => {
@@ -376,9 +398,16 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const thisMatch = matchLookup[bi.id]?.[s.id];
       if (thisMatch?.match_type === 'included_in') return sum;
       const isOnlyMatch = matchCount === 1 && thisMatch != null && thisMatch.match_type !== 'included_in';
-      if (!isSelected && !isOnlyMatch) return sum;
-      const p = effPrice(thisMatch?.quotation_items);
-      return sum + (p != null ? p * (bi.quantity || 1) : 0);
+      if (isSelected || isOnlyMatch) {
+        const p = effPrice(thisMatch?.quotation_items);
+        const cur = thisMatch?.quotation_items?.currency;
+        const rate = (cur && cur !== 'MZN') ? (s.cambio || 1) : 1;
+        return sum + (p != null ? p * rate * (bi.quantity || 1) : 0);
+      }
+      if (!selectedSuppId && lowestSuppForItem[bi.id]?.suppId === s.id) {
+        return sum + lowestSuppForItem[bi.id].price * lowestSuppForItem[bi.id].rate * (bi.quantity || 1);
+      }
+      return sum;
     }, 0);
   }
   const totalCovered = equipItems.reduce((sum, bi) => {
@@ -388,14 +417,20 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const selMatch = matchLookup[bi.id]?.[selectedSuppId];
       if (selMatch?.match_type === 'included_in') return sum;
       const p = effPrice(selMatch?.quotation_items);
-      return sum + (p ? p * (bi.quantity || 1) : 0);
+      const selSupp = suppliers.find(s => s.id === selectedSuppId);
+      const cur = selMatch?.quotation_items?.currency;
+      const rate = (cur && cur !== 'MZN') ? (selSupp?.cambio || 1) : 1;
+      return sum + (p ? p * rate * (bi.quantity || 1) : 0);
     }
     if (matchCount === 1) {
       const onlySuppId = Object.keys(matchLookup[bi.id])[0];
       const onlyMatch = matchLookup[bi.id][onlySuppId];
       if (onlyMatch?.match_type === 'included_in') return sum;
       const p = effPrice(onlyMatch?.quotation_items);
-      return sum + (p ? p * (bi.quantity || 1) : 0);
+      const onlySupp = suppliers.find(s => s.id === onlySuppId);
+      const cur = onlyMatch?.quotation_items?.currency;
+      const rate = (cur && cur !== 'MZN') ? (onlySupp?.cambio || 1) : 1;
+      return sum + (p ? p * rate * (bi.quantity || 1) : 0);
     }
     return sum;
   }, 0);
@@ -466,7 +501,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const dDiv = document.createElement('div'); dDiv.style.fontSize = '13px'; dDiv.textContent = bi.description; tdItem.appendChild(dDiv);
       if (bi.part_number) { const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv); }
       let lowestPriceMZN = Infinity;
-      for (const s of suppliers) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const p = effPrice(cm?.quotation_items); const r = (s.is_foreign && s.cambio) ? s.cambio : 1; const pMZN = p != null ? p * r : null; if (pMZN != null && pMZN < lowestPriceMZN) lowestPriceMZN = pMZN; }
+      for (const s of suppliers) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const p = effPrice(cm?.quotation_items); const cur = cm?.quotation_items?.currency; const r = (cur && cur !== 'MZN') ? (s.cambio || 1) : 1; const pMZN = p != null ? p * r : null; if (pMZN != null && pMZN < lowestPriceMZN) lowestPriceMZN = pMZN; }
       const selectedSuppId = selLookup[bi.id];
       for (const s of suppliers) {
         const m = matchLookup[bi.id]?.[s.id];
@@ -474,7 +509,8 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
         const price = effPrice(m?.quotation_items);
         const currency = m?.quotation_items?.currency || '';
         const isSel = selectedSuppId === s.id;
-        const rate = (s.is_foreign && s.cambio) ? s.cambio : 1;
+        const cur2 = m?.quotation_items?.currency;
+        const rate = (cur2 && cur2 !== 'MZN') ? (s.cambio || 1) : 1;
         const isLow = !isIncl && price != null && (price * rate) === lowestPriceMZN && lowestPriceMZN < Infinity;
         const td = row.insertCell();
         const span = document.createElement('span');

@@ -393,6 +393,7 @@ async function saveEditProcess() {
     categories:      pendingProcessCategories,
     commercial_name: document.getElementById('ep_commercial')?.value.trim() || null,
     procurement_name: document.getElementById('ep_procurement')?.value.trim() || null,
+    assigned_to: null,
   };
   const epStatusVal = document.getElementById('ep_status').value;
   if (epStatusVal === '__custom__' || !STANDARD_STATUSES.includes(epStatusVal)) {
