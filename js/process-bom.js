@@ -203,11 +203,20 @@ function _matchSuppliersForBom(items, globalList, alreadyAddedNames) {
   globalList.forEach(gs => {
     (gs.brands || []).forEach(b => {
       const k = b.toLowerCase().trim();
+      if (!k) return;
       if (!brandLookup[k]) brandLookup[k] = [];
       brandLookup[k].push(gs);
     });
   });
   const knownBrands = Object.keys(brandLookup);
+
+  const brandRegexes = {};
+  knownBrands.forEach(bk => {
+    brandRegexes[bk] = new RegExp(
+      '(?:^|[^a-zA-Z0-9])' + bk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:[^a-zA-Z0-9]|$)',
+      'i'
+    );
+  });
 
   const grouped = {};
   const unmatched = [];
@@ -229,8 +238,7 @@ function _matchSuppliersForBom(items, globalList, alreadyAddedNames) {
     catItems.forEach(item => {
       const desc = (item.description || '').toLowerCase();
       knownBrands.forEach(bk => {
-        const re = new RegExp('(?:^|\\s)' + bk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)', 'i');
-        if (re.test(desc)) {
+        if (brandRegexes[bk].test(desc)) {
           brandLookup[bk].forEach(gs => {
             if (!excluded.has(gs.name.trim().toLowerCase()) &&
                 !catMatches.includes(gs) &&
