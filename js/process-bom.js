@@ -262,6 +262,157 @@ function _matchSuppliersForBom(items, globalList, alreadyAddedNames) {
   return { grouped, unmatched };
 }
 
+function buildBomSuggestionsStep() {
+  const alreadyAdded = suppliers.map(s => s.name);
+  const { grouped, unmatched } = _matchSuppliersForBom(bomItems, globalSuppliersList, alreadyAdded);
+  const cats = Object.keys(grouped);
+
+  const wrap = document.createElement('div');
+
+  const tag = document.createElement('div');
+  tag.className = 'modal-tag';
+  tag.textContent = 'Fornecedores sugeridos';
+  const sub = document.createElement('div');
+  sub.style.cssText = 'font-size:13px;color:var(--muted);margin:4px 0 2px';
+  sub.textContent = 'Baseado nas categorias do BOM. Seleciona quem adicionar ao processo.';
+  wrap.appendChild(tag);
+  wrap.appendChild(sub);
+
+  // Empty state — no categories at all
+  if (!cats.length && !unmatched.length) {
+    const empty = document.createElement('p');
+    empty.style.cssText = 'color:var(--muted);font-size:13px;padding:var(--sp-4) 0';
+    empty.textContent = 'Nenhum fornecedor no histórico para as categorias deste BOM.';
+    wrap.appendChild(empty);
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn btn-primary';
+    closeBtn.textContent = 'Fechar';
+    closeBtn.addEventListener('click', closeModal);
+    wrap.appendChild(closeBtn);
+    return wrap;
+  }
+
+  const step = document.createElement('div');
+  step.className = 'bom-sugg-step';
+  const checkboxMap = new Map(); // gs.name → <input type=checkbox>
+
+  // Matched categories
+  cats.forEach(cat => {
+    const catEl = document.createElement('div');
+    catEl.className = 'bom-sugg-cat';
+    const hdr = document.createElement('div');
+    hdr.className = 'bom-sugg-cat-header';
+    hdr.textContent = cat;
+    catEl.appendChild(hdr);
+
+    grouped[cat].forEach(({ gs, via }) => {
+      const row = document.createElement('div');
+      row.className = 'bom-sugg-row';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      checkboxMap.set(gs.name, cb);
+
+      const name = document.createElement('span');
+      name.className = 'bom-sugg-name';
+      name.textContent = gs.name;
+
+      const chips = document.createElement('span');
+      chips.className = 'bom-sugg-chips';
+      const catTokens = new Set(_tokenizeCategory(cat));
+      const matchedCats = (gs.categories || []).filter(c =>
+        _tokenizeCategory(c).some(t => catTokens.has(t))
+      );
+      const labels = matchedCats.length ? matchedCats : (gs.brands || []).slice(0, 2);
+      labels.forEach(label => {
+        const chip = document.createElement('span');
+        chip.className = 'bom-sugg-chip' + (via === 'brand' ? ' via-brand' : '');
+        chip.textContent = label;
+        chips.appendChild(chip);
+      });
+
+      row.appendChild(cb);
+      row.appendChild(name);
+      row.appendChild(chips);
+      catEl.appendChild(row);
+    });
+
+    step.appendChild(catEl);
+  });
+
+  // Unmatched categories
+  unmatched.forEach(cat => {
+    const catEl = document.createElement('div');
+    catEl.className = 'bom-sugg-cat';
+    const hdr = document.createElement('div');
+    hdr.className = 'bom-sugg-cat-header';
+    hdr.textContent = cat;
+    catEl.appendChild(hdr);
+    const emptyRow = document.createElement('div');
+    emptyRow.className = 'bom-sugg-empty';
+    emptyRow.textContent = 'Nenhum fornecedor encontrado — pesquisa manual necessária';
+    catEl.appendChild(emptyRow);
+    step.appendChild(catEl);
+  });
+
+  wrap.appendChild(step);
+
+  // Action buttons
+  const actions = document.createElement('div');
+  actions.className = 'modal-actions';
+  actions.style.marginTop = 'var(--sp-3)';
+
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'btn btn-ghost';
+  skipBtn.textContent = 'Fechar sem adicionar';
+  skipBtn.addEventListener('click', closeModal);
+
+  const manualBtn = document.createElement('button');
+  manualBtn.className = 'btn btn-ghost';
+  lbtn(manualBtn, 'user-plus', 'Adicionar manualmente');
+  manualBtn.addEventListener('click', () => openSupplierModal(null));
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn btn-primary';
+
+  const updateCount = () => {
+    const n = [...checkboxMap.values()].filter(cb => cb.checked).length;
+    addBtn.textContent = `Adicionar selecionados (${n})`;
+    addBtn.disabled = n === 0;
+  };
+  checkboxMap.forEach(cb => cb.addEventListener('change', updateCount));
+  updateCount();
+
+  addBtn.addEventListener('click', async () => {
+    addBtn.disabled = true;
+    addBtn.textContent = 'A adicionar…';
+    const toAdd = [...checkboxMap.entries()]
+      .filter(([, cb]) => cb.checked)
+      .map(([name]) => globalSuppliersList.find(gs => gs.name === name))
+      .filter(Boolean);
+    for (const gs of toAdd) {
+      await API.createSupplier({
+        process_id: processId,
+        name: gs.name,
+        email: gs.email || null,
+        email_cc: gs.email_cc || null,
+        status: 'Not contacted',
+        is_foreign: false,
+      });
+    }
+    closeModal();
+    await loadAll();
+    showToast(`${toAdd.length} fornecedor${toAdd.length !== 1 ? 'es' : ''} adicionado${toAdd.length !== 1 ? 's' : ''}.`);
+  });
+
+  actions.appendChild(skipBtn);
+  actions.appendChild(manualBtn);
+  actions.appendChild(addBtn);
+  wrap.appendChild(actions);
+  return wrap;
+}
+
 function renderBomValTable() {
   const tbody = document.getElementById('bomValTbody');
   if (!tbody) return;
