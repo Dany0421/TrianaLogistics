@@ -592,3 +592,15 @@ a:focus-visible {
   .btn-sm { min-height: 36px; padding: 8px 12px; }
   input, select, textarea { min-height: 44px; }
 }
+
+/* ── BOM Suggestions Step ── */
+.bom-sugg-step { display: flex; flex-direction: column; gap: var(--sp-3); max-height: 55vh; overflow-y: auto; margin: var(--sp-3) 0; }
+.bom-sugg-cat { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.bom-sugg-cat-header { padding: 6px var(--sp-3); background: var(--surface2); font-size: 11px; font-family: 'DM Mono', monospace; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); }
+.bom-sugg-row { display: flex; align-items: center; gap: var(--sp-3); padding: 8px var(--sp-3); border-top: 1px solid var(--border); }
+.bom-sugg-row:hover { background: var(--surface3); }
+.bom-sugg-name { flex: 1; font-size: 13px; font-weight: 500; color: var(--text); }
+.bom-sugg-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.bom-sugg-chip { font-size: 10px; padding: 2px 7px; border-radius: 10px; background: var(--accent-bg); color: var(--accent); }
+.bom-sugg-chip.via-brand { background: rgba(109,40,217,.12); color: #a78bfa; }
+.bom-sugg-empty { padding: 8px var(--sp-3); font-size: 12px; color: var(--muted); font-style: italic; }
