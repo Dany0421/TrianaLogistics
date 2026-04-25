@@ -50,11 +50,14 @@ function renderSupplierSuggestions() {
   if (!bomCats.length || !globalSuppliersList.length) return;
 
   const addedNames = new Set(suppliers.map(s => s.name.trim().toLowerCase()));
-  const bomCatsLower = new Set(bomCats.map(c => c.toLowerCase()));
+  const _tok = str => (str||'').toLowerCase().replace(/\s+e\s+/g,'|').split(/[\/&,|]/).map(t=>t.trim()).filter(Boolean);
+  const bomTokenSets = bomCats.map(c => new Set(_tok(c)));
 
   const suggestions = globalSuppliersList.filter(gs => {
     if (addedNames.has(gs.name.trim().toLowerCase())) return false;
-    return (gs.categories || []).some(c => bomCatsLower.has(c.toLowerCase()));
+    return (gs.categories || []).some(suppCat =>
+      _tok(suppCat).some(t => bomTokenSets.some(bs => bs.has(t)))
+    );
   });
 
   if (!suggestions.length) return;
@@ -75,7 +78,9 @@ function renderSupplierSuggestions() {
   cards.className = 'sugg-cards';
 
   suggestions.forEach(gs => {
-    const matchedCats = (gs.categories || []).filter(c => bomCatsLower.has(c.toLowerCase()));
+    const matchedCats = (gs.categories || []).filter(suppCat =>
+      _tok(suppCat).some(t => bomTokenSets.some(bs => bs.has(t)))
+    );
     const card = document.createElement('div');
     card.className = 'sugg-card';
 
