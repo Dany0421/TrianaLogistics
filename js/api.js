@@ -866,4 +866,18 @@ const API = {
     if (error) throw _sanitizeError(error);
     return data;
   },
+
+  async getHistoricalCategorySuppliers() {
+    const { data, error } = await supabase
+      .from('item_matches')
+      .select('suppliers(name), bom_items!bom_item_id(category)')
+      .not('supplier_id', 'is', null)
+      .not('bom_item_id', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(2000);
+    if (error) throw _sanitizeError(error);
+    return (data || [])
+      .map(m => ({ category: m.bom_items?.category, supplier_name: m.suppliers?.name }))
+      .filter(r => r.category && r.supplier_name);
+  },
 };
