@@ -84,7 +84,11 @@ function diffStatusBadge(status) {
   return `<span style="background:${bg};color:${color};border:1px solid ${color};border-radius:3px;font-size:10px;padding:1px 5px;font-family:'IBM Plex Mono',monospace">${label}</span>`;
 }
 
-function openBomValidationModal(fileName) {
+async function openBomValidationModal(fileName) {
+  if (histCatData === null) {
+    try { histCatData = await API.getHistoricalCategorySuppliers(); }
+    catch(_) { histCatData = []; }
+  }
   const isRevision = pendingDiff !== null;
   const removed = isRevision ? pendingDiff.removed : [];
 
@@ -250,9 +254,25 @@ function _matchSuppliersForBom(items, globalList, alreadyAddedNames) {
       });
     });
 
+    // Signal 3: historical usage — past item_matches with same category tokens
+    const histMatched = [];
+    if (histCatData && histCatData.length) {
+      const seenHist = new Set();
+      histCatData.forEach(entry => {
+        if (!_tokenizeCategory(entry.category).some(t => catTokens.has(t))) return;
+        const normName = (entry.supplier_name || '').trim().toLowerCase();
+        if (!normName || excluded.has(normName) || seenHist.has(normName)) return;
+        const gs = globalList.find(g => g.name.trim().toLowerCase() === normName);
+        if (!gs || catMatches.includes(gs) || brandMatched.includes(gs)) return;
+        seenHist.add(normName);
+        histMatched.push(gs);
+      });
+    }
+
     const all = [
       ...catMatches.map(gs => ({ gs, via: 'category' })),
       ...brandMatched.map(gs => ({ gs, via: 'brand' })),
+      ...histMatched.map(gs => ({ gs, via: 'history' })),
     ];
 
     if (all.length) grouped[cat] = all;
@@ -324,10 +344,15 @@ function buildBomSuggestionsStep() {
       const matchedCats = (gs.categories || []).filter(c =>
         _tokenizeCategory(c).some(t => catTokens.has(t))
       );
-      const labels = matchedCats.length ? matchedCats : (gs.brands || []).slice(0, 2);
+      const labels = matchedCats.length
+        ? matchedCats
+        : (gs.brands || []).length
+          ? (gs.brands).slice(0, 2)
+          : (via === 'history' ? ['Histórico'] : []);
       labels.forEach(label => {
         const chip = document.createElement('span');
-        chip.className = 'bom-sugg-chip' + (via === 'brand' ? ' via-brand' : '');
+        chip.className = 'bom-sugg-chip' +
+          (via === 'brand' ? ' via-brand' : via === 'history' ? ' via-history' : '');
         chip.textContent = label;
         chips.appendChild(chip);
       });
