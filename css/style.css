@@ -603,4 +603,5 @@ a:focus-visible {
 .bom-sugg-chips { display: flex; gap: 4px; flex-wrap: wrap; }
 .bom-sugg-chip { font-size: 10px; padding: 2px 7px; border-radius: 10px; background: var(--accent-bg); color: var(--accent); }
 .bom-sugg-chip.via-brand { background: rgba(109,40,217,.12); color: #a78bfa; }
+.bom-sugg-chip.via-history { background: rgba(20,184,166,.12); color: #2dd4bf; }
 .bom-sugg-empty { padding: 8px var(--sp-3); font-size: 12px; color: var(--muted); font-style: italic; }
