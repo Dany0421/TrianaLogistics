@@ -20,6 +20,7 @@ let pendingDiff = null;   // diff result when uploading a BOM revision
 let _bomValFilter = '';   // search filter active in the BOM validation modal
 let _quotValFilter = '';  // search filter active in the quotation validation modal
 let pendingBomFile = null;  // File object held between handleBomUpload and confirmBom
+let _bomModalEl = null;     // reference to the open BOM validation modal element
 let pendingQuotFile = null; // File object held between handleQuotationUpload and confirmQuotation
 let quotationFilesMap = {}; // supplierId → latest quotation_files row
 let quotationMap = {};    // supplierId → items[]

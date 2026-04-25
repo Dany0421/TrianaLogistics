@@ -89,6 +89,7 @@ function openBomValidationModal(fileName) {
   const removed = isRevision ? pendingDiff.removed : [];
 
   const el = document.createElement('div');
+  _bomModalEl = el;
 
   const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = isRevision ? 'Revisão BOM' : 'Validação BOM'; el.appendChild(tag);
   const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = fileName; el.appendChild(title);
@@ -182,6 +183,75 @@ function openManualBomEntry() {
     pendingBomItems = stripped;
   }
   openBomValidationModal(bomItems.length ? 'Editar BOM' : 'Entrada Manual');
+}
+
+function _tokenizeCategory(str) {
+  return (str || '')
+    .toLowerCase()
+    .replace(/\s+e\s+/g, '|')
+    .split(/[\/&,|]/)
+    .map(t => t.trim())
+    .filter(Boolean);
+}
+
+function _matchSuppliersForBom(items, globalList, alreadyAddedNames) {
+  const bomCats = [...new Set(items.filter(b => !b.is_service && b.category).map(b => b.category))];
+  const excluded = new Set(alreadyAddedNames.map(n => n.trim().toLowerCase()));
+
+  // brand → [gs] lookup from all global suppliers
+  const brandLookup = {};
+  globalList.forEach(gs => {
+    (gs.brands || []).forEach(b => {
+      const k = b.toLowerCase().trim();
+      if (!brandLookup[k]) brandLookup[k] = [];
+      brandLookup[k].push(gs);
+    });
+  });
+  const knownBrands = Object.keys(brandLookup);
+
+  const grouped = {};
+  const unmatched = [];
+
+  bomCats.forEach(cat => {
+    const catTokens = new Set(_tokenizeCategory(cat));
+
+    // Signal 1: category token match
+    const catMatches = globalList.filter(gs => {
+      if (excluded.has(gs.name.trim().toLowerCase())) return false;
+      return (gs.categories || []).some(c =>
+        _tokenizeCategory(c).some(t => catTokens.has(t))
+      );
+    });
+
+    // Signal 2: brand match — scan item descriptions for this category
+    const catItems = items.filter(b => b.category === cat);
+    const brandMatched = [];
+    catItems.forEach(item => {
+      const desc = (item.description || '').toLowerCase();
+      knownBrands.forEach(bk => {
+        const re = new RegExp('(?:^|\\s)' + bk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:\\s|$)', 'i');
+        if (re.test(desc)) {
+          brandLookup[bk].forEach(gs => {
+            if (!excluded.has(gs.name.trim().toLowerCase()) &&
+                !catMatches.includes(gs) &&
+                !brandMatched.includes(gs)) {
+              brandMatched.push(gs);
+            }
+          });
+        }
+      });
+    });
+
+    const all = [
+      ...catMatches.map(gs => ({ gs, via: 'category' })),
+      ...brandMatched.map(gs => ({ gs, via: 'brand' })),
+    ];
+
+    if (all.length) grouped[cat] = all;
+    else unmatched.push(cat);
+  });
+
+  return { grouped, unmatched };
 }
 
 function renderBomValTable() {
