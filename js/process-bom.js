@@ -662,9 +662,14 @@ async function confirmBom() {
     }
 
     pendingDiff = null;
-    closeModal();
     showToast(`BOM v${versionNumber} guardado — ${itemsToSave.length} itens.`);
     await loadAll();
+    const _hasCats = bomItems.some(b => !b.is_service && b.category);
+    if (_hasCats && _bomModalEl && globalSuppliersList.length) {
+      _bomModalEl.replaceChildren(buildBomSuggestionsStep());
+    } else {
+      closeModal();
+    }
   } catch(e) { showToast('Erro ao guardar BOM: ' + e.message, true); }
 }
 
