@@ -290,7 +290,7 @@ function toggleAllRFQ(checked) {
   document.querySelectorAll('.rfq-item-cb').forEach(cb => cb.checked = checked);
 }
 
-function buildRFQHtml(selected, supplierName) {
+function buildRFQHtml(selected) {
   const td = 'style="border:1px solid #cbd5e1;padding:7px 10px"';
   const tdC = 'style="border:1px solid #cbd5e1;padding:7px 10px;text-align:center"';
   const tdMono = 'style="border:1px solid #cbd5e1;padding:7px 10px;font-family:monospace;font-size:12px"';
@@ -315,7 +315,7 @@ function buildRFQHtml(selected, supplierName) {
     rows += '</tr>';
   }
 
-  return '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6">'
+  const inner = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6">'
     + '<p>Boa tarde, Prezados,</p>'
     + '<p>Espero que este e-mail os encontre bem.</p>'
     + '<p>Queria solicitar uma cota&ccedil;&atilde;o para o equipamento abaixo:</p>'
@@ -329,9 +329,11 @@ function buildRFQHtml(selected, supplierName) {
     + '<tbody>' + rows + '</tbody>'
     + '</table>'
     + '</div>';
+  // Full document: many mail clients paste fragment-only HTML as plain or strip the table
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + inner + '</body></html>';
 }
 
-/** Plain body for clipboard — must stay readable: DOM textContent strips ALL breaks and tables become mush. */
+/** Plain fallback when a client ignores HTML — one field per line (readable); not a single tab line */
 function buildRFQPlainText(selected) {
   const hasPartNum = selected.some(bi => bi.part_number);
   const lines = [
@@ -342,31 +344,26 @@ function buildRFQPlainText(selected) {
     'Queria solicitar uma cotação para o equipamento abaixo:',
     '',
   ];
-  const header = hasPartNum
-    ? ['Artigo', 'Descrição', 'Qtd.', 'Unidade'].join('\t')
-    : ['Descrição', 'Qtd.', 'Unidade'].join('\t');
-  lines.push(header);
-  lines.push(hasPartNum ? '----\t----\t----\t----' : '----\t----\t----');
   let lastCat = undefined;
+  let n = 0;
   for (const bi of selected) {
     if (bi.category !== lastCat) {
       if (bi.category) {
-        lines.push('');
         lines.push('— ' + String(bi.category).toUpperCase() + ' —');
+        lines.push('');
       }
       lastCat = bi.category;
     }
-    const desc = String(bi.description || '-').replace(/\r?\n/g, ' ');
-    const qty = String(bi.quantity != null ? bi.quantity : 1);
-    const unit = String(bi.unit || 'Unidade').replace(/\r?\n/g, ' ');
-    if (hasPartNum) {
-      lines.push([String(bi.part_number || '-').replace(/\r?\n/g, ' '), desc, qty, unit].join('\t'));
-    } else {
-      lines.push([desc, qty, unit].join('\t'));
-    }
+    n += 1;
+    lines.push('Item ' + n);
+    lines.push('---');
+    if (hasPartNum) lines.push('Artigo: ' + String(bi.part_number || '-').replace(/\r?\n/g, ' '));
+    lines.push('Descrição: ' + String(bi.description || '-').replace(/\r?\n/g, ' '));
+    lines.push('Qtd.: ' + String(bi.quantity != null ? bi.quantity : 1));
+    lines.push('Unidade: ' + String(bi.unit || 'Unidade').replace(/\r?\n/g, ' '));
+    lines.push('');
   }
-  lines.push('');
-  return lines.join('\n');
+  return lines.join('\n').trim() + '\n';
 }
 
 async function _copyRfqToClipboard(html, plain) {
@@ -404,7 +401,7 @@ async function sendRFQ(supplierIdx) {
   if (!selected.length) { showToast('Seleciona pelo menos um item.', true); return; }
 
   const subject = 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
-  const html = buildRFQHtml(selected, s.name);
+  const html = buildRFQHtml(selected);
   const plain = buildRFQPlainText(selected);
   const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
   const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
@@ -414,7 +411,9 @@ async function sendRFQ(supplierIdx) {
   window.location.href = mailto;
   closeModal();
   showToast(
-    copied ? 'Corpo do email copiado — cola no corpo (Ctrl+V / Cmd+V).' : 'Email aberto; copia o corpo manualmente se o paste não funcionar.',
+    copied
+      ? 'Corpo copiado (tabela em HTML). Cola no email; se não vir tabela, Colar especial → HTML / manter formatação.'
+      : 'Email aberto; copia o corpo manualmente se o paste não funcionar.',
     !copied
   );
 }
