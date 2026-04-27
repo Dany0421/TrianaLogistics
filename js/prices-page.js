@@ -1,5 +1,7 @@
 let activeDays = 30;
 let lastQuery = '';
+let lastResults = [];
+let filterMatchedOnly = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   const backLink = document.querySelector('.back-link');
@@ -12,6 +14,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('clearBtn').addEventListener('click', clearSearch);
 
   document.querySelector('.search-bar .btn-primary').addEventListener('click', doSearch);
+
+  document.getElementById('filterMatchBtn').addEventListener('click', function() {
+    filterMatchedOnly = !filterMatchedOnly;
+    this.classList.toggle('active', filterMatchedOnly);
+    const toRender = filterMatchedOnly ? lastResults.filter(r => r.item_matches?.[0]?.bom_items) : lastResults;
+    renderResults(toRender, lastQuery);
+  });
 
   document.querySelectorAll('.date-chip').forEach(chip => {
     chip.addEventListener('click', function() {
@@ -77,7 +86,9 @@ async function doSearch() {
 
   try {
     const results = await API.searchPriceHistory(q, dateFrom);
-    renderResults(results, q);
+    lastResults = results;
+    const toRender = filterMatchedOnly ? results.filter(r => r.item_matches?.[0]?.bom_items) : results;
+    renderResults(toRender, q);
   } catch(e) {
     info.textContent = '';
     const area = document.getElementById('resultsArea');
@@ -180,6 +191,12 @@ function renderResults(data, query) {
     const descDiv = document.createElement('div');
     descDiv.className = 'price-desc';
     appendHighlightedDesc(descDiv, displayDesc, query);
+    if (bomItem) {
+      const badge = document.createElement('span');
+      badge.className = 'badge-bom';
+      badge.textContent = 'BOM';
+      descDiv.appendChild(badge);
+    }
     tdDesc.appendChild(descDiv);
     if (supplierDesc && supplierDesc.trim() !== displayDesc.trim()) {
       const sub = document.createElement('div');
