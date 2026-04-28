@@ -432,6 +432,7 @@ function showModal(el) {
   box.appendChild(el);
   overlay.appendChild(box);
   root.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
 }
 function showModalLg(el) {
   const root = document.getElementById('modalRoot');
@@ -444,8 +445,9 @@ function showModalLg(el) {
   box.appendChild(el);
   overlay.appendChild(box);
   root.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
 }
-function closeModal() { document.getElementById('modalRoot').replaceChildren(); }
+function closeModal() { document.getElementById('modalRoot').replaceChildren(); document.body.style.overflow = ''; }
 
 // ── Helpers ──
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
