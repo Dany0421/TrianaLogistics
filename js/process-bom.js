@@ -393,11 +393,6 @@ function buildBomSuggestionsStep() {
   skipBtn.textContent = 'Fechar sem adicionar';
   skipBtn.addEventListener('click', closeModal);
 
-  const manualBtn = document.createElement('button');
-  manualBtn.className = 'btn btn-ghost';
-  lbtn(manualBtn, 'user-plus', 'Adicionar manualmente');
-  manualBtn.addEventListener('click', () => openSupplierModal(null));
-
   const addBtn = document.createElement('button');
   addBtn.className = 'btn btn-primary';
 
@@ -432,7 +427,6 @@ function buildBomSuggestionsStep() {
   });
 
   actions.appendChild(skipBtn);
-  actions.appendChild(manualBtn);
   actions.appendChild(addBtn);
   wrap.appendChild(actions);
   return wrap;
