@@ -96,6 +96,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   box-shadow: var(--focus-ring);
 }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: .5; }
+input[type="checkbox"], input[type="radio"] { width: auto; padding: 0; }
 select option { background: var(--surface2); }
 textarea { resize: vertical; min-height: 80px; }
 

@@ -1062,9 +1062,11 @@ function showModal(html) {
   box.appendChild(document.createRange().createContextualFragment(html));
   overlay.appendChild(box);
   root.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
 }
 function closeModal() {
   document.getElementById('modalRoot').replaceChildren();
+  document.body.style.overflow = '';
 }
 
 // ── Helpers ──
