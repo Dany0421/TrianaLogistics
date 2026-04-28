@@ -599,6 +599,11 @@ function openEditUserModal(u) {
   const title = document.createElement('div'); title.className = 'modal-title';
   title.textContent = 'Editar ' + (u.name || u.email); el.appendChild(title);
 
+  const emailRow = document.createElement('div'); emailRow.className = 'form-row';
+  const emailLbl = document.createElement('label'); emailLbl.textContent = 'Email'; emailRow.appendChild(emailLbl);
+  const emailVal = document.createElement('div'); emailVal.style.cssText = 'font-size:13px;color:var(--muted);padding:6px 0;font-family:"DM Mono",monospace;'; emailVal.textContent = u.email || '—'; emailRow.appendChild(emailVal);
+  el.appendChild(emailRow);
+
   const nameRow = document.createElement('div'); nameRow.className = 'form-row';
   const nameLbl = document.createElement('label'); nameLbl.textContent = 'Nome'; nameRow.appendChild(nameLbl);
   const nameInp = document.createElement('input'); nameInp.id = 'eu_name'; nameInp.maxLength = 100; nameInp.value = u.name || ''; nameRow.appendChild(nameInp);
