@@ -333,60 +333,37 @@ function buildRFQHtml(selected) {
   return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + inner + '</body></html>';
 }
 
-/** Plain fallback when a client ignores HTML — one field per line (readable); not a single tab line */
-function buildRFQPlainText(selected) {
-  const hasPartNum = selected.some(bi => bi.part_number);
-  const lines = [
-    'Boa tarde, Prezados,',
-    '',
-    'Espero que este e-mail os encontre bem.',
-    '',
-    'Queria solicitar uma cotação para o equipamento abaixo:',
-    '',
-  ];
-  let lastCat = undefined;
-  let n = 0;
-  for (const bi of selected) {
-    if (bi.category !== lastCat) {
-      if (bi.category) {
-        lines.push('— ' + String(bi.category).toUpperCase() + ' —');
-        lines.push('');
-      }
-      lastCat = bi.category;
-    }
-    n += 1;
-    lines.push('Item ' + n);
-    lines.push('---');
-    if (hasPartNum) lines.push('Artigo: ' + String(bi.part_number || '-').replace(/\r?\n/g, ' '));
-    lines.push('Descrição: ' + String(bi.description || '-').replace(/\r?\n/g, ' '));
-    lines.push('Qtd.: ' + String(bi.quantity != null ? bi.quantity : 1));
-    lines.push('Unidade: ' + String(bi.unit || 'Unidade').replace(/\r?\n/g, ' '));
-    lines.push('');
-  }
-  return lines.join('\n').trim() + '\n';
-}
-
-async function _copyRfqToClipboard(html, plain) {
+/**
+ * Copy RFQ body as rich HTML only.
+ * Do NOT add text/plain alongside text/html: Outlook and many mail clients prefer plain and you lose the table
+ * (paste looks like "Item 1 / --- / Descrição..." from the old plain fallback).
+ */
+async function _copyRfqToClipboard(html) {
   try {
     if (navigator.clipboard && window.ClipboardItem) {
       await navigator.clipboard.write([
         new ClipboardItem({
           'text/html': new Blob([html], { type: 'text/html' }),
-          'text/plain': new Blob([plain], { type: 'text/plain' }),
         }),
       ]);
       return true;
     }
   } catch (_) { /* fall through */ }
   try {
-    const ta = document.createElement('textarea');
-    ta.value = plain;
-    ta.setAttribute('readonly', '');
-    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
-    document.body.appendChild(ta);
-    ta.select();
+    const wrap = document.createElement('div');
+    wrap.setAttribute('contenteditable', 'true');
+    wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden';
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    wrap.innerHTML = bodyMatch ? bodyMatch[1] : html;
+    document.body.appendChild(wrap);
+    const range = document.createRange();
+    range.selectNodeContents(wrap);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
     const ok = document.execCommand('copy');
-    ta.remove();
+    sel.removeAllRanges();
+    wrap.remove();
     return ok;
   } catch (_) {
     return false;
@@ -402,17 +379,16 @@ async function sendRFQ(supplierIdx) {
 
   const subject = 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
   const html = buildRFQHtml(selected);
-  const plain = buildRFQPlainText(selected);
   const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
   const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
   // Copy must complete before mailto — navigating away cancels in-flight clipboard writes.
-  const copied = await _copyRfqToClipboard(html, plain);
+  const copied = await _copyRfqToClipboard(html);
   window.location.href = mailto;
   closeModal();
   showToast(
     copied
-      ? 'Corpo copiado (tabela em HTML). Cola no email; se não vir tabela, Colar especial → HTML / manter formatação.'
+      ? 'Corpo copiado com tabela (HTML). Cola no corpo do email (Ctrl+V).'
       : 'Email aberto; copia o corpo manualmente se o paste não funcionar.',
     !copied
   );
