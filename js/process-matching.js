@@ -861,11 +861,51 @@ function openMatchModal(bomItemId, supplierId) {
     el.appendChild(listWrap);
   }
 
+  // Extra lines for this match
+  const extras = matchExtraItems.filter(e => e.item_match_id === currentMatch?.id);
+
+  // Show extra lines section if any
+  if (extras.length && currentMatch?.match_type !== 'included_in') {
+    const extraSec = document.createElement('div');
+    extraSec.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden';
+    const extraHdr = document.createElement('div');
+    extraHdr.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;padding:6px 12px;background:var(--surface2)";
+    extraHdr.textContent = 'LINHAS ADICIONAIS';
+    extraSec.appendChild(extraHdr);
+    for (const e of extras) {
+      const eRow = document.createElement('div');
+      eRow.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border)';
+      const eDesc = document.createElement('div'); eDesc.style.cssText = 'flex:1;font-size:12px;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      eDesc.textContent = e.quotation_items?.raw_description || '—';
+      const ePrice = document.createElement('div'); ePrice.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;flex-shrink:0";
+      ePrice.textContent = fmtPrice(e.quotation_items?.price);
+      const eRm = document.createElement('button'); eRm.className = 'btn btn-ghost btn-sm'; eRm.style.cssText = 'font-size:11px;padding:2px 6px;flex-shrink:0;color:var(--danger)'; eRm.textContent = '×';
+      eRm.addEventListener('click', () => removeExtraLine(e.id, currentMatch.id));
+      eRow.appendChild(eDesc); eRow.appendChild(ePrice); eRow.appendChild(eRm);
+      extraSec.appendChild(eRow);
+    }
+    el.appendChild(extraSec);
+  }
+
   const actions = document.createElement('div'); actions.className = 'modal-actions';
   if (currentMatch) {
     if (currentMatch.match_type !== 'included_in') {
       const selBtn = document.createElement('button'); selBtn.className = 'btn btn-ghost btn-sm'; lbtn(selBtn, 'check', 'Selecionar como melhor oferta');
       selBtn.addEventListener('click', () => selectOffer(bomItemId, supplierId, currentMatch.quotation_item_id)); actions.appendChild(selBtn);
+
+      // "Dividir em linhas" button — only when unused qItems exist
+      const usedQiIds = new Set([
+        currentMatch.quotation_item_id,
+        ...extras.map(e => e.quotation_item_id),
+        ...matches.filter(m => m.supplier_id === supplierId && m.id !== currentMatch.id && m.match_type !== 'included_in').map(m => m.quotation_item_id).filter(Boolean),
+      ]);
+      const splitAvailable = qItems.filter(qi => !usedQiIds.has(qi.id));
+      if (splitAvailable.length > 0) {
+        const splitBtn = document.createElement('button'); splitBtn.className = 'btn btn-ghost btn-sm';
+        lbtn(splitBtn, 'git-merge', 'Dividir em linhas');
+        splitBtn.addEventListener('click', () => { closeModal(); openSplitModal(bomItemId, supplierId, currentMatch.id, splitAvailable); });
+        actions.appendChild(splitBtn);
+      }
     }
     const rmBtn = document.createElement('button'); rmBtn.className = 'btn btn-danger btn-sm'; rmBtn.textContent = 'Remover';
     rmBtn.addEventListener('click', () => unlinkItem(bomItemId, supplierId, currentMatch.id)); actions.appendChild(rmBtn);
@@ -910,6 +950,61 @@ function openIncludedInModal(bomItemId, supplierId) {
   actions.appendChild(confirmBtn);
   el.appendChild(actions);
   showModal(el);
+}
+
+function openSplitModal(bomItemId, supplierId, itemMatchId, availableQItems) {
+  const bi = bomItems.find(b => b.id === bomItemId);
+  const s  = suppliers.find(x => x.id === supplierId);
+  const el = document.createElement('div');
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = s?.name || ''; el.appendChild(tag);
+  const title = document.createElement('div'); title.className = 'modal-title'; title.style.cssText = 'font-size:14px;margin-bottom:4px'; title.textContent = bi?.description || ''; el.appendChild(title);
+  const sub = document.createElement('div'); sub.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:16px'; sub.textContent = 'Seleciona a linha adicional da cotação que faz parte deste item.'; el.appendChild(sub);
+
+  const listWrap = document.createElement('div'); listWrap.style.cssText = 'max-height:300px;overflow-y:auto;margin-bottom:16px';
+  for (const qi of availableQItems) {
+    const row = document.createElement('div'); row.className = 'match-pick-row';
+    row.addEventListener('click', () => addExtraLine(itemMatchId, qi.id, qi));
+    const infoDiv = document.createElement('div'); infoDiv.style.cssText = 'flex:1;min-width:0';
+    const desc = document.createElement('div'); desc.style.cssText = 'font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'; desc.textContent = qi.raw_description; infoDiv.appendChild(desc);
+    if (qi.raw_part_number) { const pn = document.createElement('div'); pn.style.cssText = 'font-size:10px;color:var(--muted)'; pn.textContent = qi.raw_part_number; infoDiv.appendChild(pn); }
+    const priceDiv = document.createElement('div'); priceDiv.style.cssText = 'text-align:right;flex-shrink:0';
+    const pv = document.createElement('div'); pv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600"; pv.textContent = fmtPrice(qi.price); priceDiv.appendChild(pv);
+    const cv = document.createElement('div'); cv.style.cssText = 'font-size:10px;color:var(--muted)'; cv.textContent = qi.currency; priceDiv.appendChild(cv);
+    row.appendChild(infoDiv); row.appendChild(priceDiv);
+    listWrap.appendChild(row);
+  }
+  el.appendChild(listWrap);
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  el.appendChild(actions);
+  showModal(el);
+}
+
+async function addExtraLine(itemMatchId, quotationItemId, qi) {
+  try {
+    closeModal();
+    const saved = await API.addMatchExtraItem(itemMatchId, quotationItemId);
+    matchExtraItems.push({ ...saved, quotation_items: qi });
+    renderMatchingTab();
+    showToast('Linha adicionada.');
+  } catch(e) {
+    await loadMatchData(); renderMatchingTab();
+    showToast('Erro: ' + e.message, true);
+  }
+}
+
+async function removeExtraLine(extraItemId, itemMatchId) {
+  try {
+    matchExtraItems = matchExtraItems.filter(e => e.id !== extraItemId);
+    closeModal();
+    renderMatchingTab();
+    await API.removeMatchExtraItem(extraItemId);
+    showToast('Linha removida.');
+  } catch(e) {
+    await loadMatchData(); renderMatchingTab();
+    showToast('Erro: ' + e.message, true);
+  }
 }
 
 async function saveIncludedIn(bomItemId, supplierId, coveringBomItemId) {
