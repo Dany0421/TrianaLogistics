@@ -604,6 +604,17 @@ function openEditUserModal(u) {
   const emailVal = document.createElement('div'); emailVal.style.cssText = 'font-size:13px;color:var(--muted);padding:6px 0;font-family:"DM Mono",monospace;'; emailVal.textContent = u.email || '—'; emailRow.appendChild(emailVal);
   el.appendChild(emailRow);
 
+  const metaRow = document.createElement('div'); metaRow.style.cssText = 'display:flex;gap:var(--sp-4);margin-bottom:var(--sp-3)';
+  [['Criado em', u.created_at], ['Último acesso', u.last_sign_in_at]].forEach(([lbl, iso]) => {
+    const col = document.createElement('div'); col.style.flex = '1';
+    const l = document.createElement('label'); l.textContent = lbl; col.appendChild(l);
+    const v = document.createElement('div'); v.style.cssText = 'font-size:12px;color:var(--muted);padding:4px 0;';
+    v.textContent = iso ? timeAgo(iso) : '—';
+    v.title = iso ? fullDate(iso) : '';
+    col.appendChild(v); metaRow.appendChild(col);
+  });
+  el.appendChild(metaRow);
+
   const nameRow = document.createElement('div'); nameRow.className = 'form-row';
   const nameLbl = document.createElement('label'); nameLbl.textContent = 'Nome'; nameRow.appendChild(nameLbl);
   const nameInp = document.createElement('input'); nameInp.id = 'eu_name'; nameInp.maxLength = 100; nameInp.value = u.name || ''; nameRow.appendChild(nameInp);
