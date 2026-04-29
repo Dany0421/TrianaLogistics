@@ -16,3 +16,6 @@ Thumbs.db
 
 # SQL — schema e patches ficam locais, fora do repo público
 sql/
+
+# Cópias locais de schema/security para contexto do agente (nunca no remoto)
+.local/
