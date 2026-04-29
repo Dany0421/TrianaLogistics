@@ -41,6 +41,11 @@ async function checkPriceAnomalies(items) {
 }
 
 // ── Supplier Suggestions ──
+function _suggDismissedKey() { return 'sugg_dismissed_' + processId; }
+function _getDismissed() { try { return new Set(JSON.parse(localStorage.getItem(_suggDismissedKey()) || '[]')); } catch(_) { return new Set(); } }
+function _saveDismissed(set) { try { localStorage.setItem(_suggDismissedKey(), JSON.stringify([...set])); } catch(_) {} }
+function _dismissSugg(names) { const s = _getDismissed(); names.forEach(n => s.add(n.trim().toLowerCase())); _saveDismissed(s); }
+
 function renderSupplierSuggestions() {
   const banner = document.getElementById('suggBanner');
   if (!banner) return;
@@ -50,11 +55,13 @@ function renderSupplierSuggestions() {
   if (!bomCats.length || !globalSuppliersList.length) return;
 
   const addedNames = new Set(suppliers.map(s => s.name.trim().toLowerCase()));
+  const dismissed = _getDismissed();
   const _tok = str => (str||'').toLowerCase().replace(/\s+e\s+/g,'|').split(/[\/&,|]/).map(t=>t.trim()).filter(Boolean);
   const bomTokenSets = bomCats.map(c => new Set(_tok(c)));
 
   const suggestions = globalSuppliersList.filter(gs => {
-    if (addedNames.has(gs.name.trim().toLowerCase())) return false;
+    const norm = gs.name.trim().toLowerCase();
+    if (addedNames.has(norm) || dismissed.has(norm)) return false;
     return (gs.categories || []).some(suppCat =>
       _tok(suppCat).some(t => bomTokenSets.some(bs => bs.has(t)))
     );
@@ -70,7 +77,10 @@ function renderSupplierSuggestions() {
   closeBtn.className = 'btn btn-ghost btn-sm';
   closeBtn.appendChild(licon('x', 13));
   closeBtn.setAttribute('aria-label', 'Fechar');
-  closeBtn.onclick = () => { while (banner.firstChild) banner.removeChild(banner.firstChild); };
+  closeBtn.onclick = () => {
+    _dismissSugg(suggestions.map(gs => gs.name));
+    while (banner.firstChild) banner.removeChild(banner.firstChild);
+  };
   header.appendChild(title);
   header.appendChild(closeBtn);
 
@@ -84,10 +94,23 @@ function renderSupplierSuggestions() {
     const card = document.createElement('div');
     card.className = 'sugg-card';
 
+    const cardTop = document.createElement('div');
+    cardTop.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:4px';
+
     const nameEl = document.createElement('div');
     nameEl.className = 'sugg-card-name';
     nameEl.textContent = gs.name;
-    card.appendChild(nameEl);
+    cardTop.appendChild(nameEl);
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'btn btn-ghost btn-sm';
+    dismissBtn.style.cssText = 'padding:1px 4px;opacity:.5;flex-shrink:0';
+    dismissBtn.appendChild(licon('x', 11));
+    dismissBtn.setAttribute('aria-label', 'Não mostrar');
+    dismissBtn.onclick = () => { _dismissSugg([gs.name]); card.remove(); if (!cards.children.length) while (banner.firstChild) banner.removeChild(banner.firstChild); };
+    cardTop.appendChild(dismissBtn);
+
+    card.appendChild(cardTop);
 
     if (matchedCats.length) {
       const catsEl = document.createElement('div');
