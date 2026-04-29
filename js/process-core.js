@@ -26,6 +26,7 @@ let pendingQuotFile = null; // File object held between handleQuotationUpload an
 let quotationFilesMap = {}; // supplierId → latest quotation_files row
 let quotationMap = {};    // supplierId → items[]
 let matches = [];
+let matchExtraItems = [];
 let selectedOffers = [];
 let pendingQuotItems = [];
 let currentQuotSuppId = null;
@@ -139,6 +140,7 @@ async function loadAll() {
       const currentBomIds = new Set(currentBomItemIds);
       selectedOffers = selOfrs.filter(o => currentBomIds.has(o.bom_item_id));
       rejectedAutoMatch = rejAuto;
+      matchExtraItems = await API.getMatchExtraItems(matches.map(m => m.id));
       quotationFilesMap = {};
       for (const f of qFiles) {
         if (!quotationFilesMap[f.supplier_id]) quotationFilesMap[f.supplier_id] = f;
@@ -163,13 +165,16 @@ async function loadAll() {
 
 async function loadMatchData() {
   const currentBomItemIds = bomItems.map(bi => bi.id);
-  [matches, selectedOffers, rejectedAutoMatch] = await Promise.all([
+  const currentBomIds = new Set(currentBomItemIds);
+  const [mtch, selOfrs, rejAuto] = await Promise.all([
     API.getMatches(processId, currentBomItemIds),
     API.getSelectedOffers(processId),
     API.getRejectedAutoMatch(processId),
   ]);
-  const currentBomIds = new Set(currentBomItemIds);
-  selectedOffers = selectedOffers.filter(o => currentBomIds.has(o.bom_item_id));
+  matches = mtch;
+  selectedOffers = selOfrs.filter(o => currentBomIds.has(o.bom_item_id));
+  rejectedAutoMatch = rejAuto;
+  matchExtraItems = await API.getMatchExtraItems(matches.map(m => m.id));
 }
 
 // ── Header ──
