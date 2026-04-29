@@ -310,6 +310,37 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async getMatchExtraItems(matchIds) {
+    if (!matchIds || !matchIds.length) return [];
+    const BATCH = 80;
+    const all = [];
+    for (let i = 0; i < matchIds.length; i += BATCH) {
+      const chunk = matchIds.slice(i, i + BATCH);
+      const { data, error } = await supabase
+        .from('match_extra_items')
+        .select('id, item_match_id, quotation_item_id, quotation_items(price, currency, discount, raw_description, eta_value, eta_unit)')
+        .in('item_match_id', chunk);
+      if (error) throw _sanitizeError(error);
+      if (data) all.push(...data);
+    }
+    return all;
+  },
+
+  async addMatchExtraItem(itemMatchId, quotationItemId) {
+    const { data, error } = await supabase
+      .from('match_extra_items')
+      .insert({ item_match_id: itemMatchId, quotation_item_id: quotationItemId })
+      .select('id, item_match_id, quotation_item_id, quotation_items(price, currency, discount, raw_description, eta_value, eta_unit)')
+      .single();
+    if (error) throw _sanitizeError(error);
+    return data;
+  },
+
+  async removeMatchExtraItem(extraItemId) {
+    const { error } = await supabase.from('match_extra_items').delete().eq('id', extraItemId);
+    if (error) throw _sanitizeError(error);
+  },
+
   async getRejectedAutoMatch(processId) {
     const { data, error } = await supabase.from('rejected_automatch').select('*').eq('process_id', processId);
     if (error) throw _sanitizeError(error);
@@ -778,21 +809,16 @@ const API = {
       .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, processes(id, project_name, client_name)), item_matches(bom_items!bom_item_id(description, part_number, custom_description))')
       .order('created_at', { ascending: false });
     if (dateFrom) q = q.gte('created_at', dateFrom);
-    // Server-side filter on first word to cut down rows before transfer
-    if (query && query.trim()) {
-      const first = query.trim().split(/\s+/)[0].replace(/[%_]/g, '');
-      if (first) q = q.ilike('raw_description', `%${first}%`);
-    }
     q = q.limit(1000);
     const { data, error } = await q;
     if (error) throw _sanitizeError(error);
     const rows = data || [];
     if (!query || !query.trim()) return rows;
-    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(1);
-    if (!words.length) return rows;
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return rows.filter(item => {
-      const bomDesc = item.item_matches?.[0]?.bom_items?.description || '';
-      const bomPart = item.item_matches?.[0]?.bom_items?.part_number || '';
+      const bom = item.item_matches?.[0]?.bom_items;
+      const bomDesc = (bom?.custom_description || bom?.description || '');
+      const bomPart = (bom?.part_number || '');
       const hay = ((item.raw_description || '') + ' ' + (item.raw_part_number || '') + ' ' + bomDesc + ' ' + bomPart).toLowerCase();
       return words.every(w => hay.includes(w));
     });
@@ -834,7 +860,8 @@ const API = {
 
   // ── Pending Margin Alerts ──
   async getPendingMarginAlerts() {
-    const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const _d = new Date(); _d.setHours(0, 0, 0, 0);
+    const cutoff = _d.toISOString();
     const { data, error } = await supabase
       .from('processes')
       .select('id, project_name, client_name, last_margin_followup_at')
