@@ -348,11 +348,14 @@ async function _copyRfqToClipboard(html) {
       ]);
       return true;
     }
-  } catch (_) { /* fall through */ }
+  } catch (e) {
+    console.warn('[RFQ] ClipboardItem failed:', e);
+  }
   try {
     const wrap = document.createElement('div');
     wrap.setAttribute('contenteditable', 'true');
-    wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden';
+    // Wide enough to select full table; do NOT use overflow:hidden + 1×1px — selection is empty in several browsers
+    wrap.style.cssText = 'position:fixed;left:-8000px;top:0;width:720px;opacity:0;pointer-events:none;z-index:-1';
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
     wrap.innerHTML = bodyMatch ? bodyMatch[1] : html;
     document.body.appendChild(wrap);
@@ -365,13 +368,18 @@ async function _copyRfqToClipboard(html) {
     sel.removeAllRanges();
     wrap.remove();
     return ok;
-  } catch (_) {
+  } catch (e) {
+    console.warn('[RFQ] execCommand copy failed:', e);
     return false;
   }
 }
 
 async function sendRFQ(supplierIdx) {
   const s = suppliers[supplierIdx];
+  if (!s || !String(s.email || '').trim()) {
+    showToast('Este fornecedor não tem email principal.', true);
+    return;
+  }
   const selected = [...document.querySelectorAll('.rfq-item-cb:checked')]
     .map(cb => bomItems[parseInt(cb.value)])
     .filter(Boolean);
@@ -382,16 +390,30 @@ async function sendRFQ(supplierIdx) {
   const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
   const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
-  // Copy must complete before mailto — navigating away cancels in-flight clipboard writes.
-  const copied = await _copyRfqToClipboard(html);
-  window.location.href = mailto;
+  let copied = false;
+  try {
+    copied = await _copyRfqToClipboard(html);
+  } catch (e) {
+    console.error('[RFQ] Clipboard error:', e);
+  }
+
   closeModal();
   showToast(
     copied
       ? 'Corpo copiado com tabela (HTML). Cola no corpo do email (Ctrl+V).'
-      : 'Email aberto; copia o corpo manualmente se o paste não funcionar.',
+      : 'Não foi possível copiar automaticamente — seleciona o texto no site ou copia do browser.',
     !copied
   );
+
+  // Defer mailto so toast/modal repaint; synchronous navigation can skip UI updates in some browsers
+  setTimeout(() => {
+    try {
+      window.location.href = mailto;
+    } catch (e) {
+      console.error('[RFQ] mailto failed:', e);
+      showToast('Abre o email manualmente para ' + s.email + '.', true);
+    }
+  }, 120);
 }
 
 function autoFillSupplierEmail(name) {
