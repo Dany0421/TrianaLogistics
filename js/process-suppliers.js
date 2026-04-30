@@ -281,11 +281,20 @@ function openRFQModal(supplierIdx) {
       const frag = document.createDocumentFragment(); let lastCat = null;
       for (const { bi, idx } of group) {
         if (bi.category && bi.category !== lastCat) {
-          const catDiv = document.createElement('div'); catDiv.style.cssText = "background:var(--surface2);padding:5px 12px;font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase;border-bottom:1px solid var(--border)"; catDiv.textContent = bi.category; frag.appendChild(catDiv); lastCat = bi.category;
+          const catDiv = document.createElement('div'); catDiv.style.cssText = "display:flex;align-items:center;justify-content:space-between;background:var(--surface2);padding:5px 12px;border-bottom:1px solid var(--border);position:sticky;top:34px;z-index:1";
+          const catName = document.createElement('span'); catName.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.8px;text-transform:uppercase"; catName.textContent = bi.category;
+          const selCat = document.createElement('span'); selCat.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;user-select:none;padding:1px 6px;border-radius:3px;border:1px solid var(--border)"; selCat.textContent = 'sel. tudo';
+          const catKey = bi.category;
+          selCat.addEventListener('click', () => {
+            const cbs = document.querySelectorAll(`.rfq-item-cb[data-rfq-cat="${CSS.escape(catKey)}"]`);
+            const allChecked = [...cbs].every(c => c.checked);
+            cbs.forEach(c => { c.checked = !allChecked; });
+          });
+          catDiv.appendChild(catName); catDiv.appendChild(selCat); frag.appendChild(catDiv); lastCat = bi.category;
         }
         const lbl = document.createElement('label'); lbl.style.cssText = `display:grid;grid-template-columns:20px 1fr auto;align-items:start;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:.1s${dimmed ? ';opacity:.45' : ''}`;
         lbl.addEventListener('mouseover', () => { lbl.style.background = 'rgba(37,99,235,.05)'; }); lbl.addEventListener('mouseout', () => { lbl.style.background = ''; });
-        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'rfq-item-cb'; cb.value = idx; cb.checked = true; cb.style.cssText = 'margin-top:3px;width:auto'; lbl.appendChild(cb);
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'rfq-item-cb'; cb.value = idx; cb.checked = true; cb.dataset.rfqCat = bi.category || ''; cb.style.cssText = 'margin-top:3px;width:auto'; lbl.appendChild(cb);
         const infoDiv = document.createElement('div');
         const descEl = document.createElement('div'); descEl.style.cssText = 'font-size:13px;color:var(--text);line-height:1.4'; descEl.textContent = bi.description; infoDiv.appendChild(descEl);
         if (bi.part_number) { const pnEl = document.createElement('div'); pnEl.style.cssText = "font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px"; pnEl.textContent = bi.part_number; infoDiv.appendChild(pnEl); }
