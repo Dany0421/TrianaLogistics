@@ -2,6 +2,7 @@
 let editingSupplierIdx = null;
 let pendingSupplierCategories = [];
 let pendingSupplierBrands = [];
+let rfqLang = 'pt';
 /** Aligned with chk_quot_description_length (must not reuse api.js const name — global scope / concat builds) */
 const MAX_QUOTATION_LINE_DESC = 2000;
 
@@ -256,10 +257,33 @@ function openRFQModal(supplierIdx) {
 
   const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Pedido de Cotação — RFQ'; el.appendChild(tag);
 
-  const titleRow = document.createElement('div'); titleRow.style.cssText = 'display:flex;align-items:baseline;gap:12px;margin-bottom:4px';
+  const titleRow = document.createElement('div'); titleRow.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:4px';
   const title = document.createElement('div'); title.className = 'modal-title'; title.style.marginBottom = '0'; title.textContent = s.name; titleRow.appendChild(title);
-  const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'DM Mono',monospace"; emailSpan.textContent = s.email; titleRow.appendChild(emailSpan);
+  const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;flex:1"; emailSpan.textContent = s.email; titleRow.appendChild(emailSpan);
+
+  // Language toggle
+  rfqLang = s.language || 'pt';
+  const langWrap = document.createElement('div'); langWrap.style.cssText = 'display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden;flex-shrink:0';
+  ['pt','en'].forEach(lang => {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.dataset.lang = lang;
+    btn.textContent = lang.toUpperCase();
+    btn.style.cssText = 'padding:3px 10px;font-family:DM Mono,monospace;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:.15s;letter-spacing:.5px';
+    const setActive = () => langWrap.querySelectorAll('button').forEach(b => {
+      const active = b.dataset.lang === rfqLang;
+      b.style.background = active ? 'var(--accent)' : 'var(--surface2)';
+      b.style.color = active ? '#fff' : 'var(--muted)';
+    });
+    btn.addEventListener('click', () => { rfqLang = lang; setActive(); });
+    langWrap.appendChild(btn);
+  });
+  titleRow.appendChild(langWrap);
   el.appendChild(titleRow);
+  // Set initial active state after buttons are in DOM
+  langWrap.querySelectorAll('button').forEach(b => {
+    const active = b.dataset.lang === rfqLang;
+    b.style.background = active ? 'var(--accent)' : 'var(--surface2)';
+    b.style.color = active ? '#fff' : 'var(--muted)';
+  });
 
   if (!bomItems.length) {
     const msg = document.createElement('div'); msg.style.cssText = 'color:var(--muted);font-size:13px;margin:20px 0'; msg.textContent = 'Carrega o BOM primeiro.'; el.appendChild(msg);
@@ -329,7 +353,8 @@ function toggleAllRFQ(checked) {
   document.querySelectorAll('.rfq-item-cb').forEach(cb => cb.checked = checked);
 }
 
-function buildRFQHtml(selected) {
+function buildRFQHtml(selected, lang) {
+  const en = lang === 'en';
   const td = 'style="border:1px solid #cbd5e1;padding:7px 10px"';
   const tdC = 'style="border:1px solid #cbd5e1;padding:7px 10px;text-align:center"';
   const tdMono = 'style="border:1px solid #cbd5e1;padding:7px 10px;font-family:monospace;font-size:12px"';
@@ -350,25 +375,35 @@ function buildRFQHtml(selected) {
     if (hasPartNum) rows += '<td ' + tdMono + '>' + esc(bi.part_number || '-') + '</td>';
     rows += '<td ' + td + '>' + esc(bi.description || '-') + '</td>';
     rows += '<td ' + tdC + '>' + (bi.quantity || 1) + '</td>';
-    rows += '<td ' + td + '>' + esc(bi.unit || 'Unidade') + '</td>';
+    rows += '<td ' + td + '>' + esc(bi.unit || (en ? 'Unit' : 'Unidade')) + '</td>';
     rows += '</tr>';
   }
 
-  const inner = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6">'
-    + '<p>Boa tarde, Prezados,</p>'
-    + '<p>Espero que este e-mail os encontre bem.</p>'
-    + '<p>Queria solicitar uma cota&ccedil;&atilde;o para o equipamento abaixo:</p>'
-    + '<table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;width:100%;max-width:720px">'
+  const thStyle = 'style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600"';
+  const thCStyle = 'style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;font-weight:600"';
+
+  const table = '<table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;width:100%;max-width:720px">'
     + '<thead><tr style="background:#f0f4f8">'
-    + (hasPartNum ? '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Artigo</th>' : '')
-    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Descri&ccedil;&atilde;o</th>'
-    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;font-weight:600">Qtd.</th>'
-    + '<th style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600">Unidade</th>'
+    + (hasPartNum ? '<th ' + thStyle + '>' + (en ? 'Reference' : 'Artigo') + '</th>' : '')
+    + '<th ' + thStyle + '>' + (en ? 'Description' : 'Descri&ccedil;&atilde;o') + '</th>'
+    + '<th ' + thCStyle + '>' + (en ? 'Qty.' : 'Qtd.') + '</th>'
+    + '<th ' + thStyle + '>' + (en ? 'Unit' : 'Unidade') + '</th>'
     + '</tr></thead>'
     + '<tbody>' + rows + '</tbody>'
-    + '</table>'
-    + '</div>';
-  // Full document: many mail clients paste fragment-only HTML as plain or strip the table
+    + '</table>';
+
+  const body = en
+    ? '<p>Good day,</p>'
+      + '<p>I trust this message finds you well.</p>'
+      + '<p>We are reaching out to formally request a quotation for the following requirement:</p>'
+      + table
+      + '<p>Could you also kindly include the shipping cost and ETA?</p>'
+    : '<p>Boa tarde, Prezados,</p>'
+      + '<p>Espero que este e-mail os encontre bem.</p>'
+      + '<p>Queria solicitar uma cota&ccedil;&atilde;o para o equipamento abaixo:</p>'
+      + table;
+
+  const inner = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6">' + body + '</div>';
   return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + inner + '</body></html>';
 }
 
@@ -424,8 +459,10 @@ async function sendRFQ(supplierIdx) {
     .filter(Boolean);
   if (!selected.length) { showToast('Seleciona pelo menos um item.', true); return; }
 
-  const subject = 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
-  const html = buildRFQHtml(selected);
+  const subject = rfqLang === 'en'
+    ? 'Request for Quotation - ' + process.project_name + ' - ' + process.client_name
+    : 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
+  const html = buildRFQHtml(selected, rfqLang);
   const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
   const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 

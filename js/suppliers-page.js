@@ -379,6 +379,8 @@ function openSupplierModal(id = null) {
       '<div><label>Marcas</label>' +
         '<div class="tag-input-box" id="gsBrandBox"></div></div>' +
     '</div>' +
+    '<div class="form-row"><label>Idioma do Email <span style="font-size:11px;color:var(--muted);font-weight:400">(usado no RFQ)</span></label>' +
+      '<select id="gs_language"><option value="pt">PT — Português</option><option value="en">EN — English</option></select></div>' +
     '<div class="form-row"><label>Notas</label><textarea id="gs_notes"></textarea></div>' +
     '<div class="modal-actions">' +
       '<button class="btn btn-ghost">Cancelar</button>' +
@@ -394,6 +396,7 @@ function openSupplierModal(id = null) {
   _gs('gs_email', s?.email || '');
   _gs('gs_email_cc', s?.email_cc || '');
   _gs('gs_notes', s?.notes || '');
+  const langEl = document.getElementById('gs_language'); if (langEl) langEl.value = s?.language || 'pt';
   renderTagBox('gsCatBox', pendingCats, 'cat', '');
   renderTagBox('gsBrandBox', pendingBrands, 'brand', 'tag-chip-brand');
 }
@@ -409,7 +412,8 @@ async function saveSupplier() {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Email inv\u00e1lido.', true); return; }
   if (email_cc && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email_cc)) { showToast('Email CC inv\u00e1lido.', true); return; }
 
-  const fields = { name, email, email_cc, categories: pendingCats, brands: pendingBrands, notes };
+  const language = document.getElementById('gs_language')?.value || 'pt';
+  const fields = { name, email, email_cc, categories: pendingCats, brands: pendingBrands, notes, language };
   try {
     if (editingId) {
       await API.updateGlobalSupplier(editingId, fields);
