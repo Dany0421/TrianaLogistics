@@ -261,8 +261,9 @@ function openRFQModal(supplierIdx) {
   const title = document.createElement('div'); title.className = 'modal-title'; title.style.marginBottom = '0'; title.textContent = s.name; titleRow.appendChild(title);
   const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;flex:1"; emailSpan.textContent = s.email; titleRow.appendChild(emailSpan);
 
-  // Language toggle
-  rfqLang = s.language || 'pt';
+  // Language toggle — language lives on global_suppliers, not process suppliers
+  const _gsForLang = globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase());
+  rfqLang = _gsForLang?.language || 'pt';
   const langWrap = document.createElement('div'); langWrap.style.cssText = 'display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden;flex-shrink:0';
   ['pt','en'].forEach(lang => {
     const btn = document.createElement('button'); btn.type = 'button'; btn.dataset.lang = lang;
