@@ -871,13 +871,24 @@ function openQuotationValModal(fileName, rawPdfText) {
   const discPct = document.createElement('span'); discPct.style.cssText = 'font-size:12px;color:var(--muted)'; discPct.textContent = '%';
   discIn.oninput = function() {
     quotGlobalDiscount = parseFloat(this.value) || 0;
-    pendingQuotItems.forEach(item => { if (!item._discountManual) item.discount = quotGlobalDiscount; });
+    pendingQuotItems.forEach(item => {
+      if (!item._discountManual) {
+        item.discount = quotGlobalDiscount;
+        const entered = item._enteredPrice ?? item.price;
+        item.price = quotGlobalDiscount > 0 && quotGlobalDiscount < 100
+          ? Math.round((entered / (1 - quotGlobalDiscount / 100)) * 100) / 100
+          : entered;
+      }
+    });
     renderQuotValTable();
   };
   const resetDiscBtn = document.createElement('button'); resetDiscBtn.className = 'btn btn-ghost btn-sm'; resetDiscBtn.textContent = 'Reset 0%';
   resetDiscBtn.onclick = function() {
     quotGlobalDiscount = 0; discIn.value = '0';
-    pendingQuotItems.forEach(item => { item.discount = 0; item._discountManual = false; });
+    pendingQuotItems.forEach(item => {
+      item.discount = 0; item._discountManual = false;
+      if (item._enteredPrice != null) item.price = item._enteredPrice;
+    });
     renderQuotValTable();
   };
   discBar.appendChild(discLabel); discBar.appendChild(discIn); discBar.appendChild(discPct); discBar.appendChild(resetDiscBtn);
@@ -1056,7 +1067,8 @@ function renderQuotValTable() {
     // Preço + anomaly badge
     const tdPrice = document.createElement('td');
     const inPrice = document.createElement('input');
-    inPrice.type = 'text'; inPrice.value = item.price > 0 ? fmtPrice(item.price) : ''; inPrice.style.width = '80px';
+    const _displayPrice = item._enteredPrice != null ? item._enteredPrice : item.price;
+    inPrice.type = 'text'; inPrice.value = _displayPrice > 0 ? fmtPrice(_displayPrice) : ''; inPrice.style.width = '80px';
     inPrice.oninput = function() { /* allow formatted input — parseNum handles it on change */ };
     inPrice.onchange = function() {
       const entered = parseNum(this.value) || 0;
