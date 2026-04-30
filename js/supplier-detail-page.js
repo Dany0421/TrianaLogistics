@@ -103,7 +103,15 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
     else{accBadge.className='finance-badge unknown';accBadge.textContent='Não definida';}
     accField.appendChild(accLabel);accField.appendChild(accBadge);
 
-    finSec.appendChild(etaField);finSec.appendChild(accField);
+    const creditField=document.createElement('div');creditField.className='finance-field';
+    const creditLabel=document.createElement('div');creditLabel.className='finance-label';creditLabel.textContent='Crédito';
+    const creditBadge=document.createElement('span');
+    if(gs.has_credit===true){creditBadge.className='finance-badge open';creditBadge.textContent='Sim';}
+    else if(gs.has_credit===false){creditBadge.className='finance-badge blocked';creditBadge.textContent='Não';}
+    else{creditBadge.className='finance-badge unknown';creditBadge.textContent='Não definido';}
+    creditField.appendChild(creditLabel);creditField.appendChild(creditBadge);
+
+    finSec.appendChild(etaField);finSec.appendChild(accField);finSec.appendChild(creditField);
 
     if(hasRole('finance','admin')){
       const editBtn=document.createElement('button');editBtn.type='button';editBtn.className='btn btn-ghost btn-sm finance-edit-btn';
@@ -346,10 +354,23 @@ function _openFinanceModal(gs, finSec) {
   });
   modal.appendChild(accLabel); modal.appendChild(accSel);
 
+  // Credit field
+  const creditLabel2 = document.createElement('label'); creditLabel2.style.cssText = 'display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px';
+  creditLabel2.textContent = 'Crédito';
+  const creditSel = document.createElement('select'); creditSel.style.cssText = 'width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;margin-bottom:20px';
+  [['', 'Não definido'], ['true', 'Sim'], ['false', 'Não']].forEach(([val, lbl]) => {
+    const opt = document.createElement('option'); opt.value = val; opt.textContent = lbl;
+    if (gs.has_credit === true && val === 'true') opt.selected = true;
+    else if (gs.has_credit === false && val === 'false') opt.selected = true;
+    else if (gs.has_credit == null && val === '') opt.selected = true;
+    creditSel.appendChild(opt);
+  });
+  modal.appendChild(creditLabel2); modal.appendChild(creditSel);
+
   // Actions
   const actions = document.createElement('div'); actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
   const resetBtn = document.createElement('button'); resetBtn.type = 'button'; resetBtn.className = 'btn btn-ghost btn-sm'; resetBtn.style.marginRight = 'auto'; resetBtn.textContent = 'Reset';
-  resetBtn.addEventListener('click', () => { etaSel.value = ''; accSel.value = ''; });
+  resetBtn.addEventListener('click', () => { etaSel.value = ''; accSel.value = ''; creditSel.value = ''; });
   const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-ghost btn-sm'; cancelBtn.textContent = 'Cancelar';
   cancelBtn.addEventListener('click', () => document.body.removeChild(overlay));
   const saveBtn = document.createElement('button'); saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Guardar';
@@ -357,14 +378,15 @@ function _openFinanceModal(gs, finSec) {
     saveBtn.disabled = true; saveBtn.textContent = '...';
     const newEta = etaSel.value || null;
     const newAcc = accSel.value || null;
+    const newCredit = creditSel.value === 'true' ? true : creditSel.value === 'false' ? false : null;
     try {
-      await API.updateSupplierFinance(gs.id, newEta, newAcc);
-      gs.eta_condition = newEta; gs.account_status = newAcc;
-      // Refresh finance section display
+      await API.updateSupplierFinance(gs.id, newEta, newAcc, newCredit);
+      gs.eta_condition = newEta; gs.account_status = newAcc; gs.has_credit = newCredit;
       const etaValEl = finSec.querySelector('.finance-value');
       if (etaValEl) { etaValEl.textContent = newEta === 'after_order' ? 'Após Encomenda' : newEta === 'after_payment' ? 'Após Pagamento' : 'Não definido'; etaValEl.style.color = newEta ? '' : 'var(--muted)'; }
-      const badgeEl = finSec.querySelector('.finance-badge');
-      if (badgeEl) { if (newAcc === 'open') { badgeEl.className = 'finance-badge open'; badgeEl.textContent = 'Aberta'; } else if (newAcc === 'blocked') { badgeEl.className = 'finance-badge blocked'; badgeEl.textContent = 'Bloqueada'; } else { badgeEl.className = 'finance-badge unknown'; badgeEl.textContent = 'Não definida'; } }
+      const badges = finSec.querySelectorAll('.finance-badge');
+      if (badges[0]) { if (newAcc === 'open') { badges[0].className = 'finance-badge open'; badges[0].textContent = 'Aberta'; } else if (newAcc === 'blocked') { badges[0].className = 'finance-badge blocked'; badges[0].textContent = 'Bloqueada'; } else { badges[0].className = 'finance-badge unknown'; badges[0].textContent = 'Não definida'; } }
+      if (badges[1]) { if (newCredit === true) { badges[1].className = 'finance-badge open'; badges[1].textContent = 'Sim'; } else if (newCredit === false) { badges[1].className = 'finance-badge blocked'; badges[1].textContent = 'Não'; } else { badges[1].className = 'finance-badge unknown'; badges[1].textContent = 'Não definido'; } }
       document.body.removeChild(overlay);
       showToast('Guardado');
     } catch(e) { saveBtn.disabled = false; saveBtn.textContent = 'Guardar'; showToast(e.message, true); }

@@ -715,9 +715,9 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
-  async updateSupplierFinance(id, eta_condition, account_status) {
+  async updateSupplierFinance(id, eta_condition, account_status, has_credit) {
     const { error } = await supabase.from('global_suppliers')
-      .update({ eta_condition, account_status })
+      .update({ eta_condition, account_status, has_credit })
       .eq('id', id);
     if (error) throw _sanitizeError(error);
   },
