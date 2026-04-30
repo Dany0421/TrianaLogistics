@@ -506,6 +506,10 @@ function suppStatusClass(s) {
 }
 function showToast(msg, isError = false) {
   const el = document.getElementById('toast');
+  if (!el) {
+    console.warn('[toast]', isError ? '(erro)' : '', msg);
+    return;
+  }
   el.textContent = msg;
   el.style.color = isError ? 'var(--danger)' : 'var(--text)';
   el.style.borderLeftColor = isError ? 'var(--danger)' : 'var(--accent)';

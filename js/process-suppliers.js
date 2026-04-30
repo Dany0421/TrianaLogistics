@@ -302,8 +302,15 @@ function openRFQModal(supplierIdx) {
   }
 
   const actions = document.createElement('div'); actions.className = 'modal-actions';
-  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
-  if (bomItems.length) { const sendBtn = document.createElement('button'); sendBtn.className = 'btn btn-primary'; sendBtn.textContent = '✉ Gerar Email'; sendBtn.addEventListener('click', () => sendRFQ(supplierIdx)); actions.appendChild(sendBtn); }
+  const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
+  if (bomItems.length) {
+    const sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.className = 'btn btn-primary';
+    sendBtn.textContent = '✉ Gerar Email';
+    sendBtn.addEventListener('click', () => { void sendRFQ(supplierIdx); });
+    actions.appendChild(sendBtn);
+  }
   el.appendChild(actions);
 
   showModalLg(el);
@@ -428,15 +435,14 @@ async function sendRFQ(supplierIdx) {
     !copied
   );
 
-  // Defer mailto so toast/modal repaint; synchronous navigation can skip UI updates in some browsers
-  setTimeout(() => {
-    try {
-      window.location.href = mailto;
-    } catch (e) {
-      console.error('[RFQ] mailto failed:', e);
-      showToast('Abre o email manualmente para ' + s.email + '.', true);
-    }
-  }, 120);
+  // Must open mailto in the same task as the click aftermath — setTimeout drops user activation and
+  // some browsers block mailto entirely ("nothing happens").
+  try {
+    window.location.assign(mailto);
+  } catch (e) {
+    console.error('[RFQ] mailto failed:', e);
+    showToast('Abre o email manualmente para ' + s.email + '.', true);
+  }
 }
 
 function autoFillSupplierEmail(name) {
