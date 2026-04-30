@@ -54,13 +54,22 @@ function fmtPrice(val, currency) {
   return currency ? `${fmt} ${currency}` : fmt;
 }
 
+function _normalise(v) {
+  if (Array.isArray(v)) return [...v].sort().join('|');
+  return v;
+}
+function _display(v, fmt) {
+  if (fmt) return fmt(v);
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
+  return esc(v) || '—';
+}
 function diffFields(old_, new_, fields) {
   const parts = [];
-  for (const [key, label] of fields) {
+  for (const [key, label, fmt] of fields) {
     const ov = old_?.[key];
     const nv = new_?.[key];
-    if (ov !== nv && (ov != null || nv != null)) {
-      parts.push(`${label}: <strong>${esc(ov) || '—'}</strong> → <strong>${esc(nv) || '—'}</strong>`);
+    if (_normalise(ov) !== _normalise(nv) && (ov != null || nv != null)) {
+      parts.push(`${label}: <strong>${_display(ov, fmt)}</strong> → <strong>${_display(nv, fmt)}</strong>`);
     }
   }
   return parts;
@@ -146,7 +155,20 @@ function describeEvent(log) {
     if (action === 'INSERT') return `Adicionou fornecedor <strong>${esc(d?.name)}</strong>${d?.email ? ` (${esc(d.email)})` : ''}`;
     if (action === 'DELETE') return `Removeu fornecedor <strong>${esc(d?.name)}</strong>`;
     if (action === 'UPDATE') {
-      const diffs = diffFields(old_, new_, [['name','Nome'],['email','Email'],['categories','Categorias'],['brands','Marcas']]);
+      const fmtEta = v => v === 'after_order' ? 'Após Encomenda' : v === 'after_payment' ? 'Após Pagamento' : esc(v) || '—';
+      const fmtAcc = v => v === 'open' ? 'Aberta' : v === 'blocked' ? 'Bloqueada' : esc(v) || '—';
+      const fmtBool = v => v === true ? 'Sim' : v === false ? 'Não' : '—';
+      const fmtLang = v => v ? v.toUpperCase() : '—';
+      const diffs = diffFields(old_, new_, [
+        ['name',           'Nome'],
+        ['email',          'Email'],
+        ['categories',     'Categorias'],
+        ['brands',         'Marcas'],
+        ['language',       'Idioma',  fmtLang],
+        ['eta_condition',  'ETA',     fmtEta],
+        ['account_status', 'Conta',   fmtAcc],
+        ['has_credit',     'Crédito', fmtBool],
+      ]);
       if (diffs.length) return `Atualizou fornecedor <strong>${esc(new_?.name || old_?.name)}</strong>: ${diffs.join('; ')}`;
       return `Atualizou fornecedor <strong>${esc(new_?.name || old_?.name)}</strong>`;
     }
@@ -166,7 +188,7 @@ function describeEvent(log) {
 }
 
 // ── Collapse bulk operations into summary entries ──
-const COLLAPSIBLE = new Set(['bom_items', 'quotation_items', 'item_matches', 'selected_offers']);
+const COLLAPSIBLE = new Set(['bom_items', 'quotation_items', 'item_matches', 'selected_offers', 'global_suppliers']);
 const COLLAPSE_MIN = 3;      // min entries to trigger collapse
 const COLLAPSE_WINDOW = 15;  // seconds
 
@@ -176,6 +198,11 @@ function collapseEntries(entries) {
       if (action === 'INSERT') return `Carregou BOM: <strong>${count} itens</strong> adicionados`;
       if (action === 'DELETE') return `Removeu <strong>${count} itens</strong> do BOM`;
       return `Atualizou <strong>${count} itens</strong> do BOM`;
+    }
+    if (t === 'global_suppliers') {
+      if (action === 'INSERT') return `Adicionou <strong>${count} fornecedores</strong>`;
+      if (action === 'DELETE') return `Removeu <strong>${count} fornecedores</strong>`;
+      return `Atualizou <strong>${count} fornecedores</strong>`;
     }
     if (t === 'quotation_items') {
       if (action === 'INSERT') return `Carregou cotação: <strong>${count} itens</strong> adicionados`;
