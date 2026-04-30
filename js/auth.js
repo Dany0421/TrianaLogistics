@@ -60,7 +60,7 @@ async function logout() {
 function mountUserChip(container) {
   const name = currentProfile?.name || currentUser?.email?.split('@')[0] || '—';
   const role = currentProfile?.role || 'procurement';
-  const safeRole = ['commercial', 'procurement', 'admin'].includes(role) ? role : 'procurement';
+  const safeRole = ['commercial', 'procurement', 'admin', 'finance'].includes(role) ? role : 'procurement';
   const spanName = document.createElement('span');
   spanName.className = 'user-chip';
   spanName.textContent = name;

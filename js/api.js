@@ -715,6 +715,13 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async updateSupplierFinance(id, eta_condition, account_status) {
+    const { error } = await supabase.from('global_suppliers')
+      .update({ eta_condition, account_status })
+      .eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
   async deleteGlobalSupplier(id) {
     const { error } = await supabase.from('global_suppliers').delete().eq('id', id);
     if (error) throw _sanitizeError(error);

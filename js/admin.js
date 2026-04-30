@@ -504,9 +504,9 @@ function switchTab(tab) {
 }
 
 // ── User Management ──
-const roleLabels = { admin: 'Admin', procurement: 'Procurement', commercial: 'Commercial' };
-const roleColors = { admin: '#34d399', procurement: '#38bdf8', commercial: '#fbbf24' };
-const roleBg     = { admin: 'rgba(16,185,129,.15)', procurement: 'rgba(37,99,235,.15)', commercial: 'rgba(245,158,11,.15)' };
+const roleLabels = { admin: 'Admin', procurement: 'Procurement', commercial: 'Commercial', finance: 'Finance' };
+const roleColors = { admin: '#34d399', procurement: '#38bdf8', commercial: '#fbbf24', finance: '#fb923c' };
+const roleBg     = { admin: 'rgba(16,185,129,.15)', procurement: 'rgba(37,99,235,.15)', commercial: 'rgba(245,158,11,.15)', finance: 'rgba(251,146,60,.15)' };
 
 function roleBadge(role) {
   const c = roleColors[role] || 'var(--muted)';
@@ -629,7 +629,7 @@ function openEditUserModal(u) {
     roleRow.appendChild(roleInfo);
   } else {
     const roleSel = document.createElement('select'); roleSel.id = 'eu_role';
-    ['commercial', 'procurement', 'admin'].forEach(r => { const opt = document.createElement('option'); opt.value = r; opt.textContent = roleLabels[r]; if (u.role === r) opt.selected = true; roleSel.appendChild(opt); });
+    ['commercial', 'procurement', 'finance', 'admin'].forEach(r => { const opt = document.createElement('option'); opt.value = r; opt.textContent = roleLabels[r]; if (u.role === r) opt.selected = true; roleSel.appendChild(opt); });
     roleRow.appendChild(roleSel);
   }
   el.appendChild(roleRow);

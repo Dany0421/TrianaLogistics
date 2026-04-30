@@ -84,6 +84,37 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
   if(gs?.notes){const n=document.createElement('div');n.className='notes-row';n.textContent=gs.notes;header.appendChild(n);}
   main.appendChild(header);
 
+  // ── Finance info ──
+  if(gs){
+    const finSec=document.createElement('div');finSec.className='finance-section';
+
+    const etaField=document.createElement('div');etaField.className='finance-field';
+    const etaLabel=document.createElement('div');etaLabel.className='finance-label';etaLabel.textContent='ETA / Entrega';
+    const etaVal=document.createElement('div');etaVal.className='finance-value';
+    etaVal.textContent=gs.eta_condition==='after_order'?'Após Encomenda':gs.eta_condition==='after_payment'?'Após Pagamento':'Não definido';
+    if(!gs.eta_condition)etaVal.style.color='var(--muted)';
+    etaField.appendChild(etaLabel);etaField.appendChild(etaVal);
+
+    const accField=document.createElement('div');accField.className='finance-field';
+    const accLabel=document.createElement('div');accLabel.className='finance-label';accLabel.textContent='Conta';
+    const accBadge=document.createElement('span');
+    if(gs.account_status==='open'){accBadge.className='finance-badge open';accBadge.textContent='Aberta';}
+    else if(gs.account_status==='blocked'){accBadge.className='finance-badge blocked';accBadge.textContent='Bloqueada';}
+    else{accBadge.className='finance-badge unknown';accBadge.textContent='Não definida';}
+    accField.appendChild(accLabel);accField.appendChild(accBadge);
+
+    finSec.appendChild(etaField);finSec.appendChild(accField);
+
+    if(hasRole('finance','admin')){
+      const editBtn=document.createElement('button');editBtn.type='button';editBtn.className='btn btn-ghost btn-sm finance-edit-btn';
+      const ico=document.createElement('i');ico.setAttribute('data-lucide','pencil');editBtn.appendChild(ico);
+      editBtn.appendChild(document.createTextNode(' Editar'));
+      editBtn.addEventListener('click',()=>_openFinanceModal(gs,finSec));
+      finSec.appendChild(editBtn);
+    }
+    main.appendChild(finSec);
+  }
+
   // ── Stats ──
   const statsEl=document.createElement('div');statsEl.className='stats-strip';
   const _respSamples=processHistory.filter(s=>s.contacted_at&&s.replied_at).map(s=>(new Date(s.replied_at)-new Date(s.contacted_at))/3600000).filter(h=>h>0&&h<8760);
@@ -280,4 +311,67 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
     procSec.appendChild(tbl);
   }
   main.appendChild(procSec);
+}
+
+function _openFinanceModal(gs, finSec) {
+  const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000';
+
+  const modal = document.createElement('div'); modal.className = 'modal-box';
+  modal.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;min-width:340px;max-width:420px;width:100%';
+
+  const title = document.createElement('div'); title.style.cssText = 'font-size:15px;font-weight:600;color:var(--text);margin-bottom:20px';
+  title.textContent = 'Informações Financeiras — ' + gs.name;
+  modal.appendChild(title);
+
+  // ETA field
+  const etaLabel = document.createElement('label'); etaLabel.style.cssText = 'display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px';
+  etaLabel.textContent = 'ETA / Entrega';
+  const etaSel = document.createElement('select'); etaSel.style.cssText = 'width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;margin-bottom:14px';
+  [['', 'Não definido'], ['after_order', 'Após Encomenda'], ['after_payment', 'Após Pagamento']].forEach(([val, lbl]) => {
+    const opt = document.createElement('option'); opt.value = val; opt.textContent = lbl;
+    if ((gs.eta_condition || '') === val) opt.selected = true;
+    etaSel.appendChild(opt);
+  });
+  modal.appendChild(etaLabel); modal.appendChild(etaSel);
+
+  // Account status field
+  const accLabel = document.createElement('label'); accLabel.style.cssText = 'display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px';
+  accLabel.textContent = 'Estado da Conta';
+  const accSel = document.createElement('select'); accSel.style.cssText = 'width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;margin-bottom:20px';
+  [['', 'Não definido'], ['open', 'Aberta'], ['blocked', 'Bloqueada']].forEach(([val, lbl]) => {
+    const opt = document.createElement('option'); opt.value = val; opt.textContent = lbl;
+    if ((gs.account_status || '') === val) opt.selected = true;
+    accSel.appendChild(opt);
+  });
+  modal.appendChild(accLabel); modal.appendChild(accSel);
+
+  // Actions
+  const actions = document.createElement('div'); actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+  const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-ghost btn-sm'; cancelBtn.textContent = 'Cancelar';
+  cancelBtn.addEventListener('click', () => document.body.removeChild(overlay));
+  const saveBtn = document.createElement('button'); saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Guardar';
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true; saveBtn.textContent = '...';
+    const newEta = etaSel.value || null;
+    const newAcc = accSel.value || null;
+    try {
+      await API.updateSupplierFinance(gs.id, newEta, newAcc);
+      gs.eta_condition = newEta; gs.account_status = newAcc;
+      // Refresh finance section display
+      const etaValEl = finSec.querySelector('.finance-value');
+      if (etaValEl) { etaValEl.textContent = newEta === 'after_order' ? 'Após Encomenda' : newEta === 'after_payment' ? 'Após Pagamento' : 'Não definido'; etaValEl.style.color = newEta ? '' : 'var(--muted)'; }
+      const badgeEl = finSec.querySelector('.finance-badge');
+      if (badgeEl) { if (newAcc === 'open') { badgeEl.className = 'finance-badge open'; badgeEl.textContent = 'Aberta'; } else if (newAcc === 'blocked') { badgeEl.className = 'finance-badge blocked'; badgeEl.textContent = 'Bloqueada'; } else { badgeEl.className = 'finance-badge unknown'; badgeEl.textContent = 'Não definida'; } }
+      document.body.removeChild(overlay);
+      showToast('Guardado');
+    } catch(e) { saveBtn.disabled = false; saveBtn.textContent = 'Guardar'; showToast(e.message, true); }
+  });
+  actions.appendChild(cancelBtn); actions.appendChild(saveBtn);
+  modal.appendChild(actions);
+
+  overlay.appendChild(modal);
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+  document.body.appendChild(overlay);
+  setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 0);
 }
