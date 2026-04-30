@@ -348,6 +348,8 @@ function _openFinanceModal(gs, finSec) {
 
   // Actions
   const actions = document.createElement('div'); actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+  const resetBtn = document.createElement('button'); resetBtn.type = 'button'; resetBtn.className = 'btn btn-ghost btn-sm'; resetBtn.style.marginRight = 'auto'; resetBtn.textContent = 'Reset';
+  resetBtn.addEventListener('click', () => { etaSel.value = ''; accSel.value = ''; });
   const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-ghost btn-sm'; cancelBtn.textContent = 'Cancelar';
   cancelBtn.addEventListener('click', () => document.body.removeChild(overlay));
   const saveBtn = document.createElement('button'); saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Guardar';
@@ -367,7 +369,7 @@ function _openFinanceModal(gs, finSec) {
       showToast('Guardado');
     } catch(e) { saveBtn.disabled = false; saveBtn.textContent = 'Guardar'; showToast(e.message, true); }
   });
-  actions.appendChild(cancelBtn); actions.appendChild(saveBtn);
+  actions.appendChild(resetBtn); actions.appendChild(cancelBtn); actions.appendChild(saveBtn);
   modal.appendChild(actions);
 
   overlay.appendChild(modal);
