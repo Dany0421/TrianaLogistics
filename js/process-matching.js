@@ -1089,6 +1089,25 @@ async function selectOffer(bomItemId, supplierId, quotItemId) {
 }
 
 // ── Auto-Match ──
+function _levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m + 1}, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+
+function _fuzzyScore(s1, s2) {
+  const t1 = _matchTokenize(s1).sort().join(' ');
+  const t2 = _matchTokenize(s2).sort().join(' ');
+  if (!t1 || !t2) return 0;
+  const dist = _levenshtein(t1, t2);
+  return 1 - dist / Math.max(t1.length, t2.length);
+}
+
 function _matchTokenize(str) {
   const STOP = new Set(['de','da','do','dos','das','em','no','na','nos','nas','os','as','um','uma','por','com','para','ou','ao','que','e']);
   return (str || '').toLowerCase()
@@ -1124,16 +1143,15 @@ async function runAutoMatch() {
         if (bi.part_number && qi.raw_part_number && norm(bi.part_number) === norm(qi.raw_part_number)) {
           bestItem = qi; bestScore = 1.0; break;
         }
-        // 2. Word-based match
+        // 2. Fuzzy match (token_sort_ratio)
         const qTokens = _matchTokenize(qi.raw_description);
         // Spec gate: BOM numeric specs (sizes, fractions) must appear in quotation
         if (biSpecTokens.length > 0 && !biSpecTokens.some(bs => qTokens.includes(bs))) continue;
-        const hits = biTokens.filter(bt => qTokens.includes(bt)).length;
-        const score = hits / Math.max(biTokens.length, qTokens.length); // symmetric score
+        const score = _fuzzyScore(bi.description, qi.raw_description);
         if (score > bestScore) { bestScore = score; bestItem = qi; }
       }
 
-      if (bestItem && bestScore >= 0.5 && !rejectedSet.has(`${bi.id}:${s.id}:${bestItem.id}`)) {
+      if (bestItem && bestScore >= 0.55 && !rejectedSet.has(`${bi.id}:${s.id}:${bestItem.id}`)) {
         newMatches.push({ process_id: processId, bom_item_id: bi.id, supplier_id: s.id, quotation_item_id: bestItem.id, match_type: 'auto', confidence: Math.round(bestScore*100)/100 });
       }
     }
