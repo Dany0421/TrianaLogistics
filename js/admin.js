@@ -644,7 +644,11 @@ function openEditUserModal(u) {
 
   const nameRow = document.createElement('div'); nameRow.className = 'form-row';
   const nameLbl = document.createElement('label'); nameLbl.textContent = 'Nome'; nameRow.appendChild(nameLbl);
-  const nameInp = document.createElement('input'); nameInp.id = 'eu_name'; nameInp.maxLength = 100; nameInp.value = u.name || ''; nameRow.appendChild(nameInp);
+  if (isSelf) {
+    const nameInp = document.createElement('input'); nameInp.id = 'eu_name'; nameInp.maxLength = 100; nameInp.value = u.name || ''; nameRow.appendChild(nameInp);
+  } else {
+    const nameVal = document.createElement('div'); nameVal.style.cssText = 'font-size:13px;color:var(--text);padding:6px 0;'; nameVal.textContent = u.name || '—'; nameRow.appendChild(nameVal);
+  }
   el.appendChild(nameRow);
 
   const roleRow = document.createElement('div'); roleRow.className = 'form-row';
@@ -670,13 +674,13 @@ function openEditUserModal(u) {
 }
 
 async function saveUserEdit(userId, isSelf) {
-  const newName = document.getElementById('eu_name').value.trim();
+  const newName = isSelf ? document.getElementById('eu_name').value.trim() : null;
   const newRole = isSelf ? null : document.getElementById('eu_role').value;
 
-  if (!newName) { showToast('O nome não pode estar vazio.', true); return; }
+  if (isSelf && !newName) { showToast('O nome não pode estar vazio.', true); return; }
 
   try {
-    await API.adminUpdateUserName(userId, newName);
+    if (isSelf) await API.adminUpdateUserName(userId, newName);
     if (newRole) await API.adminUpdateUserRole(userId, newRole);
     closeModal();
     showToast('Utilizador atualizado.');

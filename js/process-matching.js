@@ -249,7 +249,32 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   const thItem = document.createElement('th'); thItem.style.minWidth = '260px'; thItem.textContent = 'Item BOM'; hrow.appendChild(thItem);
   const thQty = document.createElement('th'); thQty.style.cssText = 'text-align:center;width:50px'; thQty.textContent = 'Qty'; hrow.appendChild(thQty);
   for (const s of suppliers) {
-    const th = document.createElement('th'); th.style.cssText = 'text-align:center;min-width:140px'; th.textContent = s.name; hrow.appendChild(th);
+    const th = document.createElement('th');
+    th.style.cssText = 'text-align:center;min-width:140px';
+    const nameDiv = document.createElement('div');
+    nameDiv.textContent = s.name;
+    th.appendChild(nameDiv);
+    const gs = (globalSuppliersList || []).find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase());
+    const isBlocked = gs?.account_status === 'blocked';
+    const isEtaPost = gs?.eta_condition === 'after_payment';
+    if (isBlocked || isEtaPost) {
+      const badgeWrap = document.createElement('div');
+      badgeWrap.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:4px';
+      if (isBlocked) {
+        const b = document.createElement('span');
+        b.className = 'match-warn-badge match-warn-blocked';
+        b.textContent = 'Bloqueada';
+        badgeWrap.appendChild(b);
+      }
+      if (isEtaPost) {
+        const b = document.createElement('span');
+        b.className = 'match-warn-badge match-warn-eta';
+        b.textContent = 'ETA Pós-Pgto';
+        badgeWrap.appendChild(b);
+      }
+      th.appendChild(badgeWrap);
+    }
+    hrow.appendChild(th);
   }
   const thChoice = document.createElement('th'); thChoice.style.cssText = 'text-align:center;width:110px'; thChoice.textContent = 'Escolha'; hrow.appendChild(thChoice);
 
