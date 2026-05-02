@@ -220,7 +220,8 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
     items.forEach(qi=>{
       const matches=qi.item_matches||[];
       const cats=matches.map(m=>m.bom_items?.category).filter(Boolean);
-      const raw=(cats.length?cats[0]:'Sem categoria').trim()||'Sem categoria';
+      const freq={};cats.forEach(c=>{freq[c]=(freq[c]||0)+1;});
+      const raw=(cats.length?Object.keys(freq).sort((a,b)=>freq[b]-freq[a]||a.localeCompare(b))[0]:'Sem categoria').trim()||'Sem categoria';
       const catKey=raw.toLowerCase();
       if(!itemsByCat[catKey]){itemsByCat[catKey]=[];catDisplayNames[catKey]=raw;}
       itemsByCat[catKey].push(qi);
