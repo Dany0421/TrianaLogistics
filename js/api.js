@@ -21,6 +21,25 @@ function lbtn(el, name, label, size = 13) {
 
 // ── API — all Supabase calls in one place ──
 
+function _levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m + 1}, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+function _fuzzySearchScore(s1, s2) {
+  const tok = s => (s||'').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1).sort().join(' ');
+  const t1 = tok(s1), t2 = tok(s2);
+  if (!t1 || !t2) return 0;
+  const dist = _levenshtein(t1, t2);
+  return 1 - dist / Math.max(t1.length, t2.length);
+}
+
 function _sanitizeError(error) {
   if (!error) return new Error('Unknown error');
   const msg = error.message || String(error);
@@ -821,13 +840,22 @@ const API = {
     if (error) throw _sanitizeError(error);
     const rows = data || [];
     if (!query || !query.trim()) return rows;
-    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const queryStr = query.trim();
+    const qToks = queryStr.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1);
+    if (!qToks.length) return rows;
+    const matchesField = field => {
+      const fToks = (field||'').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1);
+      if (!fToks.length) return false;
+      return qToks.every(qt => fToks.some(ft => {
+        const d = _levenshtein(qt, ft);
+        return 1 - d / Math.max(qt.length, ft.length) >= 0.7;
+      }));
+    };
     return rows.filter(item => {
       const bom = item.item_matches?.[0]?.bom_items;
       const bomDesc = (bom?.custom_description || bom?.description || '');
       const bomPart = (bom?.part_number || '');
-      const hay = ((item.raw_description || '') + ' ' + (item.raw_part_number || '') + ' ' + bomDesc + ' ' + bomPart).toLowerCase();
-      return words.every(w => hay.includes(w));
+      return [item.raw_description, item.raw_part_number, bomDesc, bomPart].some(matchesField);
     });
   },
 

@@ -119,9 +119,9 @@ function filterSuppliers() {
   document.getElementById('clearBtn').style.display = q ? '' : 'none';
   let list = allSuppliers;
   if (q) list = list.filter(s =>
-    s.name?.toLowerCase().includes(q) ||
-    (s.categories||[]).some(c => c.toLowerCase().includes(q)) ||
-    (s.brands||[]).some(b => b.toLowerCase().includes(q))
+    _fuzzySearchScore(q, s.name || '') >= 0.35 ||
+    (s.categories||[]).some(c => _fuzzySearchScore(q, c) >= 0.35) ||
+    (s.brands||[]).some(b => _fuzzySearchScore(q, b) >= 0.35)
   );
   if (activeCat) list = list.filter(s => (s.categories||[]).includes(activeCat));
   currentVisible = list;
