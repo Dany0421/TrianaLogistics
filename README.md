@@ -1,6 +1,6 @@
-# Triana Procurement
+# TrianaLogistics
 
-Sistema interno pra gerenciar processos de procurement.
+Sistema interno para gerenciar processos de procurement.
 
 **Stack:** Vanilla JS + Supabase
 
