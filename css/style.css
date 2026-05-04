@@ -349,7 +349,7 @@ textarea { resize: vertical; min-height: 80px; }
   text-transform: uppercase; margin-bottom: 8px; font-weight: 600;
 }
 .modal-title   { font-size: 18px; font-weight: 700; color: var(--text-strong); margin-bottom: 20px; letter-spacing: -.3px; }
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 24px; }
+.modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 24px; }
 .form-row      { margin-bottom: 16px; }
 .form-grid-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 .form-grid-3   { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }

@@ -568,16 +568,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
             etaDiv.textContent = etaVal + ' ' + etaUnit;
             span.appendChild(etaDiv);
           }
-          const inclItems = includedByLookup[bi.id + '_' + s.id] || [];
-          for (const im of inclItems) {
-            const inclBi = bomItems.find(b => b.id === im.bom_item_id);
-            if (inclBi) { const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px'; d.textContent = '+ ' + (inclBi.description || '?'); span.appendChild(d); }
-          }
-          const extraLines2 = extraByMatchId[m?.id] || [];
-          for (const exl of extraLines2) {
-            const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px';
-            d.textContent = '+ ' + (exl.quotation_items?.raw_description || '?'); span.appendChild(d);
-          }
+          // 1. Item pai — sempre primeiro quando showSupplierDescs
           if (showSupplierDescs) {
             const rawText = (m?.quotation_items?.raw_description || '').trim();
             if (rawText) {
@@ -585,12 +576,43 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
               rawDiv.className = 'comp-raw-desc';
               rawDiv.textContent = rawText;
               rawDiv.title = 'Clicar para expandir/colapsar';
-              rawDiv.addEventListener('click', (ev) => {
-                ev.stopPropagation();
-                rawDiv.classList.toggle('expanded');
-              });
+              rawDiv.addEventListener('click', (ev) => { ev.stopPropagation(); rawDiv.classList.toggle('expanded'); });
               span.appendChild(rawDiv);
             }
+          }
+          // 2. Incluído em
+          const inclItems = includedByLookup[bi.id + '_' + s.id] || [];
+          for (const im of inclItems) {
+            const inclBi = bomItems.find(b => b.id === im.bom_item_id);
+            if (!inclBi) continue;
+            const inclText = inclBi.description || '?';
+            const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px';
+            d.textContent = '+ ' + (showSupplierDescs ? '' : inclText);
+            if (showSupplierDescs) {
+              const inclDiv = document.createElement('div');
+              inclDiv.className = 'comp-raw-desc';
+              inclDiv.textContent = inclText;
+              inclDiv.title = 'Clicar para expandir/colapsar';
+              inclDiv.addEventListener('click', ev => { ev.stopPropagation(); inclDiv.classList.toggle('expanded'); });
+              d.appendChild(inclDiv);
+            }
+            span.appendChild(d);
+          }
+          // 3. Dividir em linhas
+          const extraLines2 = extraByMatchId[m?.id] || [];
+          for (const exl of extraLines2) {
+            const exlText = (exl.quotation_items?.raw_description || '?');
+            const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px';
+            d.textContent = '+ ' + (showSupplierDescs ? '' : exlText);
+            if (showSupplierDescs) {
+              const exlDiv = document.createElement('div');
+              exlDiv.className = 'comp-raw-desc';
+              exlDiv.textContent = exlText;
+              exlDiv.title = 'Clicar para expandir/colapsar';
+              exlDiv.addEventListener('click', ev => { ev.stopPropagation(); exlDiv.classList.toggle('expanded'); });
+              d.appendChild(exlDiv);
+            }
+            span.appendChild(d);
           }
         } else {
           span.className = 'comp-cell comp-cell-none'; span.textContent = '—';
