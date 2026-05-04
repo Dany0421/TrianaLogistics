@@ -1136,6 +1136,7 @@ async function selectOffer(bomItemId, supplierId, quotItemId) {
 }
 
 // ── Auto-Match ──
+let histMatchData = null; // lazy-fetched once per session; {supplier_name, bom_desc, quot_desc}[]
 function _fuzzyScore(s1, s2) {
   const t1 = _matchTokenize(s1).sort().join(' ');
   const t2 = _matchTokenize(s2).sort().join(' ');
@@ -1164,6 +1165,44 @@ async function runAutoMatch() {
   const rejectedSet = new Set(rejectedAutoMatch.map(r => `${r.bom_item_id}:${r.supplier_id}:${r.quotation_item_id}`));
   const newMatches = [];
 
+  // Phase 0: historical match — mine past item_matches for supplier+description pairs
+  if (histMatchData === null) {
+    try { histMatchData = await API.getHistoricalMatchPairs(); }
+    catch(_) { histMatchData = []; }
+  }
+  const histBySupplier = {};
+  for (const p of histMatchData) {
+    const key = (p.supplier_name || '').trim().toLowerCase();
+    if (!histBySupplier[key]) histBySupplier[key] = [];
+    histBySupplier[key].push(p);
+  }
+  const phase0Matched = new Set(); // "biId:sId" pairs matched in Phase 0
+  for (const bi of bomItems) {
+    if (bi.is_service) continue;
+    const biDesc = bi.custom_description || bi.description;
+    if (!biDesc) continue;
+    for (const s of suppliersWithItems) {
+      if (matches.find(m => m.bom_item_id === bi.id && m.supplier_id === s.id)) continue;
+      if (newMatches.some(m => m.bom_item_id === bi.id && m.supplier_id === s.id)) continue;
+      const histPairs = histBySupplier[(s.name || '').trim().toLowerCase()] || [];
+      if (!histPairs.length) continue;
+      let p0matched = false;
+      for (const qi of (quotationMap[s.id] || [])) {
+        if (rejectedSet.has(`${bi.id}:${s.id}:${qi.id}`)) continue;
+        for (const hp of histPairs) {
+          if (_fuzzyScore(qi.raw_description, hp.quot_desc) >= 0.9 &&
+              _fuzzyScore(biDesc, hp.bom_desc) >= 0.75) {
+            newMatches.push({ process_id: processId, bom_item_id: bi.id, supplier_id: s.id, quotation_item_id: qi.id, match_type: 'auto', confidence: 1.0 });
+            phase0Matched.add(`${bi.id}:${s.id}`);
+            p0matched = true;
+            break;
+          }
+        }
+        if (p0matched) break;
+      }
+    }
+  }
+
   for (const bi of bomItems) {
     if (bi.is_service) continue;
     const biTokens = _matchTokenize(bi.description);
@@ -1172,6 +1211,7 @@ async function runAutoMatch() {
 
     for (const s of suppliersWithItems) {
       if (matches.find(m => m.bom_item_id === bi.id && m.supplier_id === s.id)) continue; // already matched
+      if (phase0Matched.has(`${bi.id}:${s.id}`)) continue; // matched in Phase 0
       let bestItem = null, bestScore = 0;
 
       for (const qi of quotationMap[s.id]) {

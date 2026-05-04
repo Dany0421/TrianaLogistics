@@ -950,4 +950,23 @@ const API = {
       .map(m => ({ category: m.bom_items?.category, supplier_name: m.suppliers?.name }))
       .filter(r => r.category && r.supplier_name);
   },
+
+  async getHistoricalMatchPairs() {
+    const { data, error } = await supabase
+      .from('item_matches')
+      .select('suppliers(name), bom_items!bom_item_id(description, custom_description), quotation_items!quotation_item_id(raw_description)')
+      .not('supplier_id', 'is', null)
+      .not('bom_item_id', 'is', null)
+      .not('quotation_item_id', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(3000);
+    if (error) throw _sanitizeError(error);
+    return (data || [])
+      .map(m => ({
+        supplier_name: m.suppliers?.name,
+        bom_desc: m.bom_items?.custom_description || m.bom_items?.description,
+        quot_desc: m.quotation_items?.raw_description,
+      }))
+      .filter(r => r.supplier_name && r.bom_desc && r.quot_desc);
+  },
 };
