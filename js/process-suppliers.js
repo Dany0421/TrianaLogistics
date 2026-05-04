@@ -42,17 +42,17 @@ async function checkPriceAnomalies(items) {
 }
 
 // ── Supplier Suggestions ──
-// Dismissed set is seeded from process.dismissed_suggestions (loaded in loadAll via getProcess).
-// Updates are persisted to DB so they survive incognito / cross-browser sessions.
-let _dismissedSet = null;
-function _getDismissed() {
-  if (_dismissedSet === null) _dismissedSet = new Set((process?.dismissed_suggestions || []).map(n => n.trim().toLowerCase()));
-  return _dismissedSet;
+// Dismissed set is persisted to DB (processes.dismissed_suggestions) so it survives incognito/cross-browser.
+let _dismissedSet = new Set();
+function _syncDismissed() {
+  try { _dismissedSet = new Set(Array.isArray(process?.dismissed_suggestions) ? process.dismissed_suggestions.map(n => n.trim().toLowerCase()) : []); }
+  catch(_) { _dismissedSet = new Set(); }
 }
 function _dismissSugg(names) {
-  const s = _getDismissed();
-  names.forEach(n => s.add(n.trim().toLowerCase()));
-  API.saveDismissedSuggestions(processId, [...s]).catch(() => {});
+  names.forEach(n => _dismissedSet.add(n.trim().toLowerCase()));
+  const arr = [..._dismissedSet];
+  if (process) process.dismissed_suggestions = arr;
+  API.saveDismissedSuggestions(processId, arr).catch(() => {});
 }
 
 function renderSupplierSuggestions() {
@@ -63,8 +63,9 @@ function renderSupplierSuggestions() {
   const bomCats = [...new Set(bomItems.map(b => b.category).filter(Boolean))];
   if (!bomCats.length || !globalSuppliersList.length) return;
 
+  _syncDismissed();
   const addedNames = new Set(suppliers.map(s => s.name.trim().toLowerCase()));
-  const dismissed = _getDismissed();
+  const dismissed = _dismissedSet;
   const _tok = str => (str||'').toLowerCase().replace(/\s+e\s+/g,'|').split(/[\/&,|]/).map(t=>t.trim()).filter(Boolean);
   const bomTokenSets = bomCats.map(c => new Set(_tok(c)));
 
