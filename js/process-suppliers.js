@@ -482,6 +482,13 @@ function _openMailtoSync(mailto) {
   return false;
 }
 
+/**
+ * RFQ "Gerar Email" — INVARIANT (do not change order without re-reading this):
+ * Browsers tie `mailto:` / navigation to a short-lived "user activation" from the click.
+ * Any `await` (e.g. clipboard API) consumes that activation — if you open mailto AFTER await,
+ * Chrome and others block it silently ("nothing happens"). So: call _openMailtoSync(mailto)
+ * BEFORE the first await in this handler. Also avoid setTimeout before mailto for the same reason.
+ */
 async function sendRFQ(supplierIdx) {
   try {
     const s = suppliers[supplierIdx];
