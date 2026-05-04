@@ -42,10 +42,18 @@ async function checkPriceAnomalies(items) {
 }
 
 // ── Supplier Suggestions ──
-function _suggDismissedKey() { return 'sugg_dismissed_' + processId; }
-function _getDismissed() { try { return new Set(JSON.parse(localStorage.getItem(_suggDismissedKey()) || '[]')); } catch(_) { return new Set(); } }
-function _saveDismissed(set) { try { localStorage.setItem(_suggDismissedKey(), JSON.stringify([...set])); } catch(_) {} }
-function _dismissSugg(names) { const s = _getDismissed(); names.forEach(n => s.add(n.trim().toLowerCase())); _saveDismissed(s); }
+// Dismissed set is seeded from process.dismissed_suggestions (loaded in loadAll via getProcess).
+// Updates are persisted to DB so they survive incognito / cross-browser sessions.
+let _dismissedSet = null;
+function _getDismissed() {
+  if (_dismissedSet === null) _dismissedSet = new Set((process?.dismissed_suggestions || []).map(n => n.trim().toLowerCase()));
+  return _dismissedSet;
+}
+function _dismissSugg(names) {
+  const s = _getDismissed();
+  names.forEach(n => s.add(n.trim().toLowerCase()));
+  API.saveDismissedSuggestions(processId, [...s]).catch(() => {});
+}
 
 function renderSupplierSuggestions() {
   const banner = document.getElementById('suggBanner');

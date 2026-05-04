@@ -139,6 +139,14 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async saveDismissedSuggestions(processId, namesArr) {
+    const { error } = await supabase
+      .from('processes')
+      .update({ dismissed_suggestions: namesArr })
+      .eq('id', processId);
+    if (error) throw _sanitizeError(error);
+  },
+
   // ── BOM Versions ──
   async createBomVersion(processId, originalName, filePath, versionNumber) {
     const { data, error } = await supabase
