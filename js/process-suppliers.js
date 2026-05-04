@@ -365,9 +365,10 @@ function toggleAllRFQ(checked) {
 
 function buildRFQHtml(selected, lang) {
   const en = lang === 'en';
-  const td = 'style="border:1px solid #cbd5e1;padding:7px 10px"';
-  const tdC = 'style="border:1px solid #cbd5e1;padding:7px 10px;text-align:center"';
-  const tdMono = 'style="border:1px solid #cbd5e1;padding:7px 10px;font-family:monospace;font-size:12px"';
+  /* Explicit backgrounds — dark-mode mail clients paint unspecified TD backgrounds black */
+  const td = 'style="border:1px solid #cbd5e1;padding:7px 10px;background:#ffffff;color:#1e293b"';
+  const tdC = 'style="border:1px solid #cbd5e1;padding:7px 10px;text-align:center;background:#ffffff;color:#1e293b"';
+  const tdMono = 'style="border:1px solid #cbd5e1;padding:7px 10px;font-family:monospace;font-size:12px;background:#ffffff;color:#1e293b"';
 
   const hasPartNum = selected.some(bi => bi.part_number);
   const colSpan = hasPartNum ? 4 : 3;
@@ -377,11 +378,11 @@ function buildRFQHtml(selected, lang) {
   for (const bi of selected) {
     if (bi.category !== lastCat) {
       if (bi.category) {
-        rows += '<tr style="background:#e8f0fe"><td colspan="' + colSpan + '" style="border:1px solid #cbd5e1;padding:5px 10px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#1e40af">' + esc(bi.category) + '</td></tr>';
+        rows += '<tr style="background:#e8f0fe"><td colspan="' + colSpan + '" style="border:1px solid #cbd5e1;padding:5px 10px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#1e40af;background:#e8f0fe">' + esc(bi.category) + '</td></tr>';
       }
       lastCat = bi.category;
     }
-    rows += '<tr>';
+    rows += '<tr style="background:#ffffff">';
     if (hasPartNum) rows += '<td ' + tdMono + '>' + esc(bi.part_number || '-') + '</td>';
     rows += '<td ' + td + '>' + esc(bi.description || '-') + '</td>';
     rows += '<td ' + tdC + '>' + (bi.quantity || 1) + '</td>';
@@ -389,32 +390,32 @@ function buildRFQHtml(selected, lang) {
     rows += '</tr>';
   }
 
-  const thStyle = 'style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600"';
-  const thCStyle = 'style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;font-weight:600"';
+  const thStyle = 'style="border:1px solid #cbd5e1;padding:8px 10px;text-align:left;font-weight:600;background:#f0f4f8;color:#1e293b"';
+  const thCStyle = 'style="border:1px solid #cbd5e1;padding:8px 10px;text-align:center;font-weight:600;background:#f0f4f8;color:#1e293b"';
 
-  const table = '<table border="1" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;width:100%;max-width:720px">'
-    + '<thead><tr style="background:#f0f4f8">'
+  const table = '<table border="1" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="border-collapse:collapse;font-size:13px;width:100%;max-width:720px;background:#ffffff;color:#1e293b">'
+    + '<thead><tr>'
     + (hasPartNum ? '<th ' + thStyle + '>' + (en ? 'Reference' : 'Artigo') + '</th>' : '')
     + '<th ' + thStyle + '>' + (en ? 'Description' : 'Descri&ccedil;&atilde;o') + '</th>'
     + '<th ' + thCStyle + '>' + (en ? 'Qty.' : 'Qtd.') + '</th>'
     + '<th ' + thStyle + '>' + (en ? 'Unit' : 'Unidade') + '</th>'
     + '</tr></thead>'
-    + '<tbody>' + rows + '</tbody>'
+    + '<tbody style="background:#ffffff">' + rows + '</tbody>'
     + '</table>';
 
   const body = en
-    ? '<p>Good day,</p>'
-      + '<p>I trust this message finds you well.</p>'
-      + '<p>We are reaching out to formally request a quotation for the following requirement:</p>'
+    ? '<p style="color:#1e293b;margin:0 0 1em 0">Good day,</p>'
+      + '<p style="color:#1e293b;margin:0 0 1em 0">I trust this message finds you well.</p>'
+      + '<p style="color:#1e293b;margin:0 0 1em 0">We are reaching out to formally request a quotation for the following requirement:</p>'
       + table
-      + '<p>Could you also kindly include the shipping cost and ETA?</p>'
-    : '<p>Boa tarde, Prezados,</p>'
-      + '<p>Espero que este e-mail os encontre bem.</p>'
-      + '<p>Queria solicitar uma cota&ccedil;&atilde;o para o equipamento abaixo:</p>'
+      + '<p style="color:#1e293b;margin:1em 0 0 0">Could you also kindly include the shipping cost and ETA?</p>'
+    : '<p style="color:#1e293b;margin:0 0 1em 0">Boa tarde, Prezados,</p>'
+      + '<p style="color:#1e293b;margin:0 0 1em 0">Espero que este e-mail os encontre bem.</p>'
+      + '<p style="color:#1e293b;margin:0 0 1em 0">Queria solicitar uma cota&ccedil;&atilde;o para o equipamento abaixo:</p>'
       + table;
 
-  const inner = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.6">' + body + '</div>';
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + inner + '</body></html>';
+  const inner = '<div style="font-family:Arial,sans-serif;font-size:14px;background:#ffffff;color:#1e293b;line-height:1.6">' + body + '</div>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:12px;background:#ffffff;color:#1e293b">' + inner + '</body></html>';
 }
 
 /**
