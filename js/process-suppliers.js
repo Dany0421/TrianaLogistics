@@ -449,46 +449,81 @@ async function _copyRfqToClipboard(html) {
   }
 }
 
+/**
+ * Open mailto while still in the same synchronous user gesture as the button click.
+ * After `await` (clipboard), browsers block location.assign / mailto — looks like "nothing happens".
+ */
+function _openMailtoSync(mailto) {
+  try {
+    const a = document.createElement('a');
+    a.href = mailto;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return true;
+  } catch (e) {
+    console.warn('[RFQ] mailto anchor click failed:', e);
+  }
+  try {
+    const w = window.open(mailto, '_blank', 'noopener,noreferrer');
+    if (w) return true;
+  } catch (e2) {
+    console.warn('[RFQ] window.open mailto failed:', e2);
+  }
+  try {
+    window.location.href = mailto;
+    return true;
+  } catch (e3) {
+    console.warn('[RFQ] location mailto failed:', e3);
+  }
+  return false;
+}
+
 async function sendRFQ(supplierIdx) {
-  const s = suppliers[supplierIdx];
-  if (!s || !String(s.email || '').trim()) {
-    showToast('Este fornecedor não tem email principal.', true);
-    return;
-  }
-  const selected = [...document.querySelectorAll('.rfq-item-cb:checked')]
-    .map(cb => bomItems[parseInt(cb.value)])
-    .filter(Boolean);
-  if (!selected.length) { showToast('Seleciona pelo menos um item.', true); return; }
-
-  const subject = rfqLang === 'en'
-    ? 'Request for Quotation - ' + process.project_name + ' - ' + process.client_name
-    : 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
-  const html = buildRFQHtml(selected, rfqLang);
-  const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
-  const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
-
-  let copied = false;
   try {
-    copied = await _copyRfqToClipboard(html);
-  } catch (e) {
-    console.error('[RFQ] Clipboard error:', e);
-  }
+    const s = suppliers[supplierIdx];
+    if (!s || !String(s.email || '').trim()) {
+      showToast('Este fornecedor não tem email principal.', true);
+      return;
+    }
+    const selected = [...document.querySelectorAll('.rfq-item-cb:checked')]
+      .map(cb => bomItems[parseInt(cb.value)])
+      .filter(Boolean);
+    if (!selected.length) { showToast('Seleciona pelo menos um item.', true); return; }
 
-  closeModal();
-  showToast(
-    copied
-      ? 'Corpo copiado com tabela (HTML). Cola no corpo do email (Ctrl+V).'
-      : 'Não foi possível copiar automaticamente — seleciona o texto no site ou copia do browser.',
-    !copied
-  );
+    const lang = rfqLang === 'en' ? 'en' : 'pt';
+    const subject = lang === 'en'
+      ? 'Request for Quotation - ' + process.project_name + ' - ' + process.client_name
+      : 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
+    const html = buildRFQHtml(selected, lang);
+    const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
+    const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
-  // Must open mailto in the same task as the click aftermath — setTimeout drops user activation and
-  // some browsers block mailto entirely ("nothing happens").
-  try {
-    window.location.assign(mailto);
+    const mailOpened = _openMailtoSync(mailto);
+
+    let copied = false;
+    try {
+      copied = await _copyRfqToClipboard(html);
+    } catch (e) {
+      console.error('[RFQ] Clipboard error:', e);
+    }
+
+    closeModal();
+    if (mailOpened && copied) {
+      showToast('Cliente de email aberto. Corpo copiado — cola no email (Ctrl+V).');
+    } else if (mailOpened && !copied) {
+      showToast('Cliente de email aberto. Copiar para a área de transferência falhou — cola o corpo manualmente se precisares.', true);
+    } else if (!mailOpened && copied) {
+      showToast('Corpo copiado. Se o email não abriu, abre o cliente manualmente para ' + s.email + '.', true);
+    } else {
+      showToast('Não foi possível abrir o email nem copiar. Tenta noutro browser ou verifica permissões.', true);
+    }
   } catch (e) {
-    console.error('[RFQ] mailto failed:', e);
-    showToast('Abre o email manualmente para ' + s.email + '.', true);
+    console.error('[RFQ] sendRFQ:', e);
+    showToast('Erro ao gerar email: ' + (e && e.message ? e.message : String(e)), true);
   }
 }
 
