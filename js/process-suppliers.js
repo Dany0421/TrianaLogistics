@@ -417,31 +417,20 @@ function buildRFQHtml(selected, lang) {
 }
 
 /**
- * Copy RFQ body as rich HTML only.
- * Do NOT add text/plain alongside text/html: Outlook and many mail clients prefer plain and you lose the table
- * (paste looks like "Item 1 / --- / Descrição..." from the old plain fallback).
+ * Synchronous rich HTML copy (same user gesture as the click). Required because opening mailto first
+ * consumes activation — async navigator.clipboard.write then often fails and paste is empty.
+ * Do NOT add pointer-events:none here — some engines won't copy/focus correctly.
  */
-async function _copyRfqToClipboard(html) {
-  try {
-    if (navigator.clipboard && window.ClipboardItem) {
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'text/html': new Blob([html], { type: 'text/html' }),
-        }),
-      ]);
-      return true;
-    }
-  } catch (e) {
-    console.warn('[RFQ] ClipboardItem failed:', e);
-  }
+function _copyRfqRichSync(html) {
   try {
     const wrap = document.createElement('div');
     wrap.setAttribute('contenteditable', 'true');
-    // Wide enough to select full table; do NOT use overflow:hidden + 1×1px — selection is empty in several browsers
-    wrap.style.cssText = 'position:fixed;left:-8000px;top:0;width:720px;opacity:0;pointer-events:none;z-index:-1';
+    wrap.tabIndex = -1;
+    wrap.style.cssText = 'position:fixed;left:-8000px;top:0;width:720px;max-height:90vh;overflow:auto;opacity:0;z-index:2147483646';
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
     wrap.innerHTML = bodyMatch ? bodyMatch[1] : html;
     document.body.appendChild(wrap);
+    wrap.focus();
     const range = document.createRange();
     range.selectNodeContents(wrap);
     const sel = window.getSelection();
@@ -450,7 +439,7 @@ async function _copyRfqToClipboard(html) {
     const ok = document.execCommand('copy');
     sel.removeAllRanges();
     wrap.remove();
-    return ok;
+    return !!ok;
   } catch (e) {
     console.warn('[RFQ] execCommand copy failed:', e);
     return false;
@@ -458,15 +447,29 @@ async function _copyRfqToClipboard(html) {
 }
 
 /**
+ * Async Clipboard API (best when it works). Callers may start this BEFORE mailto and await AFTER.
+ */
+function _copyRfqClipboardApiPromise(html) {
+  if (!navigator.clipboard || !window.ClipboardItem) return null;
+  return navigator.clipboard.write([
+    new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+    }),
+  ]).then(() => true).catch((e) => {
+    console.warn('[RFQ] ClipboardItem failed:', e);
+    return false;
+  });
+}
+
+/**
  * Open mailto while still in the same synchronous user gesture as the button click.
  * After `await` (clipboard), browsers block location.assign / mailto — looks like "nothing happens".
+ * Do not use target=_blank for mailto — it can behave oddly and confuse activation in some browsers.
  */
 function _openMailtoSync(mailto) {
   try {
     const a = document.createElement('a');
     a.href = mailto;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
     a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
     document.body.appendChild(a);
     a.click();
@@ -491,11 +494,10 @@ function _openMailtoSync(mailto) {
 }
 
 /**
- * RFQ "Gerar Email" — INVARIANT (do not change order without re-reading this):
- * Browsers tie `mailto:` / navigation to a short-lived "user activation" from the click.
- * Any `await` (e.g. clipboard API) consumes that activation — if you open mailto AFTER await,
- * Chrome and others block it silently ("nothing happens"). So: call _openMailtoSync(mailto)
- * BEFORE the first await in this handler. Also avoid setTimeout before mailto for the same reason.
+ * RFQ "Gerar Email" — ordering (both matter):
+ * 1) Opening mailto AFTER `await` clipboard → mail blocked (silent).
+ * 2) Opening mailto BEFORE async clipboard finishes → clipboard often blocked → paste empty.
+ * So: start Clipboard API write (no await), sync rich copy, open mailto, await API, optional second sync.
  */
 async function sendRFQ(supplierIdx) {
   try {
@@ -517,14 +519,18 @@ async function sendRFQ(supplierIdx) {
     const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
     const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
+    const clipPending = _copyRfqClipboardApiPromise(html);
+    let copied = _copyRfqRichSync(html);
     const mailOpened = _openMailtoSync(mailto);
 
-    let copied = false;
-    try {
-      copied = await _copyRfqToClipboard(html);
-    } catch (e) {
-      console.error('[RFQ] Clipboard error:', e);
+    if (clipPending) {
+      try {
+        if (await clipPending) copied = true;
+      } catch (e) {
+        console.error('[RFQ] Clipboard error:', e);
+      }
     }
+    if (!copied) copied = _copyRfqRichSync(html);
 
     closeModal();
     if (mailOpened && copied) {
