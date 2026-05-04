@@ -716,7 +716,7 @@ async function saveSupplier() {
   // Response time tracking
   const prev = editingSupplierIdx !== null ? suppliers[editingSupplierIdx] : null;
   const now = new Date().toISOString();
-  const repliedStatuses = ['Replied partial', 'Replied complete'];
+  const repliedStatuses = ['Replied partial', 'Replied complete', 'No stock', 'Not available', 'Ignored/no response'];
   if (fields.status === 'Request sent' && prev?.status !== 'Request sent') {
     fields.contacted_at = now;
   }
