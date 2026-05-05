@@ -315,7 +315,12 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     editBtn.title = 'Editar descrição';
     editBtn.appendChild(licon('pencil', 12));
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); openDescModal(bi.id); });
-    descWrap.appendChild(descDiv); descWrap.appendChild(editBtn);
+    const clockBtn = document.createElement('button');
+    clockBtn.style.cssText = `background:none;border:none;cursor:pointer;padding:2px;color:var(--muted);display:flex;align-items:center;flex-shrink:0;transition:.15s`;
+    clockBtn.title = 'Preço histórico';
+    clockBtn.appendChild(licon('clock', 12));
+    clockBtn.addEventListener('click', (e) => { e.stopPropagation(); openHistoricalPriceModal(bi); });
+    descWrap.appendChild(descDiv); descWrap.appendChild(editBtn); descWrap.appendChild(clockBtn);
     tdItem.appendChild(descWrap);
     if (bi.part_number) {
       const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv);
@@ -328,6 +333,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     for (const s of suppliers) {
       const m = matchLookup[bi.id]?.[s.id];
       const isIncludedIn = m?.match_type === 'included_in';
+      const isHistorical = m?.match_type === 'historical';
       const isSel = selectedSuppId === s.id;
       const price = effPrice(m?.quotation_items, extraByMatchId[m?.id] || []);
       const _cur2 = m?.quotation_items?.currency;
@@ -337,7 +343,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       const tdSupp = row.insertCell();
       const cellDiv = document.createElement('div');
       let cls = 'match-cell';
-      if (m) { if (isIncludedIn) cls += ' match-incl'; else if (isSel) cls += ' match-selected'; else if (isLowest) cls += ' match-lowest'; }
+      if (m) { if (isIncludedIn) cls += ' match-incl'; else if (isHistorical) cls += ' match-hist'; else if (isSel) cls += ' match-selected'; else if (isLowest) cls += ' match-lowest'; }
       else cls += ' match-empty';
       cellDiv.className = cls;
       cellDiv.addEventListener('click', () => openMatchModal(bi.id, s.id));
@@ -353,6 +359,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
           priceDiv.appendChild(currSpan); cellDiv.appendChild(priceDiv);
           if (isSel) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px'; lbl.textContent = 'SELECIONADO'; cellDiv.appendChild(lbl); }
           else if (isLowest) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#4fc3f7;letter-spacing:1px'; lbl.textContent = 'MAIS BAIXO'; cellDiv.appendChild(lbl); }
+          if (isHistorical) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#f59e0b;letter-spacing:1px'; lbl.textContent = 'HIST.'; cellDiv.appendChild(lbl); }
           const inclItems = includedByLookup[bi.id + '_' + s.id] || [];
           for (const im of inclItems) {
             const inclBi = bomItems.find(b => b.id === im.bom_item_id);
@@ -1137,6 +1144,7 @@ async function selectOffer(bomItemId, supplierId, quotItemId) {
 
 // ── Auto-Match ──
 let histMatchData = null; // lazy-fetched once per session; {supplier_name, bom_desc, quot_desc}[]
+let _histMarkupGlobal = 0; // persists global markup % across historical price modal opens
 function _fuzzyScore(s1, s2) {
   const t1 = _matchTokenize(s1).sort().join(' ');
   const t2 = _matchTokenize(s2).sort().join(' ');
@@ -1316,6 +1324,177 @@ async function runAutoMatch() {
     await loadMatchData(); renderMatchingTab();
     showToast('Erro: ' + e.message, true);
   }
+}
+
+async function openHistoricalPriceModal(bi) {
+  const el = document.createElement('div');
+  el.style.cssText = 'min-width:580px;max-width:780px;display:flex;flex-direction:column;gap:12px';
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-weight:600;font-size:15px';
+  title.textContent = bi.custom_description || bi.description;
+  el.appendChild(title);
+
+  // Global markup row
+  const markupRow = document.createElement('div');
+  markupRow.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px';
+  const markupLabel = document.createElement('label');
+  markupLabel.textContent = 'Markup %';
+  markupLabel.style.cssText = 'white-space:nowrap;color:var(--muted)';
+  const markupInput = document.createElement('input');
+  markupInput.type = 'number'; markupInput.min = '0'; markupInput.step = '0.1';
+  markupInput.value = _histMarkupGlobal;
+  markupInput.style.cssText = 'width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface2);color:var(--text)';
+  markupInput.addEventListener('input', () => { _histMarkupGlobal = parseFloat(markupInput.value) || 0; });
+  markupRow.appendChild(markupLabel);
+  markupRow.appendChild(markupInput);
+  el.appendChild(markupRow);
+
+  // Search row
+  const searchRow = document.createElement('div');
+  searchRow.style.cssText = 'display:flex;gap:6px';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.value = bi.custom_description || bi.description;
+  searchInput.style.cssText = 'flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface2);color:var(--text)';
+  const searchBtn = document.createElement('button');
+  searchBtn.type = 'button'; searchBtn.className = 'btn btn-sm btn-secondary';
+  searchBtn.textContent = 'Pesquisar';
+  searchRow.appendChild(searchInput);
+  searchRow.appendChild(searchBtn);
+  el.appendChild(searchRow);
+
+  // Results container
+  const resultsDiv = document.createElement('div');
+  resultsDiv.style.cssText = 'max-height:380px;overflow-y:auto';
+  el.appendChild(resultsDiv);
+
+  showModalLg(el);
+
+  async function doSearch() {
+    const query = searchInput.value.trim();
+    resultsDiv.replaceChildren();
+    const loadingDiv = document.createElement('div');
+    loadingDiv.style.cssText = 'padding:16px;text-align:center;color:var(--muted);font-size:13px';
+    loadingDiv.textContent = 'A pesquisar…';
+    resultsDiv.appendChild(loadingDiv);
+    let rows;
+    try { rows = await API.searchPriceHistory(query); }
+    catch(e) {
+      resultsDiv.replaceChildren();
+      const errDiv = document.createElement('div');
+      errDiv.style.cssText = 'padding:12px;color:#f87171;font-size:13px';
+      errDiv.textContent = 'Erro: ' + e.message;
+      resultsDiv.appendChild(errDiv);
+      return;
+    }
+    resultsDiv.replaceChildren();
+
+    // Exclude rows whose supplier already has a match for this bom_item
+    const existingMatchSupplierIds = new Set(
+      matches.filter(m => m.bom_item_id === bi.id).map(m => m.supplier_id)
+    );
+    const filtered = rows.filter(row => {
+      const suppName = (row.suppliers?.name || '').trim().toLowerCase();
+      const currentProcessSupp = suppliers.find(s => s.name.trim().toLowerCase() === suppName);
+      return !(currentProcessSupp && existingMatchSupplierIds.has(currentProcessSupp.id));
+    });
+
+    if (!filtered.length) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.cssText = 'padding:20px;text-align:center;color:var(--muted);font-size:13px;font-style:italic';
+      emptyDiv.textContent = 'Nenhum resultado encontrado.';
+      resultsDiv.appendChild(emptyDiv);
+      return;
+    }
+
+    const globalMkp = parseFloat(markupInput.value) || 0;
+
+    const table = document.createElement('table');
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px';
+    const thead = table.createTHead();
+    const hRow = thead.insertRow();
+    ['Fornecedor', 'Descrição (fornecedor)', 'Preço base', 'Markup %', 'Preço final', 'Data', 'Processo', ''].forEach(h => {
+      const th = document.createElement('th');
+      th.style.cssText = 'text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);color:var(--muted);white-space:nowrap;font-weight:500;position:sticky;top:0;background:var(--surface)';
+      th.textContent = h;
+      hRow.appendChild(th);
+    });
+    const tbody = table.createTBody();
+
+    for (const row of filtered) {
+      const suppName = (row.suppliers?.name || '').trim().toLowerCase();
+      const currentProcessSupp = suppliers.find(s => s.name.trim().toLowerCase() === suppName);
+      const tr = tbody.insertRow();
+      if (currentProcessSupp) tr.style.cssText = 'background:rgba(34,197,94,.07);outline:1px solid rgba(34,197,94,.3)';
+      const basePrice = row.price || 0;
+      const proc = row.suppliers?.processes;
+
+      const tdSupp = tr.insertCell(); tdSupp.style.cssText = 'padding:5px 6px;white-space:nowrap;font-weight:500';
+      tdSupp.textContent = row.suppliers?.name || '—';
+
+      const tdDesc = tr.insertCell(); tdDesc.style.cssText = 'padding:5px 6px;max-width:200px;word-break:break-word';
+      tdDesc.textContent = row.raw_description || '—';
+
+      const tdBase = tr.insertCell(); tdBase.style.cssText = "padding:5px 6px;white-space:nowrap;font-family:'IBM Plex Mono',monospace";
+      tdBase.textContent = fmtPrice(basePrice);
+
+      const tdMkp = tr.insertCell(); tdMkp.style.cssText = 'padding:5px 6px';
+      const rowMkpInput = document.createElement('input');
+      rowMkpInput.type = 'number'; rowMkpInput.min = '0'; rowMkpInput.step = '0.1';
+      rowMkpInput.value = globalMkp;
+      rowMkpInput.style.cssText = 'width:65px;padding:3px 5px;border:1px solid var(--border);border-radius:3px;font-size:11px;background:var(--surface2);color:var(--text)';
+      tdMkp.appendChild(rowMkpInput);
+
+      const tdFinal = tr.insertCell(); tdFinal.style.cssText = "padding:5px 6px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;font-weight:600;color:#f59e0b";
+      const finalPriceDiv = document.createElement('div');
+      const calcFinal = () => basePrice * (1 + (parseFloat(rowMkpInput.value) || 0) / 100);
+      finalPriceDiv.textContent = fmtPrice(calcFinal()) + ' MZN';
+      tdFinal.appendChild(finalPriceDiv);
+      rowMkpInput.addEventListener('input', () => { finalPriceDiv.textContent = fmtPrice(calcFinal()) + ' MZN'; });
+
+      const tdDate = tr.insertCell(); tdDate.style.cssText = 'padding:5px 6px;white-space:nowrap;color:var(--muted)';
+      tdDate.textContent = fmtDate(row.created_at);
+
+      const tdProc = tr.insertCell(); tdProc.style.cssText = 'padding:5px 6px;color:var(--muted);max-width:130px;word-break:break-word';
+      const procLabel = proc ? ((proc.project_name || '') + (proc.client_name ? ' / ' + proc.client_name : '')) : '—';
+      tdProc.textContent = procLabel;
+
+      const tdUsar = tr.insertCell(); tdUsar.style.cssText = 'padding:5px 6px';
+      const usarBtn = document.createElement('button');
+      usarBtn.type = 'button'; usarBtn.className = 'btn btn-sm btn-primary';
+      usarBtn.textContent = 'Usar';
+      usarBtn.addEventListener('click', async () => {
+        usarBtn.disabled = true; usarBtn.textContent = '…';
+        try {
+          const finalPrice = calcFinal();
+          _histMarkupGlobal = parseFloat(rowMkpInput.value) || 0;
+          const rawHistDesc = row.raw_description || '';
+          let targetSuppId = currentProcessSupp?.id ?? null;
+          if (!targetSuppId) {
+            if (!confirm('Adicionar ' + (row.suppliers?.name || 'fornecedor') + ' ao processo?')) {
+              usarBtn.disabled = false; usarBtn.textContent = 'Usar'; return;
+            }
+            const newSupp = await API.createSupplier({ process_id: processId, name: row.suppliers?.name, status: 'Historical price' });
+            targetSuppId = newSupp.id;
+          }
+          await API.createHistoricalMatch(processId, bi.id, targetSuppId, rawHistDesc, finalPrice);
+          closeModal();
+          await loadMatchData(); renderMatchingTab();
+          showToast('Preço histórico aplicado.');
+        } catch(e) {
+          usarBtn.disabled = false; usarBtn.textContent = 'Usar';
+          showToast('Erro: ' + e.message, true);
+        }
+      });
+      tdUsar.appendChild(usarBtn);
+    }
+    resultsDiv.appendChild(table);
+  }
+
+  searchBtn.addEventListener('click', doSearch);
+  searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+  doSearch();
 }
 
 function makeRowHeightCalc(fontPtSize) {

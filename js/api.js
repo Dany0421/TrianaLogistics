@@ -985,4 +985,20 @@ const API = {
       }))
       .filter(r => r.supplier_name && r.bom_desc && r.quot_desc);
   },
+
+  async createHistoricalMatch(processId, biId, supplierId, rawDesc, finalPrice) {
+    const { data: qi, error: e1 } = await supabase
+      .from('quotation_items')
+      .insert({ supplier_id: supplierId, raw_description: String(rawDesc).slice(0, 500), price: finalPrice, quantity: 1, currency: 'MZN' })
+      .select()
+      .single();
+    if (e1) throw _sanitizeError(e1);
+    const { data: im, error: e2 } = await supabase
+      .from('item_matches')
+      .upsert({ process_id: processId, bom_item_id: biId, supplier_id: supplierId, quotation_item_id: qi.id, match_type: 'historical', updated_at: new Date().toISOString() }, { onConflict: 'bom_item_id,supplier_id' })
+      .select()
+      .single();
+    if (e2) throw _sanitizeError(e2);
+    return { quotation_item: qi, item_match: im };
+  },
 };
