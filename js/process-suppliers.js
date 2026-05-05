@@ -1219,12 +1219,29 @@ function renderQuotValTable() {
     etaWrap.appendChild(etaIn); etaWrap.appendChild(etaUnitBtn);
     tdEta.appendChild(etaWrap);
 
-    // Delete
+    // Actions (\u25b2 \u25bc \u00d7)
     const tdDel = document.createElement('td');
+    tdDel.style.cssText = 'display:flex;gap:3px;align-items:center';
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button'; upBtn.className = 'btn btn-ghost btn-sm'; upBtn.textContent = '\u25b2';
+    upBtn.title = 'Mover para cima'; upBtn.style.padding = '3px 6px';
+    upBtn.disabled = i === 0;
+    if (i === 0) upBtn.style.opacity = '0.25';
+    upBtn.onclick = () => { [pendingQuotItems[i-1], pendingQuotItems[i]] = [pendingQuotItems[i], pendingQuotItems[i-1]]; renderQuotValTable(); };
+
+    const downBtn = document.createElement('button');
+    downBtn.type = 'button'; downBtn.className = 'btn btn-ghost btn-sm'; downBtn.textContent = '\u25bc';
+    downBtn.title = 'Mover para baixo'; downBtn.style.padding = '3px 6px';
+    downBtn.disabled = i === pendingQuotItems.length - 1;
+    if (i === pendingQuotItems.length - 1) downBtn.style.opacity = '0.25';
+    downBtn.onclick = () => { [pendingQuotItems[i], pendingQuotItems[i+1]] = [pendingQuotItems[i+1], pendingQuotItems[i]]; renderQuotValTable(); };
+
     const delBtn = document.createElement('button');
     delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '\u00d7';
     delBtn.onclick = () => { pendingQuotItems.splice(i, 1); renderQuotValTable(); };
-    tdDel.appendChild(delBtn);
+
+    tdDel.appendChild(upBtn); tdDel.appendChild(downBtn); tdDel.appendChild(delBtn);
 
     tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty);
     tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdEta); tr.appendChild(tdDel);

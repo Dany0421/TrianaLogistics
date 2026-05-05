@@ -160,12 +160,10 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
       sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
       sc2(ws.getCell(row,3),{value:item.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
       sc2(ws.getCell(row,4+si),{value:{formula:`${ss}!R${ds+item.indexInSupplier}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      sc2(ws.getCell(row,tc),{value:{formula:`+${vl}${row}*C${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
     } else {
       sc2(ws.getCell(row,2),{value:item.model,font:svcF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
       sc2(ws.getCell(row,3),{value:item.qty,font:svcF,alignment:{horizontal:'center',vertical:'middle'}});
       if(trCol) sc2(ws.getCell(row,trCol),{value:item.unitPrice,font:svcF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      sc2(ws.getCell(row,tc),{value:{formula:`+${trL}${row}*C${row}`},font:svcF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
     }
     row++;
   }

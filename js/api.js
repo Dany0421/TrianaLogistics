@@ -464,6 +464,22 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async adminUpdateUserAssignment(targetId, showInAssignment) {
+    const { error } = await supabase.rpc('admin_set_user_assignment', { target_id: targetId, new_value: showInAssignment });
+    if (error) throw _sanitizeError(error);
+  },
+
+  async getAssignableUsers() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, name, role')
+      .in('role', ['procurement', 'admin'])
+      .eq('show_in_assignment', true)
+      .order('name');
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
   async getTopSuppliers(limit = 5) {
     const { data, error } = await supabase.from('suppliers').select('name, process_id');
     if (error) throw _sanitizeError(error);
@@ -928,7 +944,7 @@ const API = {
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
       .from('suppliers')
-      .select('id, name, next_followup_at, status, processes(id, project_name, client_name)')
+      .select('id, name, next_followup_at, status, processes(id, project_name, client_name, assigned_to)')
       .lte('next_followup_at', today)
       .not('next_followup_at', 'is', null)
       .not('status', 'in', '("Replied complete","No stock","Not available","Ignored / no response")')

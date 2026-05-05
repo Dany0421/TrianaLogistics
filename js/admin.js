@@ -665,6 +665,14 @@ function openEditUserModal(u) {
   }
   el.appendChild(roleRow);
 
+  const assignRow = document.createElement('div'); assignRow.className = 'form-row';
+  const assignLbl = document.createElement('label'); assignLbl.textContent = 'Alocação de processos'; assignRow.appendChild(assignLbl);
+  const assignWrap = document.createElement('label'); assignWrap.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);margin-top:4px';
+  const assignChk = document.createElement('input'); assignChk.type = 'checkbox'; assignChk.id = 'eu_assignment'; assignChk.checked = u.show_in_assignment !== false;
+  const assignTxt = document.createElement('span'); assignTxt.textContent = 'Aparece no dropdown de responsável procurement';
+  assignWrap.appendChild(assignChk); assignWrap.appendChild(assignTxt); assignRow.appendChild(assignWrap);
+  el.appendChild(assignRow);
+
   const actions = document.createElement('div'); actions.className = 'modal-actions';
   const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
   const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-primary'; saveBtn.textContent = 'Guardar'; saveBtn.addEventListener('click', () => saveUserEdit(u.id, isSelf)); actions.appendChild(saveBtn);
@@ -679,9 +687,12 @@ async function saveUserEdit(userId, isSelf) {
 
   if (isSelf && !newName) { showToast('O nome não pode estar vazio.', true); return; }
 
+  const showInAssignment = document.getElementById('eu_assignment')?.checked ?? true;
+
   try {
     if (isSelf) await API.adminUpdateUserName(userId, newName);
     if (newRole) await API.adminUpdateUserRole(userId, newRole);
+    await API.adminUpdateUserAssignment(userId, showInAssignment);
     closeModal();
     showToast('Utilizador atualizado.');
     loadUsers();

@@ -3,6 +3,8 @@ let procUsers = [];
 let _notifications = [];
 let _notifOpen = false;
 let _overdueCount = 0;
+let _dashAuth = null;
+let _assignableUsers = [];
 
 // ── Notifications ──
 async function loadNotifications() {
@@ -116,6 +118,8 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('load', async () => {
   const auth = await requireAuth('index.html');
   if (!auth) return;
+  _dashAuth = auth;
+  try { _assignableUsers = await API.getAssignableUsers(); } catch(_) {}
   // Bind early — do not wait for network; otherwise a hung/failed fetch blocks the button forever
   const createBtn = document.getElementById('createProcessBtn');
   if (createBtn) createBtn.addEventListener('click', () => openCreateModal());
@@ -310,6 +314,8 @@ function renderCharts(processes, topSuppliers) {
 // ── Follow-up Alerts ──
 let followupCollapsed = false;
 function renderFollowupAlerts(data) {
+  const myId = _dashAuth?.user?.id;
+  if (myId) data = data.filter(s => s.processes?.assigned_to === myId);
   _overdueCount = data.length;
   renderStats();
   const banner = document.getElementById('followupBanner');
@@ -540,6 +546,7 @@ function renderStats() {
 function renderUserStats() {
   const section = document.getElementById('userStatsSection');
   const statNames = [...new Set(allProcesses.map(p => p.procurement_name || p.assignee?.name).filter(Boolean))];
+  if (section) section.style.display = 'none'; return; // HIDDEN temporariamente
   if (!section || !hasRole('admin') || !statNames.length) { if (section) section.style.display = 'none'; return; }
 
   const openByUser = {};
@@ -858,7 +865,7 @@ function openCreateModal(id = null) {
         <input type="text" id="f_custom_name" placeholder="Nome do estado" style="flex:1" value="${!STANDARD_STATUSES.includes(p.status)?esc(p.status):''}">
         <input type="color" id="f_custom_color" value="${p.status_color||'#2563eb'}" style="width:40px;height:36px;padding:2px;cursor:pointer">
       </div></div>` : ''}
-    <div class="form-row"><label>Procurement respons\u00e1vel</label><input type="text" id="f_procurement" placeholder="Nome do respons\u00e1vel" value="${esc(p?.procurement_name || p?.assignee?.name || '')}"></div>
+    <div class="form-row"><label>Procurement respons\u00e1vel</label><select id="f_procurement"><option value="">\u2014 Nenhum \u2014</option></select></div>
     <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto \u2014 opcional)</span></label><div class="tag-input-box" id="f_catBox"></div></div>
     <div class="form-row"><label>Comercial respons\u00e1vel</label><input type="text" id="f_commercial" placeholder="Nome do comercial" value="${esc(p?.commercial_name||'')}"></div>
     <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observa\u00e7\u00f5es..."></textarea></div>
@@ -876,6 +883,15 @@ function openCreateModal(id = null) {
   _fc('f_project', p?.project_name || '');
   _fc('f_notes', p?.notes || '');
   renderProcTagBox('f_catBox', pendingProcessCategories);
+  const fProcSel = document.getElementById('f_procurement');
+  if (fProcSel) {
+    _assignableUsers.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id; opt.textContent = u.name;
+      if (u.id === (p?.assigned_to || '')) opt.selected = true;
+      fProcSel.appendChild(opt);
+    });
+  }
   const fStatusSel = document.getElementById('f_status');
   if (fStatusSel) {
     fStatusSel.addEventListener('change', function() {
@@ -892,8 +908,8 @@ async function saveProcess() {
     priority:     document.getElementById('f_priority').value || null,
     notes:        document.getElementById('f_notes').value.trim(),
     commercial_name: document.getElementById('f_commercial')?.value.trim() || null,
-    procurement_name: document.getElementById('f_procurement')?.value.trim() || null,
-    assigned_to: null,
+    procurement_name: null,
+    assigned_to: document.getElementById('f_procurement')?.value || null,
     categories:   pendingProcessCategories,
   };
   const statusEl = document.getElementById('f_status');
@@ -992,7 +1008,7 @@ function openCloneModal(id) {
     </div>
     <div class="form-row" style="margin-top:4px">
       <label>Procurement respons\u00e1vel (opcional)</label>
-      <input type="text" id="cl_procurement" placeholder="Nome do respons\u00e1vel" value="${esc(p?.procurement_name || p?.assignee?.name || '')}">
+      <select id="cl_procurement"><option value="">\u2014 Nenhum \u2014</option></select>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost">Cancelar</button>
@@ -1001,6 +1017,15 @@ function openCloneModal(id) {
   `);
   document.getElementById('cl_bom').addEventListener('change', updateCloneUI);
   document.getElementById('cl_sup').addEventListener('change', updateCloneUI);
+  const clProcSel = document.getElementById('cl_procurement');
+  if (clProcSel) {
+    _assignableUsers.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id; opt.textContent = u.name;
+      if (u.id === (p?.assigned_to || '')) opt.selected = true;
+      clProcSel.appendChild(opt);
+    });
+  }
   const actions = document.querySelector('#modalRoot .modal-actions');
   actions.querySelector('.btn-ghost').addEventListener('click', closeModal);
   actions.querySelector('.btn-primary').addEventListener('click', () => doClone(id));
@@ -1039,7 +1064,8 @@ async function doClone(sourceId) {
     status:   'Active',
     notes:    src.notes || null,
     deadline: null,
-    procurement_name: document.getElementById('cl_procurement')?.value.trim() || null,
+    procurement_name: null,
+    assigned_to: document.getElementById('cl_procurement')?.value || null,
   };
 
   try {
