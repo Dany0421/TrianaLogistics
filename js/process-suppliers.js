@@ -796,6 +796,7 @@ function openManualQuotEntry(supplierId) {
   pendingQuotItems = existing.map(qi => ({
     id: qi.id,
     raw_part_number: qi.raw_part_number,
+    raw_sku: qi.raw_sku || null,
     raw_description: qi.raw_description,
     quantity: qi.quantity,
     price: qi.price,
@@ -876,6 +877,7 @@ async function handleQuotationUpload(input) {
     const existing = (quotationMap[currentQuotSuppId] || []).map(qi => ({
       id: qi.id,
       raw_part_number: qi.raw_part_number || null,
+      raw_sku: qi.raw_sku || null,
       raw_description: qi.raw_description,
       quantity: qi.quantity,
       price: qi.price,
@@ -1019,6 +1021,46 @@ function openQuotationValModal(fileName, rawPdfText) {
   etaBar.appendChild(etaLabel); etaBar.appendChild(etaValIn); etaBar.appendChild(etaGlobalUnitBtn); etaBar.appendChild(resetEtaBtn);
   el.appendChild(etaBar);
 
+  // Ref type toggle — pre-fill from global supplier record
+  const _gsForRef = globalSuppliersList.find(g => g.name.trim().toLowerCase() === (s?.name || '').trim().toLowerCase());
+  _quotRefType = _gsForRef?.last_ref_type || 'part_number';
+  // Apply initial remap: if SKU mode, move raw_part_number → raw_sku on parsed items
+  if (_quotRefType === 'sku') {
+    pendingQuotItems.forEach(item => {
+      if (item.raw_part_number && !item.raw_sku) { item.raw_sku = item.raw_part_number; item.raw_part_number = null; }
+    });
+  }
+  const refBar = document.createElement('div'); refBar.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:10px;font-size:12px;color:var(--muted)';
+  const refBarLabel = document.createElement('span'); refBarLabel.textContent = 'Campo de referência:';
+  const _makeRefOpt = (value, label) => {
+    const wrap = document.createElement('label'); wrap.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--text)';
+    const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'quotRefType'; radio.value = value;
+    if (_quotRefType === value) radio.checked = true;
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      const prev = _quotRefType;
+      _quotRefType = value;
+      // Remap values in pendingQuotItems
+      pendingQuotItems.forEach(item => {
+        if (value === 'sku' && prev === 'part_number') {
+          if (item.raw_part_number) { item.raw_sku = item.raw_part_number; item.raw_part_number = null; }
+        } else if (value === 'part_number' && prev === 'sku') {
+          if (item.raw_sku) { item.raw_part_number = item.raw_sku; item.raw_sku = null; }
+        }
+      });
+      // Update column header
+      const th = table.querySelector('thead th');
+      if (th) th.textContent = value === 'sku' ? 'SKU' : 'Part #';
+      renderQuotValTable();
+    });
+    wrap.appendChild(radio); wrap.appendChild(document.createTextNode(label));
+    return wrap;
+  };
+  refBar.appendChild(refBarLabel);
+  refBar.appendChild(_makeRefOpt('part_number', 'Part Number'));
+  refBar.appendChild(_makeRefOpt('sku', 'SKU fornecedor'));
+  el.appendChild(refBar);
+
   // Rates block — shown only when any item has currency != MZN
   const ratesBlock = document.createElement('div');
   ratesBlock.id = 'quotRatesBlock';
@@ -1049,7 +1091,7 @@ function openQuotationValModal(fileName, rawPdfText) {
   const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
   const table = document.createElement('table'); table.className = 'bom-validate-table';
   table.insertAdjacentHTML('afterbegin', `<thead><tr>
-    <th style="width:9%">Part #</th><th style="width:34%">Descrição</th>
+    <th style="width:9%">${_quotRefType === 'sku' ? 'SKU' : 'Part #'}</th><th style="width:34%">Descrição</th>
     <th style="width:5%">Qty</th><th style="width:10%">Preço Unit.</th>
     <th style="width:6%">Desc.%</th>
     <th style="width:10%">Moeda</th><th style="width:13%">ETA</th><th style="width:13%"></th>
@@ -1115,7 +1157,7 @@ function renderQuotValTable() {
 
   pendingQuotItems.forEach((item, i) => {
     if (_tokens.length && !_tokens.every(t =>
-      _norm(item.raw_part_number).includes(t) || _norm(item.raw_description).includes(t)
+      _norm(item.raw_part_number).includes(t) || _norm(item.raw_sku).includes(t) || _norm(item.raw_description).includes(t)
     )) return;
 
     const tr = document.createElement('tr');
@@ -1123,8 +1165,11 @@ function renderQuotValTable() {
     // Part #
     const tdPart = document.createElement('td');
     const inPart = document.createElement('input');
-    inPart.type = 'text'; inPart.value = item.raw_part_number || ''; inPart.style.width = '100%';
-    inPart.onchange = function() { pendingQuotItems[i].raw_part_number = this.value || null; };
+    inPart.type = 'text'; inPart.value = (_quotRefType === 'sku' ? item.raw_sku : item.raw_part_number) || ''; inPart.style.width = '100%';
+    inPart.onchange = function() {
+      if (_quotRefType === 'sku') { pendingQuotItems[i].raw_sku = this.value || null; }
+      else { pendingQuotItems[i].raw_part_number = this.value || null; }
+    };
     tdPart.appendChild(inPart);
 
     // Descrição
@@ -1281,6 +1326,14 @@ async function confirmQuotation() {
     );
     quotationMap[currentQuotSuppId] = await API.getQuotationItems(currentQuotSuppId);
 
+    // Persist last_ref_type on global supplier
+    const _suppName = suppliers.find(s => s.id === currentQuotSuppId)?.name;
+    if (_suppName) {
+      try { await API.updateGlobalSupplierRefType(_suppName, _quotRefType); } catch(_) {}
+      const _gsRef = globalSuppliersList.find(g => g.name.trim().toLowerCase() === _suppName.trim().toLowerCase());
+      if (_gsRef) _gsRef.last_ref_type = _quotRefType;
+    }
+
     // Save or clear exchange rates on the supplier record
     const hasNonMzn = valid.some(i => i.currency && i.currency !== 'MZN');
     const rateFields = hasNonMzn ? {
@@ -1369,9 +1422,12 @@ function parsePdf(text){
     const ei=new Set([qci,...nc.map(n=>n.i)]);
     const dc=cols.filter((c,i)=>{if(ei.has(i))return false;if(c.includes('%'))return false;if(UR.test(c.trim())&&!/[a-zA-Z]{4,}/.test(c))return false;return true;});
     if(!dc.length)continue;
-    let part='',model=dc.join(' ');const fd=dc[0];
-    const lr=!/\s/.test(fd)&&fd.length>=4&&((/\d/.test(fd)&&/[A-Za-z]/.test(fd))||/^\d{5,}$/.test(fd));
-    if(lr&&dc.length>1){part=fd;model=dc.slice(1).join(' ').trim();if(model.length<2){model=dc.join(' ');part='';}}
+    let part='',model=dc.join(' ');
+    // Recover reference from cols[0] if it was classified as numeric but looks like a catalog code
+    const fc=cols[0];
+    if(fc&&ei.has(0)&&!/\s/.test(fc)&&fc.length>=4&&((/\d/.test(fc)&&/[A-Za-z]/.test(fc))||/^\d{8,}$/.test(fc)||/^\d{2,}\.\d{4,}$/.test(fc))){part=fc;}
+    const fd=dc[0];
+    if(!part){const lr=!/\s/.test(fd)&&fd.length>=4&&((/\d/.test(fd)&&/[A-Za-z]/.test(fd))||/^\d{5,}$/.test(fd));if(lr&&dc.length>1){part=fd;model=dc.slice(1).join(' ').trim();if(model.length<2){model=dc.join(' ');part='';}}}
     if(!model||model.length<2)continue;
     items.push({part,model,qty,price});
   }
@@ -1394,6 +1450,7 @@ async function handlePdfQuotation(file) {
     const existingPdf = (quotationMap[currentQuotSuppId] || []).map(qi => ({
       id: qi.id,
       raw_part_number: qi.raw_part_number || null,
+      raw_sku: qi.raw_sku || null,
       raw_description: qi.raw_description,
       quantity: qi.quantity,
       price: qi.price,

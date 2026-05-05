@@ -1001,4 +1001,33 @@ const API = {
     if (e2) throw _sanitizeError(e2);
     return { quotation_item: qi, item_match: im };
   },
+
+  async getHistoricalSkuPairs() {
+    const { data, error } = await supabase
+      .from('item_matches')
+      .select('suppliers(name), quotation_items!quotation_item_id!inner(raw_sku), bom_items!bom_item_id(description, custom_description)')
+      .not('quotation_item_id', 'is', null)
+      .not('supplier_id', 'is', null)
+      .not('bom_item_id', 'is', null)
+      .not('quotation_items.raw_sku', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(3000);
+    if (error) throw _sanitizeError(error);
+    return (data || [])
+      .filter(m => m.quotation_items?.raw_sku)
+      .map(m => ({
+        supplier_name: m.suppliers?.name,
+        raw_sku: m.quotation_items.raw_sku,
+        bom_desc: m.bom_items?.custom_description || m.bom_items?.description,
+      }))
+      .filter(r => r.supplier_name && r.raw_sku && r.bom_desc);
+  },
+
+  async updateGlobalSupplierRefType(name, refType) {
+    const { error } = await supabase
+      .from('global_suppliers')
+      .update({ last_ref_type: refType, last_ref_type_at: new Date().toISOString() })
+      .ilike('name', name.trim());
+    if (error) throw _sanitizeError(error);
+  },
 };

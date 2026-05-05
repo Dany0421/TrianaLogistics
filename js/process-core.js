@@ -30,6 +30,7 @@ let matchExtraItems = [];
 let selectedOffers = [];
 let pendingQuotItems = [];
 let currentQuotSuppId = null;
+let _quotRefType = 'part_number'; // 'part_number' | 'sku' — persists last used per session
 let matchingView = 'matching'; // 'matching' | 'comparacao' | 'resumo'
 let matchingFilter = 'all';   // 'all' | 'unmatched'
 let matchingSearch = '';       // text filter

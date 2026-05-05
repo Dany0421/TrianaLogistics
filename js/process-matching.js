@@ -1144,6 +1144,7 @@ async function selectOffer(bomItemId, supplierId, quotItemId) {
 
 // ── Auto-Match ──
 let histMatchData = null; // lazy-fetched once per session; {supplier_name, bom_desc, quot_desc}[]
+let histSkuData = null;   // lazy-fetched once per session; {supplier_name, raw_sku, bom_desc}[]
 let _histMarkupGlobal = 0; // persists global markup % across historical price modal opens
 function _fuzzyScore(s1, s2) {
   const t1 = _matchTokenize(s1).sort().join(' ');
@@ -1172,6 +1173,42 @@ async function runAutoMatch() {
   // Build rejected set: "bomItemId:supplierId:quotItemId"
   const rejectedSet = new Set(rejectedAutoMatch.map(r => `${r.bom_item_id}:${r.supplier_id}:${r.quotation_item_id}`));
   const newMatches = [];
+  const phase0Matched = new Set(); // "biId:sId" pairs skipped by Phase 0 and later phases
+
+  // Phase -1: SKU match — exact supplier SKU is definitive evidence
+  if (histSkuData === null) {
+    try { histSkuData = await API.getHistoricalSkuPairs(); }
+    catch(_) { histSkuData = []; }
+  }
+  const histSkuBySupplier = {};
+  for (const p of histSkuData) {
+    const key = (p.supplier_name || '').trim().toLowerCase();
+    if (!histSkuBySupplier[key]) histSkuBySupplier[key] = [];
+    histSkuBySupplier[key].push(p);
+  }
+  for (const s of suppliersWithItems) {
+    const skuItems = (quotationMap[s.id] || []).filter(qi => (qi.raw_sku || '').trim());
+    if (!skuItems.length) continue;
+    const histPairs = histSkuBySupplier[(s.name || '').trim().toLowerCase()] || [];
+    if (!histPairs.length) continue;
+    for (const qi of skuItems) {
+      if (matches.some(m => m.supplier_id === s.id && m.quotation_item_id === qi.id)) continue;
+      const hp = histPairs.find(h => (h.raw_sku || '').trim().toLowerCase() === qi.raw_sku.trim().toLowerCase());
+      if (!hp) continue;
+      // SKU is definitive — use bom_desc only to identify which current BOM item to link to
+      const bi = bomItems.find(b =>
+        !b.is_service &&
+        !matches.find(m => m.bom_item_id === b.id && m.supplier_id === s.id) &&
+        !newMatches.some(m => m.bom_item_id === b.id && m.supplier_id === s.id) &&
+        !phase0Matched.has(`${b.id}:${s.id}`) &&
+        !rejectedSet.has(`${b.id}:${s.id}:${qi.id}`) &&
+        _fuzzyScore(b.custom_description || b.description, hp.bom_desc) >= 0.75
+      );
+      if (!bi) continue;
+      newMatches.push({ process_id: processId, bom_item_id: bi.id, supplier_id: s.id, quotation_item_id: qi.id, match_type: 'auto', confidence: 1.0 });
+      phase0Matched.add(`${bi.id}:${s.id}`);
+    }
+  }
 
   // Phase 0: historical match — mine past item_matches for supplier+description pairs
   if (histMatchData === null) {
@@ -1184,7 +1221,6 @@ async function runAutoMatch() {
     if (!histBySupplier[key]) histBySupplier[key] = [];
     histBySupplier[key].push(p);
   }
-  const phase0Matched = new Set(); // "biId:sId" pairs matched in Phase 0
   for (const bi of bomItems) {
     if (bi.is_service) continue;
     const biDesc = bi.custom_description || bi.description;
