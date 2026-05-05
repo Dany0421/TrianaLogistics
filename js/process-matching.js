@@ -257,9 +257,15 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     const gs = (globalSuppliersList || []).find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase());
     const isBlocked = gs?.account_status === 'blocked';
     const isEtaPost = gs?.eta_condition === 'after_payment';
-    if (isBlocked || isEtaPost) {
+    const noCredit = gs?.has_credit === false;
+    if (isBlocked || isEtaPost || noCredit) {
       const badgeWrap = document.createElement('div');
-      badgeWrap.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:4px';
+      badgeWrap.className = 'match-warn-wrap';
+      const tips = [];
+      if (isBlocked) tips.push('Conta bloqueada');
+      if (isEtaPost) tips.push('ETA após pagamento');
+      if (noCredit) tips.push('Sem crédito disponível');
+      badgeWrap.dataset.tooltip = tips.join(' · ');
       if (isBlocked) {
         const b = document.createElement('span');
         b.className = 'match-warn-badge match-warn-blocked';
@@ -270,6 +276,12 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
         const b = document.createElement('span');
         b.className = 'match-warn-badge match-warn-eta';
         b.textContent = 'ETA Pós-Pgto';
+        badgeWrap.appendChild(b);
+      }
+      if (noCredit) {
+        const b = document.createElement('span');
+        b.className = 'match-warn-badge match-warn-credit';
+        b.textContent = 'Sem Crédito';
         badgeWrap.appendChild(b);
       }
       th.appendChild(badgeWrap);

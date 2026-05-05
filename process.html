@@ -67,7 +67,9 @@
   .tag-input-field { border:none; background:none; outline:none; font-size:13px; color:var(--text); flex:1; min-width:80px; }
   /* Matching table */
   .match-table { border-collapse:collapse; font-size:13px; }
-  .match-table th { text-align:left; font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.8px; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .match-table th { text-align:left; font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.8px; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; overflow:visible; }
+  .match-warn-wrap { display:flex; gap:4px; flex-wrap:wrap; justify-content:center; margin-top:4px; position:relative; white-space:normal; }
+  .match-warn-wrap[data-tooltip]:hover::after { content:attr(data-tooltip); position:absolute; top:calc(100% + 5px); left:50%; transform:translateX(-50%); background:var(--surface2); border:1px solid var(--border); color:var(--text); font-size:11px; font-family:inherit; font-weight:400; letter-spacing:normal; text-transform:none; padding:5px 10px; border-radius:6px; white-space:nowrap; z-index:1000; pointer-events:none; box-shadow:var(--shadow); }
   .match-table td { padding:4px 6px; border-bottom:1px solid var(--border); vertical-align:middle; }
   .match-table th:first-child, .match-table td:first-child { position:sticky; left:0; background:var(--bg); z-index:1; box-shadow:2px 0 6px rgba(0,0,0,.4); }
   .match-table th:last-child, .match-table td:last-child { position:sticky; right:0; background:var(--bg); z-index:1; box-shadow:-2px 0 6px rgba(0,0,0,.4); }

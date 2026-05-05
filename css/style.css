@@ -626,3 +626,4 @@ a:focus-visible {
 .match-warn-badge { font-size:10px; padding:1px 6px; border-radius:4px; font-weight:600; white-space:nowrap; }
 .match-warn-blocked { background:rgba(239,68,68,.15); color:#f87171; }
 .match-warn-eta { background:rgba(251,146,60,.15); color:#fb923c; }
+.match-warn-credit { background:rgba(234,179,8,.15); color:#ca8a04; }
