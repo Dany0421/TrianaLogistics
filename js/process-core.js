@@ -69,7 +69,7 @@ async function loadAll() {
     [process, bomVersions, suppliers] = await Promise.all([
       API.getProcess(processId),
       API.getBomVersions(processId),
-      API.getSuppliers(processId),
+      hasRole('commercial') ? Promise.resolve([]) : API.getSuppliers(processId),
     ]);
     renderHeader();
     loadDurationEstimate();

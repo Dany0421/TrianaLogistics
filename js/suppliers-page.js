@@ -45,8 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('load', async () => {
-  if (hasRole('commercial')) { window.location.href = 'dashboard.html'; return; }
   await requireAuth('index.html');
+  if (hasRole('commercial')) { window.location.href = 'dashboard.html'; return; }
   mountSidebar(document.getElementById('appSidebar'));
   document.getElementById('addBtn').style.display = hasRole('admin') || hasRole('procurement') ? '' : 'none';
   await loadSuppliers();

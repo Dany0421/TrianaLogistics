@@ -99,9 +99,11 @@ function mountSidebar(el) {
   nav.className = 'sidebar-nav';
   const navItems = [
     { label: 'Dashboard',    icon: 'layout-dashboard', href: 'dashboard.html',    match: ['dashboard', ''] },
-    { label: 'Fornecedores', icon: 'users',              href: 'suppliers.html',    match: ['suppliers', 'supplier-detail'] },
-    { label: 'Preços',       icon: 'search',            href: 'prices.html',       match: ['prices'] },
   ];
+  if (!hasRole('commercial')) {
+    navItems.push({ label: 'Fornecedores', icon: 'users',   href: 'suppliers.html', match: ['suppliers', 'supplier-detail'] });
+    navItems.push({ label: 'Preços',       icon: 'search',  href: 'prices.html',    match: ['prices'] });
+  }
   if (hasRole('admin')) navItems.push({ label: 'Admin', icon: 'settings', href: 'admin.html', match: ['admin'] });
 
   const currentPage = window.location.pathname.split('/').pop().replace('.html', '') || '';
