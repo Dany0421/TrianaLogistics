@@ -1499,8 +1499,11 @@ async function openHistoricalPriceModal(bi) {
       const tdDesc = tr.insertCell(); tdDesc.style.cssText = 'padding:5px 6px;max-width:200px;word-break:break-word';
       tdDesc.textContent = row.raw_description || '—';
 
+      const rowCurrency = row.currency || 'MZN';
+      const rowCambio = (rowCurrency !== 'MZN') ? (row.suppliers?.cambio || 1) : 1;
+
       const tdBase = tr.insertCell(); tdBase.style.cssText = "padding:5px 6px;white-space:nowrap;font-family:'IBM Plex Mono',monospace";
-      tdBase.textContent = fmtPrice(basePrice);
+      tdBase.textContent = fmtPrice(basePrice) + ' ' + rowCurrency;
 
       const tdMkp = tr.insertCell(); tdMkp.style.cssText = 'padding:5px 6px';
       const rowMkpInput = document.createElement('input');
@@ -1511,7 +1514,8 @@ async function openHistoricalPriceModal(bi) {
 
       const tdFinal = tr.insertCell(); tdFinal.style.cssText = "padding:5px 6px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;font-weight:600;color:#f59e0b";
       const finalPriceDiv = document.createElement('div');
-      const calcFinal = () => basePrice * (1 + (parseFloat(rowMkpInput.value) || 0) / 100);
+      // Final in MZN: base × cambio × (1 + markup%)
+      const calcFinal = () => basePrice * rowCambio * (1 + (parseFloat(rowMkpInput.value) || 0) / 100);
       finalPriceDiv.textContent = fmtPrice(calcFinal()) + ' MZN';
       tdFinal.appendChild(finalPriceDiv);
       rowMkpInput.addEventListener('input', () => { finalPriceDiv.textContent = fmtPrice(calcFinal()) + ' MZN'; });
@@ -1530,18 +1534,20 @@ async function openHistoricalPriceModal(bi) {
       usarBtn.addEventListener('click', async () => {
         usarBtn.disabled = true; usarBtn.textContent = '…';
         try {
-          const finalPrice = calcFinal();
           _histMarkupGlobal = parseFloat(rowMkpInput.value) || 0;
+          const markup = parseFloat(rowMkpInput.value) || 0;
+          // Store price in original currency (markup applied), matching tab converts via cambio
+          const priceToStore = basePrice * (1 + markup / 100);
           const rawHistDesc = row.raw_description || '';
           let targetSuppId = currentProcessSupp?.id ?? null;
           if (!targetSuppId) {
             if (!await _showConfirmModal('Adicionar fornecedor?', (row.suppliers?.name || 'Este fornecedor') + ' não está neste processo. Adicionar?', 'Adicionar')) {
               usarBtn.disabled = false; usarBtn.textContent = 'Usar'; return;
             }
-            const newSupp = await API.createSupplier({ process_id: processId, name: row.suppliers?.name, status: 'Historical price' });
+            const newSupp = await API.createSupplier({ process_id: processId, name: row.suppliers?.name, status: 'Historical price', cambio: rowCambio > 1 ? rowCambio : undefined });
             targetSuppId = newSupp.id;
           }
-          await API.createHistoricalMatch(processId, bi.id, targetSuppId, rawHistDesc, finalPrice);
+          await API.createHistoricalMatch(processId, bi.id, targetSuppId, rawHistDesc, priceToStore, rowCurrency);
           closeModal();
           await loadMatchData(); renderMatchingTab();
           showToast('Preço histórico aplicado.');
