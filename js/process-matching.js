@@ -203,6 +203,14 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     renderMatchingTab();
   });
 
+  const filterMatchedBtn = document.createElement('button');
+  filterMatchedBtn.className = 'btn btn-sm' + (matchingFilter === 'matched' ? ' btn-primary' : ' btn-ghost');
+  filterMatchedBtn.textContent = 'Com match';
+  filterMatchedBtn.addEventListener('click', () => {
+    matchingFilter = matchingFilter === 'matched' ? 'all' : 'matched';
+    renderMatchingTab();
+  });
+
   const searchWrap = document.createElement('div');
   searchWrap.style.cssText = 'margin-left:auto;display:flex;align-items:center;gap:6px';
   const searchInput = document.createElement('input');
@@ -220,6 +228,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   searchWrap.appendChild(searchInput);
 
   controlsRow.appendChild(filterBtn);
+  controlsRow.appendChild(filterMatchedBtn);
   controlsRow.appendChild(searchWrap);
   el.appendChild(controlsRow);
 
@@ -227,6 +236,8 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   let visibleItems = equipItems;
   if (matchingFilter === 'unmatched') {
     visibleItems = equipItems.filter(bi => !matchLookup[bi.id] || Object.keys(matchLookup[bi.id]).length === 0);
+  } else if (matchingFilter === 'matched') {
+    visibleItems = equipItems.filter(bi => matchLookup[bi.id] && Object.keys(matchLookup[bi.id]).length > 0);
   }
   if (matchingSearch.trim()) {
     const q = matchingSearch.trim().toLowerCase();
@@ -1063,8 +1074,10 @@ async function addExtraLine(itemMatchId, quotationItemId, qi) {
 async function removeExtraLine(extraItemId, itemMatchId) {
   try {
     matchExtraItems = matchExtraItems.filter(e => e.id !== extraItemId);
+    const _preScroll = _captureMatchingScroll(document.getElementById('matchingContent'));
     closeModal();
     renderMatchingTab();
+    requestAnimationFrame(() => requestAnimationFrame(() => _restoreMatchingScroll(_preScroll)));
     await API.removeMatchExtraItem(extraItemId);
     showToast('Linha removida.');
   } catch(e) {
@@ -1124,8 +1137,10 @@ async function unlinkItem(bomItemId, supplierId, matchId) {
     matches = matches.filter(m => m.id !== matchId);
     if (wasSelected) selectedOffers = selectedOffers.filter(o => !(o.bom_item_id === bomItemId && o.supplier_id === supplierId));
     if (quotItemId) rejectedAutoMatch.push({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId });
+    const _preScroll = _captureMatchingScroll(document.getElementById('matchingContent'));
     closeModal();
     renderMatchingTab();
+    requestAnimationFrame(() => requestAnimationFrame(() => _restoreMatchingScroll(_preScroll)));
     // Persist
     await API.deleteMatch(matchId);
     if (wasSelected) await API.deleteSelectedOffer(processId, bomItemId);

@@ -169,8 +169,29 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
   }
 }
 
+function _askDescSource() {
+  return new Promise(resolve => {
+    const el = document.createElement('div');
+    const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = 'Descrição no Excel'; el.appendChild(title);
+    const sub = document.createElement('div'); sub.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:20px'; sub.textContent = 'Qual descrição usar para os itens?'; el.appendChild(sub);
+    const actions = document.createElement('div'); actions.className = 'modal-actions';
+    const btnQ = document.createElement('button'); btnQ.className = 'btn btn-primary'; btnQ.textContent = 'Cotação (default)';
+    const btnB = document.createElement('button'); btnB.className = 'btn btn-ghost'; btnB.textContent = 'BOM';
+    const btnC = document.createElement('button'); btnC.className = 'btn btn-ghost'; btnC.textContent = 'Cancelar';
+    btnQ.addEventListener('click', () => { closeModal(); resolve('quotation'); });
+    btnB.addEventListener('click', () => { closeModal(); resolve('bom'); });
+    btnC.addEventListener('click', () => { closeModal(); resolve(null); });
+    actions.appendChild(btnB); actions.appendChild(btnQ); actions.appendChild(btnC);
+    el.appendChild(actions);
+    showModal(el);
+  });
+}
+
 async function generateExcel() {
   if (hasRole('commercial')) { showToast('Sem permissão para gerar Excel.', true); return; }
+
+  const descSource = await _askDescSource();
+  if (descSource === null) return;
 
   // Build selected offer lookup
   const selLookup = {};
@@ -218,7 +239,7 @@ async function generateExcel() {
 
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
     const indexInSupplier = supplierCounters[suppId]++;
-    const modelDesc = bi.custom_description || qi.raw_description || bi.description;
+    const modelDesc = bi.custom_description || (descSource === 'bom' ? bi.description : (qi.raw_description || bi.description));
     supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(qi.quantity || bi.quantity), price: String(qi.price) });
     allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: qi.quantity || bi.quantity, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }
