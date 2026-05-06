@@ -47,6 +47,17 @@
   .empty-msg { color:var(--muted); font-size:13px; padding:16px 0; }
   .section-wrap { margin-bottom:32px; }
   .mono-sm { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); }
+  .contacts-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-bottom:10px; }
+  .contact-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px 16px; display:flex; flex-direction:column; gap:4px; position:relative; }
+  .contact-card:hover { border-color:rgba(37,99,235,.35); }
+  .contact-name { font-size:13px; font-weight:600; color:var(--text); }
+  .contact-phone { font-family:'DM Mono',monospace; font-size:12px; color:var(--accent); cursor:pointer; width:fit-content; }
+  .contact-phone:hover { text-decoration:underline; }
+  .contact-note { font-size:11px; color:var(--muted); font-style:italic; margin-top:2px; }
+  .contact-actions { position:absolute; top:10px; right:10px; display:flex; gap:4px; opacity:0; transition:.15s; }
+  .contact-card:hover .contact-actions { opacity:1; }
+  .contact-btn { background:none; border:none; cursor:pointer; color:var(--muted); padding:2px 4px; border-radius:3px; line-height:1; }
+  .contact-btn:hover { color:var(--text); background:rgba(255,255,255,.06); }
 </style>
 </head>
 <body>

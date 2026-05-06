@@ -33,8 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('load',async()=>{
-  if(hasRole('commercial')){window.location.href='dashboard.html';return;}
   await requireAuth('index.html');
+  if(hasRole('commercial')){window.location.href='dashboard.html';return;}
   mountSidebar(document.getElementById('appSidebar'));
   const params=new URLSearchParams(location.search);
   const name=params.get('name');
@@ -53,17 +53,18 @@ async function loadDetail(name){
   const gs=globalList.find(g=>g.name.trim().toLowerCase()===name.trim().toLowerCase());
   const supplierIds=processHistory.map(s=>s.id);
   const processIds=processHistory.map(s=>s.process_id);
-  const[quotItems,bomCatMap]=await Promise.all([
+  const[quotItems,bomCatMap,contacts]=await Promise.all([
     API.getSupplierQuotationHistory(supplierIds),
     API.getBomCategoriesByProcessIds(processIds),
+    gs ? API.getSupplierContacts(gs.id) : Promise.resolve([]),
   ]);
   const qCountById={};
   quotItems.forEach(qi=>{qCountById[qi.supplier_id]=(qCountById[qi.supplier_id]||0)+1;});
   const isForeign=processHistory.some(s=>s.is_foreign);
-  renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isForeign);
+  renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isForeign,contacts);
 }
 
-function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isForeign){
+function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isForeign,contacts){
   const main=document.getElementById('mainContent');
   while(main.firstChild)main.removeChild(main.firstChild);
 
@@ -122,6 +123,9 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
     }
     main.appendChild(finSec);
   }
+
+  // ── Contacts ──
+  if(gs) main.appendChild(_buildContactsSection(gs, contacts));
 
   // ── Stats ──
   const statsEl=document.createElement('div');statsEl.className='stats-strip';
@@ -320,6 +324,149 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
     procSec.appendChild(tbl);
   }
   main.appendChild(procSec);
+}
+
+function _buildContactsSection(gs, contacts) {
+  const sec = document.createElement('div'); sec.className = 'section-wrap';
+
+  const headerRow = document.createElement('div');
+  headerRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:8px';
+  const title = document.createElement('div'); title.className = 'section-title';
+  title.style.cssText = 'margin-bottom:0;border-bottom:none;padding-bottom:0';
+  title.textContent = 'Contactos';
+  headerRow.appendChild(title);
+
+  const addBtn = document.createElement('button'); addBtn.type = 'button';
+  addBtn.className = 'btn btn-ghost btn-sm';
+  addBtn.style.cssText = 'display:flex;align-items:center;gap:5px;font-size:12px';
+  const addIco = document.createElement('i'); addIco.setAttribute('data-lucide', 'plus');
+  addBtn.appendChild(addIco); addBtn.appendChild(document.createTextNode(' Adicionar'));
+  headerRow.appendChild(addBtn);
+  sec.appendChild(headerRow);
+
+  const grid = document.createElement('div'); grid.className = 'contacts-grid';
+  sec.appendChild(grid);
+
+  function renderCards(list) {
+    while (grid.firstChild) grid.removeChild(grid.firstChild);
+    if (!list.length) {
+      const em = document.createElement('div'); em.className = 'empty-msg';
+      em.textContent = 'Sem contactos registados.'; grid.appendChild(em); return;
+    }
+    list.forEach(c => {
+      const card = document.createElement('div'); card.className = 'contact-card';
+
+      const nameEl = document.createElement('div'); nameEl.className = 'contact-name'; nameEl.textContent = c.name;
+      const phoneEl = document.createElement('div'); phoneEl.className = 'contact-phone'; phoneEl.textContent = c.phone;
+      phoneEl.title = 'Copiar número';
+      phoneEl.addEventListener('click', () => {
+        navigator.clipboard.writeText(c.phone).then(() => showToast('Número copiado')).catch(() => {});
+      });
+
+      card.appendChild(nameEl); card.appendChild(phoneEl);
+      if (c.notes) {
+        const noteEl = document.createElement('div'); noteEl.className = 'contact-note'; noteEl.textContent = c.notes;
+        card.appendChild(noteEl);
+      }
+
+      const actions = document.createElement('div'); actions.className = 'contact-actions';
+      const editBtn = document.createElement('button'); editBtn.type = 'button'; editBtn.className = 'contact-btn';
+      editBtn.title = 'Editar'; const editIco = document.createElement('i'); editIco.setAttribute('data-lucide', 'pencil');
+      editBtn.appendChild(editIco);
+      editBtn.addEventListener('click', () => _openContactModal(gs.id, c, list, renderCards));
+
+      const delBtn = document.createElement('button'); delBtn.type = 'button'; delBtn.className = 'contact-btn';
+      delBtn.title = 'Apagar'; const delIco = document.createElement('i'); delIco.setAttribute('data-lucide', 'trash-2');
+      delBtn.appendChild(delIco);
+      delBtn.addEventListener('click', async () => {
+        if (!confirm('Apagar contacto "' + c.name + '"?')) return;
+        try {
+          await API.deleteSupplierContact(c.id);
+          const idx = list.findIndex(x => x.id === c.id);
+          if (idx !== -1) list.splice(idx, 1);
+          renderCards(list);
+        } catch(e) { showToast(e.message, true); }
+      });
+
+      actions.appendChild(editBtn); actions.appendChild(delBtn);
+      card.appendChild(actions);
+      grid.appendChild(card);
+    });
+    if (window.lucide) lucide.createIcons();
+  }
+
+  addBtn.addEventListener('click', () => _openContactModal(gs.id, null, contacts, renderCards));
+  renderCards(contacts);
+  if (window.lucide) setTimeout(() => lucide.createIcons(), 0);
+  return sec;
+}
+
+function _openContactModal(globalSupplierId, existing, list, onSave) {
+  const isEdit = !!existing;
+  const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000';
+
+  const modal = document.createElement('div'); modal.className = 'modal-box';
+  modal.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;min-width:320px;max-width:400px;width:100%';
+
+  const titleEl = document.createElement('div');
+  titleEl.style.cssText = 'font-size:15px;font-weight:600;color:var(--text);margin-bottom:20px';
+  titleEl.textContent = isEdit ? 'Editar Contacto' : 'Novo Contacto';
+  modal.appendChild(titleEl);
+
+  function mkField(labelText, inputEl) {
+    const wrap = document.createElement('div'); wrap.style.marginBottom = '14px';
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px';
+    lbl.textContent = labelText;
+    const inputStyle = 'width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box';
+    inputEl.style.cssText = inputStyle;
+    wrap.appendChild(lbl); wrap.appendChild(inputEl);
+    return wrap;
+  }
+
+  const nameInp = document.createElement('input'); nameInp.type = 'text'; nameInp.placeholder = 'Nome completo';
+  if (existing) nameInp.value = existing.name;
+  modal.appendChild(mkField('Nome *', nameInp));
+
+  const phoneInp = document.createElement('input'); phoneInp.type = 'tel'; phoneInp.placeholder = '+258 84 000 0000';
+  if (existing) phoneInp.value = existing.phone;
+  modal.appendChild(mkField('Telefone *', phoneInp));
+
+  const notesInp = document.createElement('textarea'); notesInp.rows = 2; notesInp.placeholder = 'Nota (opcional)';
+  notesInp.style.resize = 'vertical';
+  if (existing) notesInp.value = existing.notes || '';
+  modal.appendChild(mkField('Nota', notesInp));
+
+  const actions = document.createElement('div'); actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:4px';
+  const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-ghost btn-sm'; cancelBtn.textContent = 'Cancelar';
+  cancelBtn.addEventListener('click', () => document.body.removeChild(overlay));
+  const saveBtn = document.createElement('button'); saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Guardar';
+  saveBtn.addEventListener('click', async () => {
+    const name = nameInp.value.trim();
+    const phone = phoneInp.value.trim();
+    if (!name || !phone) { showToast('Nome e telefone são obrigatórios', true); return; }
+    saveBtn.disabled = true; saveBtn.textContent = '...';
+    try {
+      if (isEdit) {
+        await API.updateSupplierContact(existing.id, name, phone, notesInp.value.trim());
+        Object.assign(existing, { name, phone, notes: notesInp.value.trim() || null });
+      } else {
+        const created = await API.createSupplierContact(globalSupplierId, name, phone, notesInp.value.trim());
+        list.push(created);
+      }
+      onSave(list);
+      document.body.removeChild(overlay);
+      showToast(isEdit ? 'Contacto atualizado' : 'Contacto adicionado');
+    } catch(e) { saveBtn.disabled = false; saveBtn.textContent = 'Guardar'; showToast(e.message, true); }
+  });
+  actions.appendChild(cancelBtn); actions.appendChild(saveBtn);
+  modal.appendChild(actions);
+
+  overlay.appendChild(modal);
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+  document.body.appendChild(overlay);
+  nameInp.focus();
 }
 
 function _openFinanceModal(gs, finSec) {

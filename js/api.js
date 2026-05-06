@@ -1029,4 +1029,40 @@ const API = {
       .ilike('name', name.trim());
     if (error) throw _sanitizeError(error);
   },
+
+  async getSupplierContacts(globalSupplierId) {
+    const { data, error } = await supabase
+      .from('supplier_contacts')
+      .select('*')
+      .eq('global_supplier_id', globalSupplierId)
+      .order('created_at', { ascending: true });
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async createSupplierContact(globalSupplierId, name, phone, notes) {
+    const { data, error } = await supabase
+      .from('supplier_contacts')
+      .insert({ global_supplier_id: globalSupplierId, name, phone, notes: notes || null })
+      .select()
+      .single();
+    if (error) throw _sanitizeError(error);
+    return data;
+  },
+
+  async updateSupplierContact(id, name, phone, notes) {
+    const { error } = await supabase
+      .from('supplier_contacts')
+      .update({ name, phone, notes: notes || null })
+      .eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
+  async deleteSupplierContact(id) {
+    const { error } = await supabase
+      .from('supplier_contacts')
+      .delete()
+      .eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
 };
