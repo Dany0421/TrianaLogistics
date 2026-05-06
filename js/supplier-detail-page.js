@@ -4,6 +4,26 @@ function formatResponseTime(h){if(!h||h<=0)return '—';return h<24?Math.round(h
 function fmtDate(d){if(!d)return '—';return new Date(d).toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'});}
 function fmtPrice(p,cur){if(!p&&p!==0)return '—';return Number(p).toLocaleString('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+(cur||'MZN');}
 
+function _confirmModal(message) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)';
+    const box = document.createElement('div'); box.className = 'modal-box';
+    box.style.cssText = 'max-width:360px;padding:24px';
+    const msg = document.createElement('div'); msg.style.cssText = 'font-size:14px;color:var(--text);margin-bottom:20px'; msg.textContent = message;
+    const actions = document.createElement('div'); actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+    const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.className = 'btn btn-ghost btn-sm'; cancelBtn.textContent = 'Cancelar';
+    const confirmBtn = document.createElement('button'); confirmBtn.type = 'button'; confirmBtn.className = 'btn btn-danger btn-sm'; confirmBtn.textContent = 'Apagar';
+    const dismiss = val => { document.body.removeChild(overlay); resolve(val); };
+    cancelBtn.addEventListener('click', () => dismiss(false));
+    confirmBtn.addEventListener('click', () => dismiss(true));
+    actions.appendChild(cancelBtn); actions.appendChild(confirmBtn);
+    box.appendChild(msg); box.appendChild(actions);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  });
+}
+
 function computeTrend(items){
   const now=new Date();
   const thisStart=new Date(now.getFullYear(),now.getMonth(),1);
@@ -379,7 +399,8 @@ function _buildContactsSection(gs, contacts) {
       delBtn.title = 'Apagar'; const delIco = document.createElement('i'); delIco.setAttribute('data-lucide', 'trash-2');
       delBtn.appendChild(delIco);
       delBtn.addEventListener('click', async () => {
-        if (!confirm('Apagar contacto "' + c.name + '"?')) return;
+        const ok = await _confirmModal('Apagar contacto "' + c.name + '"?');
+        if (!ok) return;
         try {
           await API.deleteSupplierContact(c.id);
           const idx = list.findIndex(x => x.id === c.id);
