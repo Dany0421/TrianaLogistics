@@ -20,7 +20,7 @@ function fullDate(iso) {
 // ── Badge ──
 function badgeClass(table) {
   if (table === 'processes')                               return 'log-badge-process';
-  if (table === 'suppliers' || table === 'quotation_items' || table === 'global_suppliers') return 'log-badge-supplier';
+  if (table === 'suppliers' || table === 'quotation_items' || table === 'global_suppliers' || table === 'supplier_contacts') return 'log-badge-supplier';
   if (table === 'bom_versions' || table === 'bom_items')   return 'log-badge-bom';
   if (table === 'item_matches' || table === 'selected_offers') return 'log-badge-offer';
   if (table === 'profiles')                                return 'log-badge-profile';
@@ -37,7 +37,8 @@ function badgeLabel(table) {
     bom_items:       'BOM Item',
     item_matches:    'Match',
     selected_offers: 'Oferta',
-    profiles:        'Perfil',
+    profiles:           'Perfil',
+    supplier_contacts:  'Contacto',
   };
   return map[table] || table;
 }
@@ -171,6 +172,16 @@ function describeEvent(log) {
       ]);
       if (diffs.length) return `Atualizou fornecedor <strong>${esc(new_?.name || old_?.name)}</strong>: ${diffs.join('; ')}`;
       return `Atualizou fornecedor <strong>${esc(new_?.name || old_?.name)}</strong>`;
+    }
+  }
+
+  if (t === 'supplier_contacts') {
+    if (action === 'INSERT') return `Adicionou contacto <strong>${esc(d?.name)}</strong> (${esc(d?.phone)}) ao fornecedor`;
+    if (action === 'DELETE') return `Removeu contacto <strong>${esc(d?.name)}</strong>`;
+    if (action === 'UPDATE') {
+      const diffs = diffFields(old_, new_, [['name','Nome'],['phone','Telefone'],['notes','Nota']]);
+      if (diffs.length) return `Atualizou contacto <strong>${esc(new_?.name || old_?.name)}</strong>: ${diffs.join('; ')}`;
+      return `Atualizou contacto <strong>${esc(new_?.name || old_?.name)}</strong>`;
     }
   }
 
