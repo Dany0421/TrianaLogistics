@@ -1010,8 +1010,7 @@ const API = {
       .not('supplier_id', 'is', null)
       .not('bom_item_id', 'is', null)
       .not('quotation_items.raw_sku', 'is', null)
-      .order('updated_at', { ascending: false })
-      .limit(3000);
+      .order('updated_at', { ascending: false });
     if (error) throw _sanitizeError(error);
     return (data || [])
       .filter(m => m.quotation_items?.raw_sku)
