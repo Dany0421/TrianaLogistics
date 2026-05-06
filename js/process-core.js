@@ -381,14 +381,24 @@ async function openEditModal() {
 
   const procRow = document.createElement('div'); procRow.className = 'form-row'; procRow.style.marginBottom = '12px';
   const procLbl = document.createElement('label'); procLbl.textContent = 'Procurement responsável';
-  const procInp = document.createElement('input'); procInp.type = 'text'; procInp.id = 'ep_procurement';
-  procInp.placeholder = 'Nome do responsável'; procInp.style.width = '100%';
-  procInp.value = p.procurement_name || p.assignee?.name || '';
-  procRow.appendChild(procLbl); procRow.appendChild(procInp);
+  const procSel = document.createElement('select'); procSel.id = 'ep_procurement'; procSel.style.width = '100%';
+  const noneOpt = document.createElement('option'); noneOpt.value = ''; noneOpt.textContent = '— Nenhum —';
+  procSel.appendChild(noneOpt);
+  procRow.appendChild(procLbl); procRow.appendChild(procSel);
   el.querySelector('.modal-actions').before(procRow);
 
   showModal(el);
   renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
+
+  try {
+    const users = await API.getAssignableUsers();
+    users.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id; opt.textContent = u.name;
+      if (u.id === (p.assigned_to || '')) opt.selected = true;
+      procSel.appendChild(opt);
+    });
+  } catch(_) {}
 }
 
 async function saveEditProcess() {
@@ -400,8 +410,8 @@ async function saveEditProcess() {
     notes:           document.getElementById('ep_notes').value.trim(),
     categories:      pendingProcessCategories,
     commercial_name: document.getElementById('ep_commercial')?.value.trim() || null,
-    procurement_name: document.getElementById('ep_procurement')?.value.trim() || null,
-    assigned_to: null,
+    procurement_name: null,
+    assigned_to: document.getElementById('ep_procurement')?.value || null,
   };
   const epStatusVal = document.getElementById('ep_status').value;
   if (epStatusVal === '__custom__' || !STANDARD_STATUSES.includes(epStatusVal)) {
@@ -419,6 +429,9 @@ async function saveEditProcess() {
   if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (máx 5000 caracteres).', true); return; }
   try {
     process = await API.updateProcess(processId, fields);
+    const procSel = document.getElementById('ep_procurement');
+    const selOpt = procSel?.options[procSel?.selectedIndex];
+    process.assignee = (selOpt?.value) ? { id: selOpt.value, name: selOpt.textContent } : null;
     renderHeader();
     closeModal();
     loadDurationEstimate();
@@ -454,6 +467,27 @@ function showModalLg(el) {
   document.body.style.overflow = 'hidden';
 }
 function closeModal() { document.getElementById('modalRoot').replaceChildren(); document.body.style.overflow = ''; }
+
+function _showConfirmModal(title, message, confirmLabel = 'Confirmar') {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)';
+    const box = document.createElement('div');
+    box.className = 'modal-box';
+    box.style.maxWidth = '380px';
+    const t = document.createElement('div'); t.className = 'modal-title'; t.textContent = title; box.appendChild(t);
+    const m = document.createElement('div'); m.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:20px'; m.textContent = message; box.appendChild(m);
+    const acts = document.createElement('div'); acts.className = 'modal-actions';
+    const btnOk = document.createElement('button'); btnOk.className = 'btn btn-primary'; btnOk.textContent = confirmLabel;
+    const btnNo = document.createElement('button'); btnNo.className = 'btn btn-ghost'; btnNo.textContent = 'Cancelar';
+    const dismiss = (val) => { document.body.removeChild(overlay); resolve(val); };
+    btnOk.addEventListener('click', () => dismiss(true));
+    btnNo.addEventListener('click', () => dismiss(false));
+    acts.appendChild(btnNo); acts.appendChild(btnOk); box.appendChild(acts);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  });
+}
 
 // ── Helpers ──
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }

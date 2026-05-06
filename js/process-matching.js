@@ -1535,7 +1535,7 @@ async function openHistoricalPriceModal(bi) {
           const rawHistDesc = row.raw_description || '';
           let targetSuppId = currentProcessSupp?.id ?? null;
           if (!targetSuppId) {
-            if (!confirm('Adicionar ' + (row.suppliers?.name || 'fornecedor') + ' ao processo?')) {
+            if (!await _showConfirmModal('Adicionar fornecedor?', (row.suppliers?.name || 'Este fornecedor') + ' não está neste processo. Adicionar?', 'Adicionar')) {
               usarBtn.disabled = false; usarBtn.textContent = 'Usar'; return;
             }
             const newSupp = await API.createSupplier({ process_id: processId, name: row.suppliers?.name, status: 'Historical price' });
