@@ -1546,6 +1546,7 @@ async function openHistoricalPriceModal(bi) {
             }
             const newSupp = await API.createSupplier({ process_id: processId, name: row.suppliers?.name, status: 'Historical price', cambio: rowCambio > 1 ? rowCambio : undefined });
             targetSuppId = newSupp.id;
+            suppliers = await API.getSuppliers(processId);
           }
           await API.createHistoricalMatch(processId, bi.id, targetSuppId, rawHistDesc, priceToStore, rowCurrency);
           closeModal();
