@@ -252,6 +252,20 @@ function toggleSupplier(i) {
 }
 
 // ── RFQ ──
+function _rfqBomSort(items) {
+  // Category order = first appearance in BOM (by sort_order)
+  const catFirst = {};
+  bomItems.forEach(bi => {
+    if (bi.category && catFirst[bi.category] === undefined) catFirst[bi.category] = bi.sort_order ?? 0;
+  });
+  return [...items].sort((a, b) => {
+    const cA = a.bi.category ? (catFirst[a.bi.category] ?? 999999) : -1;
+    const cB = b.bi.category ? (catFirst[b.bi.category] ?? 999999) : -1;
+    if (cA !== cB) return cA - cB;
+    return (a.bi.sort_order ?? 0) - (b.bi.sort_order ?? 0);
+  });
+}
+
 function openRFQModal(supplierIdx) {
   const s = suppliers[supplierIdx];
 
@@ -261,6 +275,8 @@ function openRFQModal(supplierIdx) {
     const hasPrice = matches.some(m => m.bom_item_id === bi.id);
     (hasPrice ? comPreco : semPreco).push({ bi, idx });
   });
+  _rfqBomSort(semPreco).forEach((v, i) => semPreco[i] = v);
+  _rfqBomSort(comPreco).forEach((v, i) => comPreco[i] = v);
 
   const el = document.createElement('div');
 
@@ -508,9 +524,17 @@ async function sendRFQ(supplierIdx) {
       showToast('Este fornecedor não tem email principal.', true);
       return;
     }
+    const catFirst = {};
+    bomItems.forEach(bi => { if (bi.category && catFirst[bi.category] === undefined) catFirst[bi.category] = bi.sort_order ?? 0; });
     const selected = [...document.querySelectorAll('.rfq-item-cb:checked')]
       .map(cb => bomItems[parseInt(cb.value)])
-      .filter(Boolean);
+      .filter(Boolean)
+      .sort((a, b) => {
+        const cA = a.category ? (catFirst[a.category] ?? 999999) : -1;
+        const cB = b.category ? (catFirst[b.category] ?? 999999) : -1;
+        if (cA !== cB) return cA - cB;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
     if (!selected.length) { showToast('Seleciona pelo menos um item.', true); return; }
 
     const lang = rfqLang === 'en' ? 'en' : 'pt';
