@@ -1,6 +1,9 @@
 // ── Excel Generation (ported from planilha-generator) ──
 const MB={top:{style:'medium'},left:{style:'medium'},bottom:{style:'medium'},right:{style:'medium'}};
 const TB={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+// Outside-only borders for Preco de Venda (left col) and Preco Total (right col)
+const VCB={top:{style:'medium'},left:{style:'medium'},bottom:{style:'medium'},right:{style:'thin'}};
+const TCB={top:{style:'medium'},left:{style:'thin'},bottom:{style:'medium'},right:{style:'medium'}};
 const OF={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFC000'}};
 const YF={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};
 function sc2(cell,opts={}){const{value,font,fill,border,alignment,numFmt}=opts;if(value!==undefined)cell.value=value;if(font)cell.font=font;if(fill)cell.fill=fill;if(border)cell.border=border;if(alignment)cell.alignment=alignment;if(numFmt)cell.numFmt=numFmt;}
@@ -149,6 +152,8 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
       row++;
     }
     for(let c=1;c<=tc;c++)ws.getCell(row,c).border=TB;
+    ws.getCell(row,vc).border=VCB;
+    ws.getCell(row,tc).border=TCB;
 
     const modelStr = String(item.model || '');
     const modelLines = __wrappedLineCount(modelStr, __colWidthToPx(wMainModel) - 12);
@@ -163,7 +168,7 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
       sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
       sc2(ws.getCell(row,3),{value:item.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
       sc2(ws.getCell(row,4+si),{value:{formula:`${ss}!R${ds+item.indexInSupplier}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      sc2(ws.getCell(row,ddpCol),{value:{formula:`MAX(D${row}:${col2l(suppEndCol)}${row})`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+      sc2(ws.getCell(row,ddpCol),{value:{formula:`${col2l(4+si)}${row}*1`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
     } else {
       sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
       sc2(ws.getCell(row,3),{value:item.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
@@ -175,9 +180,10 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
     row++;
   }
 
-  // Two footer rows — bold border on col 1 only
+  // Two footer rows — outside border on Preco de Venda and Preco Total only
   [row, row+1].forEach(r => {
-    sc2(ws.getCell(r,1),{border:MB});
+    sc2(ws.getCell(r,vc),{border:VCB});
+    sc2(ws.getCell(r,tc),{border:TCB});
   });
 }
 

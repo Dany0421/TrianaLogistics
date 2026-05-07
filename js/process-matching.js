@@ -1418,15 +1418,75 @@ async function runAutoMatch() {
     if (actualCount === 0) {
       showToast('Auto-match: 0 guardados (possível erro de permissões).', true);
     } else {
-      const msg = propagated > 0
-        ? `${actualCount} match(es) criado(s) — ${propagated} propagado(s) de itens repetidos.`
-        : `${actualCount} match(es) automático(s) criado(s).`;
-      showToast(msg);
+      showAutoMatchSummary(newMatches, actualCount, propagated);
     }
   } catch(e) {
     await loadMatchData(); renderMatchingTab();
     showToast('Erro: ' + e.message, true);
   }
+}
+
+function showAutoMatchSummary(newMatches, actualCount, propagated) {
+  const el = document.createElement('div');
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Auto-Match';
+  const title = document.createElement('div'); title.className = 'modal-title';
+  title.textContent = actualCount + ' match(es) criado(s)' + (propagated > 0 ? ' — ' + propagated + ' propagado(s)' : '');
+  el.appendChild(tag);
+  el.appendChild(title);
+
+  const list = document.createElement('div');
+  list.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;margin-bottom:20px';
+
+  newMatches.forEach(m => {
+    const bi = bomItems.find(b => b.id === m.bom_item_id);
+    const sup = suppliers.find(s => s.id === m.supplier_id);
+    const qi = (quotationMap[m.supplier_id] || []).find(q => q.id === m.quotation_item_id);
+    if (!bi || !sup || !qi) return;
+
+    const conf = Math.round((m.confidence || 0) * 100);
+    const confColor = conf >= 90 ? '#10b981' : conf >= 70 ? '#f59e0b' : '#f87171';
+
+    const row = document.createElement('div');
+    row.style.cssText = 'background:var(--surface-2,#1a2235);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5';
+
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px';
+    const bomDesc = document.createElement('span');
+    bomDesc.style.cssText = 'font-weight:600;color:var(--text)';
+    bomDesc.textContent = bi.custom_description || bi.description;
+    const confBadge = document.createElement('span');
+    confBadge.style.cssText = 'font-size:11px;font-weight:600;white-space:nowrap;margin-left:8px;color:' + confColor;
+    confBadge.textContent = conf + '%';
+    topRow.appendChild(bomDesc);
+    topRow.appendChild(confBadge);
+
+    const botRow = document.createElement('div');
+    botRow.style.cssText = 'color:var(--muted);font-size:11px';
+    const supName = document.createElement('span');
+    supName.style.cssText = 'color:#7c3aed;font-weight:500';
+    supName.textContent = sup.name;
+    const arrow = document.createElement('span');
+    arrow.style.cssText = 'margin:0 6px';
+    arrow.textContent = '→';
+    const qDesc = document.createElement('span');
+    qDesc.textContent = qi.raw_description;
+    botRow.appendChild(supName);
+    botRow.appendChild(arrow);
+    botRow.appendChild(qDesc);
+
+    row.appendChild(topRow);
+    row.appendChild(botRow);
+    list.appendChild(row);
+  });
+
+  el.appendChild(list);
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const closeBtn = document.createElement('button'); closeBtn.className = 'btn btn-primary'; closeBtn.textContent = 'Fechar';
+  closeBtn.addEventListener('click', closeModal);
+  actions.appendChild(closeBtn);
+  el.appendChild(actions);
+  showModal(el);
 }
 
 async function openHistoricalPriceModal(bi) {

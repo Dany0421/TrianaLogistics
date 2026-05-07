@@ -147,7 +147,13 @@
     </div>
     <div class="charts-grid" id="chartsSection" style="display:none">
       <div class="chart-card">
-        <div class="chart-title">Por Estado</div>
+        <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Por Estado</span>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;letter-spacing:.4px;font-weight:500;text-transform:uppercase">
+            <input type="checkbox" id="chartStatusHideClosed" style="accent-color:#2563eb;cursor:pointer">
+            Só ativos
+          </label>
+        </div>
         <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
       </div>
       <div class="chart-card">

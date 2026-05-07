@@ -189,23 +189,51 @@ async function loadProcesses() {
 // ── Charts ──
 let _charts = {};
 let chartsExpanded = false;
+let _lastChartProcs = [];
+let _hideClosedStatus = false;
 function toggleCharts() {
   chartsExpanded = !chartsExpanded;
   document.getElementById('chartsArrow').textContent = chartsExpanded ? '\u25bc' : '\u25b6';
   document.getElementById('chartsSection').style.display = chartsExpanded ? '' : 'none';
 }
+function _renderStatusChart() {
+  const allStatuses = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Closed','Cancelled'];
+  const allColors   = ['#2563eb','#f59e0b','#22d3ee','#10b981','#7c3aed','#f97316','#64748b','#f87171'];
+  const FINAL = new Set(['Closed','Cancelled']);
+  const filtered = _hideClosedStatus
+    ? allStatuses.map((s,i) => ({ s, c: allColors[i] })).filter(x => !FINAL.has(x.s))
+    : allStatuses.map((s,i) => ({ s, c: allColors[i] }));
+  const statuses = filtered.map(x => x.s);
+  const statusColors = filtered.map(x => x.c);
+  const statusCounts = statuses.map(s => _lastChartProcs.filter(p => p.status === s).length);
+  if (_charts.status) { _charts.status.destroy(); delete _charts.status; }
+  _charts.status = new Chart(document.getElementById('chartStatus'), {
+    type: 'doughnut',
+    data: { labels: statuses, datasets: [{ data: statusCounts, backgroundColor: statusColors, borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 }, padding: 10 } } },
+    },
+  });
+}
+
 function renderCharts(processes, topSuppliers) {
   if (typeof Chart === 'undefined') return;
   if (!processes.length && !topSuppliers.length) return;
+  _lastChartProcs = processes;
   document.getElementById('chartsToggleRow').style.display = 'flex';
 
   Chart.defaults.color = '#64748b';
   Chart.defaults.borderColor = '#1a2235';
   Chart.defaults.font.family = "'Figtree', sans-serif";
 
-  const statuses = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Closed','Cancelled'];
-  const statusColors = ['#2563eb','#f59e0b','#22d3ee','#10b981','#7c3aed','#f97316','#64748b','#f87171'];
-  const statusCounts = statuses.map(s => processes.filter(p => p.status === s).length);
+  const chkEl = document.getElementById('chartStatusHideClosed');
+  if (chkEl && !chkEl._bound) {
+    chkEl._bound = true;
+    chkEl.addEventListener('change', () => { _hideClosedStatus = chkEl.checked; _renderStatusChart(); });
+  }
+
+  _renderStatusChart();
 
   const priorities = ['Low','Medium','High','Urgent'];
   const priorityColors = ['#475569','#2563eb','#f59e0b','#f87171'];
@@ -252,16 +280,6 @@ function renderCharts(processes, topSuppliers) {
   );
 
   function destroyChart(id) { if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; } }
-
-  destroyChart('status');
-  _charts.status = new Chart(document.getElementById('chartStatus'), {
-    type: 'doughnut',
-    data: { labels: statuses, datasets: [{ data: statusCounts, backgroundColor: statusColors, borderWidth: 0, hoverOffset: 6 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false, cutout: '68%',
-      plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 }, padding: 10 } } },
-    },
-  });
 
   destroyChart('priority');
   _charts.priority = new Chart(document.getElementById('chartPriority'), {
