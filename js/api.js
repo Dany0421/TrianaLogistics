@@ -337,6 +337,11 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async setMatchExcludeHistory(matchId, value) {
+    const { error } = await supabase.from('item_matches').update({ exclude_from_history: value }).eq('id', matchId);
+    if (error) throw _sanitizeError(error);
+  },
+
   async getMatchExtraItems(matchIds) {
     if (!matchIds || !matchIds.length) return [];
     const BATCH = 80;
@@ -974,6 +979,7 @@ const API = {
       .not('supplier_id', 'is', null)
       .not('bom_item_id', 'is', null)
       .not('quotation_item_id', 'is', null)
+      .eq('exclude_from_history', false)
       .order('updated_at', { ascending: false })
       .limit(3000);
     if (error) throw _sanitizeError(error);
@@ -1010,6 +1016,7 @@ const API = {
       .not('supplier_id', 'is', null)
       .not('bom_item_id', 'is', null)
       .not('quotation_items.raw_sku', 'is', null)
+      .eq('exclude_from_history', false)
       .order('updated_at', { ascending: false });
     if (error) throw _sanitizeError(error);
     return (data || [])

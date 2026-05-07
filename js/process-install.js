@@ -185,7 +185,7 @@ function generateReport() {
   }
   const grandTotal = equipTotal + installTotal;
 
-  const fmt = function(n) { return Number(n).toLocaleString('pt-PT', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' MZN'; };
+  const fmt = function(n) { const [i,d] = Number(n||0).toFixed(2).split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g,' ')+'.'+d+' MZN'; };
   const fmtD = function(d) { return d ? new Date(d).toLocaleDateString('pt-PT') : '-'; };
 
   let html = '<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8">';

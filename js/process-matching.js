@@ -383,6 +383,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
           if (isSel) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px'; lbl.textContent = 'SELECIONADO'; cellDiv.appendChild(lbl); }
           else if (isLowest) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#4fc3f7;letter-spacing:1px'; lbl.textContent = 'MAIS BAIXO'; cellDiv.appendChild(lbl); }
           if (isHistorical) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#f59e0b;letter-spacing:1px'; lbl.textContent = 'HIST.'; cellDiv.appendChild(lbl); }
+          if (m.exclude_from_history) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--muted);letter-spacing:1px'; lbl.textContent = '∅ HIST.'; cellDiv.appendChild(lbl); }
           const inclItems = includedByLookup[bi.id + '_' + s.id] || [];
           for (const im of inclItems) {
             const inclBi = bomItems.find(b => b.id === im.bom_item_id);
@@ -910,11 +911,15 @@ function openMatchModal(bomItemId, supplierId) {
     el.appendChild(inclBanner);
   } else {
     const qLabel = document.createElement('div'); qLabel.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px"; qLabel.textContent = 'SELECIONA UM ITEM DA COTAÇÃO'; el.appendChild(qLabel);
+    const srchInp = document.createElement('input'); srchInp.type = 'text'; srchInp.placeholder = 'Filtrar…';
+    srchInp.style.cssText = 'width:100%;padding:5px 9px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface2);color:var(--text);margin-bottom:8px;box-sizing:border-box';
+    el.appendChild(srchInp);
     const listWrap = document.createElement('div'); listWrap.style.cssText = 'max-height:300px;overflow-y:auto;margin-bottom:16px';
     for (const qi of qItems) {
       const isLinked = currentMatch?.quotation_item_id === qi.id;
       const hasAnyMatch = matches.some(m => m.quotation_item_id === qi.id);
       const row = document.createElement('div'); row.className = 'match-pick-row' + (isLinked ? ' linked' : '');
+      row.dataset.search = ((qi.raw_description || '') + ' ' + (qi.raw_part_number || '')).toLowerCase();
       row.addEventListener('click', () => linkItem(bomItemId, supplierId, qi.id));
       const infoDiv = document.createElement('div'); infoDiv.style.cssText = 'flex:1;min-width:0';
       const desc = document.createElement('div'); desc.style.cssText = 'font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'; desc.textContent = qi.raw_description; infoDiv.appendChild(desc);
@@ -936,6 +941,10 @@ function openMatchModal(bomItemId, supplierId) {
       listWrap.appendChild(row);
     }
     el.appendChild(listWrap);
+    srchInp.addEventListener('input', () => {
+      const q = srchInp.value.toLowerCase();
+      listWrap.querySelectorAll('.match-pick-row').forEach(r => { r.style.display = r.dataset.search.includes(q) ? '' : 'none'; });
+    });
   }
 
   // Extra lines for this match
@@ -984,6 +993,22 @@ function openMatchModal(bomItemId, supplierId) {
         actions.appendChild(splitBtn);
       }
     }
+    if (currentMatch.match_type !== 'included_in') {
+      const histBtn = document.createElement('button'); histBtn.className = 'btn btn-ghost btn-sm';
+      if (currentMatch.exclude_from_history) histBtn.style.color = '#f59e0b';
+      lbtn(histBtn, 'clock', currentMatch.exclude_from_history ? 'Incluir no histórico' : 'Excluir do histórico');
+      histBtn.addEventListener('click', async () => {
+        const newVal = !currentMatch.exclude_from_history;
+        histBtn.disabled = true;
+        try {
+          await API.setMatchExcludeHistory(currentMatch.id, newVal);
+          const idx = matches.findIndex(m => m.id === currentMatch.id);
+          if (idx >= 0) matches[idx].exclude_from_history = newVal;
+          closeModal(); openMatchModal(bomItemId, supplierId);
+        } catch(e) { showToast('Erro: ' + e.message, true); histBtn.disabled = false; }
+      });
+      actions.appendChild(histBtn);
+    }
     const rmBtn = document.createElement('button'); rmBtn.className = 'btn btn-danger btn-sm'; rmBtn.textContent = 'Remover';
     rmBtn.addEventListener('click', () => unlinkItem(bomItemId, supplierId, currentMatch.id)); actions.appendChild(rmBtn);
   } else if (qItems.length) {
@@ -1006,14 +1031,21 @@ function openIncludedInModal(bomItemId, supplierId) {
 
   const selWrap = document.createElement('div'); selWrap.style.marginBottom = '16px';
   const selLbl = document.createElement('label'); selLbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);margin-bottom:4px'; selLbl.textContent = 'Coberto por';
-  const sel = document.createElement('select'); sel.style.width = '100%';
   const hasSuppMatch = id => matches.some(m => m.bom_item_id === id && m.supplier_id === supplierId && m.match_type !== 'included_in');
-  bomItems.filter(b => !b.is_service && b.id !== bomItemId && hasSuppMatch(b.id)).forEach(b => {
-    const o = document.createElement('option'); o.value = b.id;
-    o.textContent = (b.description || '—') + (b.part_number ? '  [' + b.part_number + ']' : '');
-    sel.appendChild(o);
-  });
-  selWrap.appendChild(selLbl); selWrap.appendChild(sel); el.appendChild(selWrap);
+  const allBomOpts = bomItems.filter(b => !b.is_service && b.id !== bomItemId && hasSuppMatch(b.id))
+    .map(b => ({ value: b.id, text: (b.description || '—') + (b.part_number ? '  [' + b.part_number + ']' : '') }));
+  const sel = document.createElement('select'); sel.style.width = '100%';
+  const rebuildOpts = q => {
+    sel.replaceChildren();
+    allBomOpts.filter(o => !q || o.text.toLowerCase().includes(q)).forEach(({ value, text }) => {
+      const opt = document.createElement('option'); opt.value = value; opt.textContent = text; sel.appendChild(opt);
+    });
+  };
+  rebuildOpts('');
+  const srchInpIncl = document.createElement('input'); srchInpIncl.type = 'text'; srchInpIncl.placeholder = 'Filtrar…';
+  srchInpIncl.style.cssText = 'width:100%;padding:5px 9px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface2);color:var(--text);margin-bottom:6px;box-sizing:border-box';
+  srchInpIncl.addEventListener('input', () => rebuildOpts(srchInpIncl.value.toLowerCase()));
+  selWrap.appendChild(selLbl); selWrap.appendChild(srchInpIncl); selWrap.appendChild(sel); el.appendChild(selWrap);
 
   const actions = document.createElement('div'); actions.className = 'modal-actions';
   const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
@@ -1037,9 +1069,13 @@ function openSplitModal(bomItemId, supplierId, itemMatchId, availableQItems) {
   const title = document.createElement('div'); title.className = 'modal-title'; title.style.cssText = 'font-size:14px;margin-bottom:4px'; title.textContent = bi?.description || ''; el.appendChild(title);
   const sub = document.createElement('div'); sub.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:16px'; sub.textContent = 'Seleciona a linha adicional da cotação que faz parte deste item.'; el.appendChild(sub);
 
+  const srchInpSplit = document.createElement('input'); srchInpSplit.type = 'text'; srchInpSplit.placeholder = 'Filtrar…';
+  srchInpSplit.style.cssText = 'width:100%;padding:5px 9px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface2);color:var(--text);margin-bottom:8px;box-sizing:border-box';
+  el.appendChild(srchInpSplit);
   const listWrap = document.createElement('div'); listWrap.style.cssText = 'max-height:300px;overflow-y:auto;margin-bottom:16px';
   for (const qi of availableQItems) {
     const row = document.createElement('div'); row.className = 'match-pick-row';
+    row.dataset.search = ((qi.raw_description || '') + ' ' + (qi.raw_part_number || '')).toLowerCase();
     row.addEventListener('click', () => addExtraLine(itemMatchId, qi.id, qi));
     const infoDiv = document.createElement('div'); infoDiv.style.cssText = 'flex:1;min-width:0';
     const desc = document.createElement('div'); desc.style.cssText = 'font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'; desc.textContent = qi.raw_description; infoDiv.appendChild(desc);
@@ -1051,6 +1087,10 @@ function openSplitModal(bomItemId, supplierId, itemMatchId, availableQItems) {
     listWrap.appendChild(row);
   }
   el.appendChild(listWrap);
+  srchInpSplit.addEventListener('input', () => {
+    const q = srchInpSplit.value.toLowerCase();
+    listWrap.querySelectorAll('.match-pick-row').forEach(r => { r.style.display = r.dataset.search.includes(q) ? '' : 'none'; });
+  });
 
   const actions = document.createElement('div'); actions.className = 'modal-actions';
   const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar'; cancelBtn.addEventListener('click', closeModal); actions.appendChild(cancelBtn);
@@ -1642,12 +1682,14 @@ async function exportMissingItems() {
   const PT_PER_LINE = 14;
   const V_PADDING = 8;
 
+  const CAT_BG = 'FFE0E7FF';
+  const CAT_FG = 'FF1E3A8A';
+
   const cols = [
     { h: 'Part #',      min: 14, max: 24, align: 'left'   },
     { h: 'Descri\u00e7\u00e3o', min: 40, max: 70, align: 'left'   },
     { h: 'Qty',         min: 7,  max: 10, align: 'center' },
     { h: 'Unidade',     min: 10, max: 14, align: 'center' },
-    { h: 'Categoria',   min: 18, max: 30, align: 'left'   },
   ];
 
   for (const [sheetName, items] of Object.entries(sheets)) {
@@ -1656,18 +1698,20 @@ async function exportMissingItems() {
       views: [{ state: 'frozen', ySplit: 4, showGridLines: false }],
     });
 
-    const rows = items.map(bi => [
-      bi.part_number || '\u2014',
-      bi.description || '',
-      bi.quantity ?? '',
-      bi.unit || '',
-      bi.category || '',
-    ]);
+    // Group by category, sorted alphabetically
+    const byCategory = {};
+    for (const bi of items) {
+      const cat = bi.category || 'Sem Categoria';
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(bi);
+    }
+    const sortedCats = Object.entries(byCategory).sort(([a], [b]) => a.localeCompare(b, 'pt'));
 
     const colWidths = cols.map((cfg, i) => {
       let longest = cfg.h.length;
-      for (const r of rows) {
-        const v = String(r[i] ?? '');
+      for (const bi of items) {
+        const vals = [bi.part_number || '\u2014', bi.description || '', String(bi.quantity ?? ''), bi.unit || ''];
+        const v = String(vals[i] ?? '');
         for (const line of v.split(/\r?\n/)) {
           if (line.length > longest) longest = line.length;
         }
@@ -1700,42 +1744,44 @@ async function exportMissingItems() {
       c.value = cfg.h;
       c.font = { name: FONT, bold: true, size: FONT_DATA, color: { argb: HDR_FG } };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HDR_BG } };
-      c.alignment = {
-        horizontal: cfg.align,
-        vertical: 'middle',
-        indent: cfg.align === 'left' ? 1 : 0,
-      };
+      c.alignment = { horizontal: cfg.align, vertical: 'middle', indent: cfg.align === 'left' ? 1 : 0 };
     });
     hRow.height = 26;
 
-    rows.forEach((vals, idx) => {
-      const rn = 5 + idx;
-      const bg = idx % 2 === 0 ? ROW_WHITE : ROW_ZEBRA;
-      const row = ws.getRow(rn);
-      let maxLines = 1;
-      vals.forEach((v, i) => {
-        const c = row.getCell(i + 1);
-        c.value = v;
-        c.font = { name: FONT, size: FONT_DATA, color: { argb: TEXT } };
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-        c.alignment = {
-          horizontal: cols[i].align,
-          vertical: 'middle',
-          wrapText: true,
-          indent: cols[i].align === 'left' ? 1 : 0,
-        };
-        c.border = { bottom: { style: 'hair', color: { argb: BORDER } } };
-        const widthPx = colToPx(colWidths[i]) - 12;
-        const lines = wrapCount(v, widthPx);
-        if (lines > maxLines) maxLines = lines;
-      });
-      row.height = Math.max(22, maxLines * PT_PER_LINE + V_PADDING);
-    });
+    let rowNum = 5;
+    let zebraIdx = 0;
+    for (const [cat, catItems] of sortedCats) {
+      // Category header row
+      ws.mergeCells(rowNum, 1, rowNum, cols.length);
+      const catCell = ws.getCell(rowNum, 1);
+      catCell.value = cat;
+      catCell.font = { name: FONT, bold: true, size: FONT_DATA, color: { argb: CAT_FG } };
+      catCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: CAT_BG } };
+      catCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+      ws.getRow(rowNum).height = 20;
+      rowNum++;
 
-    ws.autoFilter = {
-      from: { row: 4, column: 1 },
-      to:   { row: 4 + rows.length, column: cols.length },
-    };
+      for (const bi of catItems) {
+        const vals = [bi.part_number || '\u2014', bi.description || '', bi.quantity ?? '', bi.unit || ''];
+        const bg = zebraIdx % 2 === 0 ? ROW_WHITE : ROW_ZEBRA;
+        const row = ws.getRow(rowNum);
+        let maxLines = 1;
+        vals.forEach((v, i) => {
+          const c = row.getCell(i + 1);
+          c.value = v;
+          c.font = { name: FONT, size: FONT_DATA, color: { argb: TEXT } };
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+          c.alignment = { horizontal: cols[i].align, vertical: 'middle', wrapText: true, indent: cols[i].align === 'left' ? 1 : 0 };
+          c.border = { bottom: { style: 'hair', color: { argb: BORDER } } };
+          const widthPx = colToPx(colWidths[i]) - 12;
+          const lines = wrapCount(v, widthPx);
+          if (lines > maxLines) maxLines = lines;
+        });
+        row.height = Math.max(22, maxLines * PT_PER_LINE + V_PADDING);
+        rowNum++;
+        zebraIdx++;
+      }
+    }
 
     ws.pageSetup = {
       orientation: 'landscape',

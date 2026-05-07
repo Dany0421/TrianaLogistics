@@ -539,8 +539,8 @@ async function sendRFQ(supplierIdx) {
 
     const lang = rfqLang === 'en' ? 'en' : 'pt';
     const subject = lang === 'en'
-      ? 'Request for Quotation - ' + process.project_name + ' - ' + process.client_name
-      : 'Pedido de Cotacao - ' + process.project_name + ' - ' + process.client_name;
+      ? 'Request for Quotation - ' + process.project_name
+      : 'Pedido de Cotacao - ' + process.project_name;
     const html = buildRFQHtml(selected, lang);
     const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
     const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
