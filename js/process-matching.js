@@ -1430,7 +1430,11 @@ function showAutoMatchSummary(newMatches, actualCount, propagated) {
   const el = document.createElement('div');
   const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Auto-Match';
   const title = document.createElement('div'); title.className = 'modal-title';
-  title.textContent = actualCount + ' match(es) criado(s)' + (propagated > 0 ? ' — ' + propagated + ' propagado(s)' : '');
+  let remaining = actualCount;
+  const _updateTitle = () => {
+    title.textContent = remaining + ' match(es) criado(s)' + (propagated > 0 ? ' — ' + propagated + ' propagado(s)' : '');
+  };
+  _updateTitle();
   el.appendChild(tag);
   el.appendChild(title);
 
@@ -1450,15 +1454,51 @@ function showAutoMatchSummary(newMatches, actualCount, propagated) {
     row.style.cssText = 'background:var(--surface-2,#1a2235);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5';
 
     const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px';
+    topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px';
     const bomDesc = document.createElement('span');
-    bomDesc.style.cssText = 'font-weight:600;color:var(--text)';
+    bomDesc.style.cssText = 'font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
     bomDesc.textContent = bi.custom_description || bi.description;
+
+    const rightSide = document.createElement('div');
+    rightSide.style.cssText = 'display:flex;align-items:center;gap:6px;flex-shrink:0';
+
     const confBadge = document.createElement('span');
-    confBadge.style.cssText = 'font-size:11px;font-weight:600;white-space:nowrap;margin-left:8px;color:' + confColor;
+    confBadge.style.cssText = 'font-size:11px;font-weight:600;white-space:nowrap;color:' + confColor;
     confBadge.textContent = conf + '%';
+
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'btn btn-ghost btn-sm';
+    rmBtn.textContent = '×';
+    rmBtn.title = 'Remover match';
+    rmBtn.style.cssText = 'color:var(--danger,#f87171);padding:1px 6px;font-size:14px;line-height:1';
+    rmBtn.addEventListener('click', async () => {
+      rmBtn.disabled = true;
+      try {
+        const wasSelected = !!selectedOffers.find(o => o.bom_item_id === m.bom_item_id && o.supplier_id === m.supplier_id);
+        matches = matches.filter(x => x.id !== m.id);
+        if (wasSelected) selectedOffers = selectedOffers.filter(o => !(o.bom_item_id === m.bom_item_id && o.supplier_id === m.supplier_id));
+        if (m.quotation_item_id) rejectedAutoMatch.push({ process_id: processId, bom_item_id: m.bom_item_id, supplier_id: m.supplier_id, quotation_item_id: m.quotation_item_id });
+        row.style.opacity = '0.35';
+        row.style.pointerEvents = 'none';
+        remaining = Math.max(0, remaining - 1);
+        _updateTitle();
+        renderMatchingTab();
+        await API.deleteMatch(m.id);
+        if (wasSelected) await API.deleteSelectedOffer(processId, m.bom_item_id);
+        if (m.quotation_item_id) await API.addRejectedAutoMatch(processId, m.bom_item_id, m.supplier_id, m.quotation_item_id);
+        row.remove();
+      } catch(e) {
+        await loadMatchData(); renderMatchingTab();
+        showToast('Erro ao remover: ' + e.message, true);
+        row.style.opacity = ''; row.style.pointerEvents = '';
+        rmBtn.disabled = false;
+      }
+    });
+
+    rightSide.appendChild(confBadge);
+    rightSide.appendChild(rmBtn);
     topRow.appendChild(bomDesc);
-    topRow.appendChild(confBadge);
+    topRow.appendChild(rightSide);
 
     const botRow = document.createElement('div');
     botRow.style.cssText = 'color:var(--muted);font-size:11px';

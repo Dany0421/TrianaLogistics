@@ -927,7 +927,7 @@ function parseQuotationExcel(arrayBuffer) {
   const priceKw = ['preço','preco','price','valor','unit','unitár','unitár','custo'];
   const descKw  = ['descri','artigo','produto','item','designa','material','equipment'];
   const qtyKw   = ['qty','quant','quantidade','qnt'];
-  const partKw  = ['part','ref','código','codigo','code','p/n'];
+  const partKw  = ['part','ref','código','codigo','code','p/n','sku'];
 
   let headerRow = -1, colDesc = -1, colQty = -1, colPrice = -1, colPart = -1;
 
@@ -1172,6 +1172,8 @@ function openQuotationValModal(fileName, rawPdfText) {
 function renderQuotValTable() {
   const tbody = document.getElementById('quotValTbody');
   if (!tbody) return;
+  const _scrollBox = tbody.closest('.modal-box-lg, .modal-box');
+  const _savedScroll = _scrollBox ? _scrollBox.scrollTop : 0;
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
   const hasNonMzn = pendingQuotItems.some(i => i.currency && i.currency !== 'MZN');
   const ratesBlock = document.getElementById('quotRatesBlock');
@@ -1316,6 +1318,7 @@ function renderQuotValTable() {
     tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdEta); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
+  if (_scrollBox) requestAnimationFrame(() => { _scrollBox.scrollTop = _savedScroll; });
 }
 
 function addQuotRow() {
@@ -1449,9 +1452,9 @@ function parsePdf(text){
     let part='',model=dc.join(' ');
     // Recover reference from cols[0] if it was classified as numeric but looks like a catalog code
     const fc=cols[0];
-    if(fc&&ei.has(0)&&!/\s/.test(fc)&&fc.length>=4&&((/\d/.test(fc)&&/[A-Za-z]/.test(fc))||/^\d{8,}$/.test(fc)||/^\d{2,}\.\d{4,}$/.test(fc))){part=fc;}
+    if(fc&&ei.has(0)&&!/\s/.test(fc)&&fc.length>=4&&((/\d/.test(fc)&&/[A-Za-z]/.test(fc))||/^\d{5,}$/.test(fc)||/^\d{2,}\.\d{4,}$/.test(fc))){part=fc;}
     const fd=dc[0];
-    if(!part){const lr=!/\s/.test(fd)&&fd.length>=4&&((/\d/.test(fd)&&/[A-Za-z]/.test(fd))||/^\d{5,}$/.test(fd));if(lr&&dc.length>1){part=fd;model=dc.slice(1).join(' ').trim();if(model.length<2){model=dc.join(' ');part='';}}}
+    if(!part){const lr=!/\s/.test(fd)&&fd.length>=4&&((/\d/.test(fd)&&/[A-Za-z]/.test(fd))||/^\d{4,}$/.test(fd));if(lr&&dc.length>1){part=fd;model=dc.slice(1).join(' ').trim();if(model.length<2){model=dc.join(' ');part='';}}}
     if(!model||model.length<2)continue;
     items.push({part,model,qty,price});
   }
