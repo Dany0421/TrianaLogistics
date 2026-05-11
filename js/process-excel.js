@@ -248,7 +248,8 @@ async function generateExcel() {
         let bestPrice = Infinity;
         for (const [sid, m] of Object.entries(itemMatches)) {
           const q = (quotationMap[sid] || []).find(q => q.id === m.quotation_item_id);
-          if (q && q.price != null && q.price < bestPrice) { bestPrice = q.price; suppId = sid; qi = q; }
+          const effP = q ? (q.price || 0) * (1 - ((q.discount || 0) / 100)) : null;
+          if (effP != null && effP < bestPrice) { bestPrice = effP; suppId = sid; qi = q; }
         }
       }
     }
@@ -258,7 +259,7 @@ async function generateExcel() {
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
     const indexInSupplier = supplierCounters[suppId]++;
     const modelDesc = bi.custom_description || (descSource === 'bom' ? bi.description : (qi.raw_description || bi.description));
-    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(qi.quantity || bi.quantity), price: String(qi.price) });
+    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(qi.quantity || bi.quantity), price: String((qi.price || 0) * (1 - ((qi.discount || 0) / 100))) });
     allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: qi.quantity || bi.quantity, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }
 

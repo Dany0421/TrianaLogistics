@@ -1690,7 +1690,9 @@ async function openHistoricalPriceModal(bi) {
           }
           await API.createHistoricalMatch(processId, bi.id, targetSuppId, rawHistDesc, priceToStore, rowCurrency);
           closeModal();
-          await loadMatchData(); renderMatchingTab();
+          await loadMatchData();
+          quotationMap[targetSuppId] = await API.getQuotationItems(targetSuppId);
+          renderMatchingTab();
           showToast('Preço histórico aplicado.');
         } catch(e) {
           usarBtn.disabled = false; usarBtn.textContent = 'Usar';
