@@ -2,6 +2,7 @@ let logOffset = 0;
 const LOG_LIMIT = 100;
 let filterTimeout = null;
 let allEntries = [];
+let visibleCount = 0;
 
 // ── Time helpers ──
 function timeAgo(iso) {
@@ -344,8 +345,10 @@ async function loadLog(append = false) {
   try {
     const entries = await API.getAuditLog({ limit: LOG_LIMIT, offset: logOffset, processSearch, userId, eventType, dateFrom, dateTo });
     allEntries = append ? [...allEntries, ...entries] : entries;
-    renderEntries(collapseEntries(append ? entries : allEntries), append);
-    document.getElementById('logCount').textContent = allEntries.length > 0 ? `(${allEntries.length}${entries.length === LOG_LIMIT ? '+' : ''})` : '';
+    const collapsed = collapseEntries(append ? entries : allEntries);
+    renderEntries(collapsed, append);
+    visibleCount = append ? visibleCount + collapsed.length : collapsed.length;
+    document.getElementById('logCount').textContent = visibleCount > 0 ? `(${visibleCount}${entries.length === LOG_LIMIT ? '+' : ''})` : '';
     document.getElementById('loadMoreWrap').style.display = entries.length === LOG_LIMIT ? '' : 'none';
     logOffset += entries.length;
   } catch (e) {
