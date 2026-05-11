@@ -503,6 +503,10 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const rate = (cur && cur !== 'MZN') ? (onlySupp?.cambio || 1) : 1;
       return sum + (p ? p * rate * (bi.quantity || 1) : 0);
     }
+    if (matchCount > 1 && lowestSuppForItem[bi.id]) {
+      const low = lowestSuppForItem[bi.id];
+      return sum + low.price * low.rate * (bi.quantity || 1);
+    }
     return sum;
   }, 0);
   const serviceTotal = serviceItems.reduce((sum, bi) => sum + ((bi.service_price || 0) * (bi.quantity || 1)), 0);
