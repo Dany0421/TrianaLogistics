@@ -129,6 +129,7 @@ function renderResults(data, query) {
   const area = document.getElementById('resultsArea');
   const now = new Date();
   const thirtyDaysAgo = new Date(now - 30 * 86400000);
+  const sixMonthsAgo = new Date(now - 180 * 86400000);
 
   if (!data.length) {
     info.textContent = '';
@@ -181,7 +182,9 @@ function renderResults(data, query) {
   for (const row of data) {
     const supplier = row.suppliers;
     const proc = supplier?.processes;
-    const isRecent = row.created_at && new Date(row.created_at) >= thirtyDaysAgo;
+    const rowDate = row.created_at ? new Date(row.created_at) : null;
+    const isRecent = rowDate && rowDate >= thirtyDaysAgo;
+    const isStale  = rowDate && rowDate < sixMonthsAgo;
     const procId = proc?.id;
     const tr = document.createElement('tr');
     const tdDesc = document.createElement('td');
@@ -237,7 +240,7 @@ function renderResults(data, query) {
     dspan.className = 'price-date';
     dspan.textContent = fmtDate(row.created_at);
     const badge = document.createElement('span');
-    badge.className = isRecent ? 'badge-fresh' : 'badge-old';
+    badge.className = isRecent ? 'badge-fresh' : isStale ? 'badge-stale' : 'badge-old';
     badge.textContent = isRecent ? 'RECENTE' : 'ANTIGO';
     tdDate.appendChild(dspan);
     tdDate.appendChild(document.createTextNode(' '));
