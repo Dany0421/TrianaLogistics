@@ -861,13 +861,13 @@ const API = {
   async searchPriceHistory(query, dateFrom) {
     let q = supabase
       .from('quotation_items')
-      .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, cambio, processes(id, project_name, client_name)), item_matches(bom_items!bom_item_id(description, part_number, custom_description))')
+      .select('raw_description, raw_part_number, price, currency, quantity, created_at, suppliers(name, cambio, processes(id, project_name, client_name)), item_matches(match_type, bom_items!bom_item_id(description, part_number, custom_description))')
       .order('created_at', { ascending: false });
     if (dateFrom) q = q.gte('created_at', dateFrom);
     q = q.limit(1000);
     const { data, error } = await q;
     if (error) throw _sanitizeError(error);
-    const rows = data || [];
+    const rows = (data || []).filter(item => !item.item_matches?.some(m => m.match_type === 'historical'));
     if (!query || !query.trim()) return rows;
     const queryStr = query.trim();
     const qToks = queryStr.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 1);
