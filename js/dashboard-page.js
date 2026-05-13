@@ -149,7 +149,7 @@ window.addEventListener('load', async () => {
   renderStats();
   renderList();
   const uniqueNames = [...new Set(allProcesses.map(p => p.procurement_name || p.assignee?.name).filter(Boolean))];
-  if (hasRole('admin') && uniqueNames.length) {
+  if (!hasRole('commercial') && uniqueNames.length) {
     const filterBar = document.querySelector('.filter-bar');
     const newBtn = filterBar?.querySelector('#createProcessBtn')?.parentElement;
     if (filterBar && newBtn) {
