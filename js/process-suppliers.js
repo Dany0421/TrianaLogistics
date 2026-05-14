@@ -988,7 +988,7 @@ function parseQuotationExcel(arrayBuffer) {
     const price = parseNum(String(row[colPrice]||''));
     const qty   = colQty!==-1 ? parseFloat(String(row[colQty]||'').replace(',','.')) : 1;
     const part  = colPart!==-1 ? String(row[colPart]||'').trim() : null;
-    if (!desc || isNaN(price) || price <= 0) continue;
+    if (!desc || parseNum(desc) === 0 || isNaN(price) || price <= 0) continue;
     items.push({
       raw_part_number: part||null,
       raw_description: desc,
@@ -1475,11 +1475,11 @@ function parsePdf(text){
     const line=raw.trim();if(line.length<4)continue;if(SKIP.test(line))continue;if(!/[a-zA-Z]/.test(line))continue;if(!/\d/.test(line))continue;
     const cols=line.split('\t').map(c=>c.trim()).filter(c=>c.length>0);if(cols.length<2)continue;
     const UR=/\b(UN|MT|M|PC|KG|L|UNID|PÇ|PCS|CX|RL|ROL|ML|CM|G|T|HR|H)\b/i;
-    let qty='1',qci=-1,price='';const nc=[];
-    for(let i=0;i<cols.length;i++){const c=cols[i];if(c.includes('%'))continue;const m=c.match(/^([\d.,]+(?:\s[\d.,]+)*)\s*([A-Za-z].*)?$/);if(!m)continue;const np=m[1].trim();const sf=(m[2]||'').trim();const v=parseNum(np);if(isNaN(v)||v<=0)continue;if(sf&&UR.test(sf.split(/\s/)[0])){if(qci===-1){qty=String(Math.round(v));qci=i;}}else{nc.push({i,c,v});}}
+    let qty='1',qci=-1,price='';const nc=[];const zeroCols=new Set();
+    for(let i=0;i<cols.length;i++){const c=cols[i];if(c.includes('%'))continue;const m=c.match(/^([\d.,]+(?:\s[\d.,]+)*)\s*([A-Za-z].*)?$/);if(!m)continue;const np=m[1].trim();const sf=(m[2]||'').trim();const v=parseNum(np);if(isNaN(v))continue;if(v===0){zeroCols.add(i);continue;}if(v<0)continue;if(sf&&UR.test(sf.split(/\s/)[0])){if(qci===-1){qty=String(Math.round(v));qci=i;}}else{nc.push({i,c,v});}}
     if(!nc.length)continue;const pe=nc[nc.length-1];price=String(pe.v);
     if(qci===-1){for(const n of nc){if(n.i===pe.i)continue;const r=Math.round(n.v);if(r>=1&&r<=9999){qty=String(r);qci=n.i;break;}}}
-    const ei=new Set([qci,...nc.map(n=>n.i)]);
+    const ei=new Set([qci,...nc.map(n=>n.i),...zeroCols]);
     const dc=cols.filter((c,i)=>{if(ei.has(i))return false;if(c.includes('%'))return false;if(UR.test(c.trim())&&!/[a-zA-Z]{4,}/.test(c))return false;return true;});
     if(!dc.length)continue;
     let part='',model=dc.join(' ');
