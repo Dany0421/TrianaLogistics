@@ -853,7 +853,7 @@ function removeProcTag(boxId, idx) {
 let editingProcessId = null;
 let pendingProcessCategories = [];
 
-function openCreateModal(id = null) {
+async function openCreateModal(id = null) {
   if (id && !UUID_RE.test(id)) return;
   editingProcessId = id;
   const p = id ? allProcesses.find(x => x.id === id) : null;
@@ -883,7 +883,7 @@ function openCreateModal(id = null) {
         <input type="text" id="f_custom_name" placeholder="Nome do estado" style="flex:1" value="${!STANDARD_STATUSES.includes(p.status)?esc(p.status):''}">
         <input type="color" id="f_custom_color" value="${p.status_color||'#2563eb'}" style="width:40px;height:36px;padding:2px;cursor:pointer">
       </div></div>` : ''}
-    <div class="form-row"><label>Procurement respons\u00e1vel</label><select id="f_procurement"><option value="">\u2014 Nenhum \u2014</option></select></div>
+    ${!hasRole('commercial') ? `<div class="form-row"><label>Procurement respons\u00e1vel</label><select id="f_procurement"><option value="">\u2014 Nenhum \u2014</option></select></div>` : ''}
     <div class="form-row"><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipo de projeto \u2014 opcional)</span></label><div class="tag-input-box" id="f_catBox"></div></div>
     <div class="form-row"><label>Comercial respons\u00e1vel</label><input type="text" id="f_commercial" placeholder="Nome do comercial" value="${esc(p?.commercial_name||'')}"></div>
     <div class="form-row"><label>Notas</label><textarea id="f_notes" placeholder="Observa\u00e7\u00f5es..."></textarea></div>
@@ -902,13 +902,17 @@ function openCreateModal(id = null) {
   _fc('f_notes', p?.notes || '');
   renderProcTagBox('f_catBox', pendingProcessCategories);
   const fProcSel = document.getElementById('f_procurement');
-  if (fProcSel) {
-    _assignableUsers.forEach(u => {
-      const opt = document.createElement('option');
-      opt.value = u.id; opt.textContent = u.name;
-      if (u.id === (p?.assigned_to || '')) opt.selected = true;
-      fProcSel.appendChild(opt);
-    });
+  if (fProcSel && !hasRole('commercial')) {
+    try {
+      const users = await API.getAssignableUsers();
+      _assignableUsers = users;
+      users.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id; opt.textContent = u.name;
+        if (u.id === (p?.assigned_to || '')) opt.selected = true;
+        fProcSel.appendChild(opt);
+      });
+    } catch(_) {}
   }
   const fStatusSel = document.getElementById('f_status');
   if (fStatusSel) {
