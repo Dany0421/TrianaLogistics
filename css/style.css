@@ -627,3 +627,6 @@ a:focus-visible {
 .match-warn-blocked { background:rgba(239,68,68,.15); color:#f87171; }
 .match-warn-eta { background:rgba(251,146,60,.15); color:#fb923c; }
 .match-warn-credit { background:rgba(234,179,8,.15); color:#ca8a04; }
+.supp-filter-chip { background:var(--surface2); color:var(--muted); border:1px solid var(--border); border-radius:20px; padding:3px 10px; font-size:11px; cursor:pointer; white-space:nowrap; }
+.supp-filter-chip:hover { border-color:var(--accent); color:var(--text); }
+.supp-filter-chip.active { background:rgba(37,99,235,.15); color:var(--accent); border-color:var(--accent); }

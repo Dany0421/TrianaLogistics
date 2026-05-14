@@ -1,4 +1,5 @@
 // ── Supplier modal local state ──
+let _suppFilter = null; // null = all; string = filter by status
 let editingSupplierIdx = null;
 let pendingSupplierCategories = [];
 let pendingSupplierBrands = [];
@@ -156,19 +157,51 @@ function renderSupplierSuggestions() {
   banner.appendChild(cards);
 }
 
+// ── Supplier Filter Bar ──
+function renderSuppFilterBar() {
+  const bar = document.getElementById('suppFilterBar');
+  if (!bar) return;
+  bar.replaceChildren();
+  if (!suppliers.length) return;
+
+  const counts = {};
+  suppliers.forEach(s => { const st = s.status || 'Not contacted'; counts[st] = (counts[st] || 0) + 1; });
+
+  const makeChip = (label, value) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'supp-filter-chip' + (_suppFilter === value ? ' active' : '');
+    chip.textContent = label;
+    chip.addEventListener('click', () => { _suppFilter = _suppFilter === value ? null : value; renderSuppliers(); });
+    return chip;
+  };
+
+  bar.appendChild(makeChip(`Todos (${suppliers.length})`, null));
+  const ORDER = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'];
+  ORDER.forEach(st => { if (counts[st]) bar.appendChild(makeChip(`${st} (${counts[st]})`, st)); });
+}
+
 // ── Render Suppliers ──
 function renderSuppliers() {
   document.getElementById('suppCount').textContent = `${suppliers.length} fornecedor${suppliers.length !== 1 ? 'es' : ''}`;
+  renderSuppFilterBar();
   const el = document.getElementById('suppliersContent');
   el.replaceChildren();
+  const visible = _suppFilter ? suppliers.filter(s => (s.status || 'Not contacted') === _suppFilter) : suppliers;
   if (!suppliers.length) {
     const empty = document.createElement('div'); empty.className = 'empty-state';
     empty.appendChild(document.createTextNode('Sem fornecedores.')); empty.appendChild(document.createElement('br'));
     empty.appendChild(document.createTextNode('Adiciona o primeiro fornecedor.'));
     el.appendChild(empty); return;
   }
+  if (!visible.length) {
+    const empty = document.createElement('div'); empty.className = 'empty-state';
+    empty.appendChild(document.createTextNode('Nenhum fornecedor com este estado.'));
+    el.appendChild(empty); return;
+  }
 
-  suppliers.forEach((s, i) => {
+  visible.forEach(s => {
+    const origIdx = suppliers.indexOf(s);
     const qItems = quotationMap[s.id] || [];
     const qCount = qItems.length;
     const gs = supplierHistory[s.name?.trim().toLowerCase()];
@@ -177,7 +210,7 @@ function renderSuppliers() {
 
     // Header
     const header = document.createElement('div'); header.className = 'supplier-card-header';
-    header.addEventListener('click', () => toggleSupplier(i));
+    header.addEventListener('click', () => toggleSupplier(origIdx));
 
     const leftDiv = document.createElement('div'); leftDiv.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap';
     const nameSpan = document.createElement('span'); nameSpan.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--accent)"; nameSpan.textContent = s.name; leftDiv.appendChild(nameSpan);
@@ -189,16 +222,16 @@ function renderSuppliers() {
     header.appendChild(leftDiv);
 
     const rightDiv = document.createElement('div'); rightDiv.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap'; rightDiv.addEventListener('click', e => e.stopPropagation());
-    if (s.email) { const rfqBtn = document.createElement('button'); rfqBtn.className = 'btn btn-ghost btn-sm'; lbtn(rfqBtn, 'mail', 'RFQ'); rfqBtn.addEventListener('click', e => { e.stopPropagation(); openRFQModal(i); }); rightDiv.appendChild(rfqBtn); }
+    if (s.email) { const rfqBtn = document.createElement('button'); rfqBtn.className = 'btn btn-ghost btn-sm'; lbtn(rfqBtn, 'mail', 'RFQ'); rfqBtn.addEventListener('click', e => { e.stopPropagation(); openRFQModal(origIdx); }); rightDiv.appendChild(rfqBtn); }
     const manBtn = document.createElement('button'); manBtn.className = 'btn btn-ghost btn-sm'; lbtn(manBtn, 'pencil', 'Manual'); manBtn.addEventListener('click', () => openManualQuotEntry(s.id)); rightDiv.appendChild(manBtn);
     const quotBtn = document.createElement('button'); quotBtn.className = 'btn btn-ghost btn-sm'; lbtn(quotBtn, 'paperclip', 'Cotação'); quotBtn.addEventListener('click', () => uploadQuotation(s.id)); rightDiv.appendChild(quotBtn);
-    const editBtn = document.createElement('button'); editBtn.className = 'btn btn-ghost btn-sm'; lbtn(editBtn, 'settings', 'Editar'); editBtn.addEventListener('click', () => openSupplierModal(i)); rightDiv.appendChild(editBtn);
+    const editBtn = document.createElement('button'); editBtn.className = 'btn btn-ghost btn-sm'; lbtn(editBtn, 'settings', 'Editar'); editBtn.addEventListener('click', () => openSupplierModal(origIdx)); rightDiv.appendChild(editBtn);
     const delBtn = document.createElement('button'); delBtn.className = 'btn btn-danger btn-sm'; delBtn.appendChild(licon('trash-2', 13)); delBtn.setAttribute('aria-label', 'Eliminar'); delBtn.addEventListener('click', () => deleteSupplier(s.id)); rightDiv.appendChild(delBtn);
     header.appendChild(rightDiv);
     card.appendChild(header);
 
     // Body
-    const body = document.createElement('div'); body.className = 'supplier-card-body'; body.id = 'suppBody-' + i;
+    const body = document.createElement('div'); body.className = 'supplier-card-body'; body.id = 'suppBody-' + origIdx;
 
     const grid = document.createElement('div'); grid.style.cssText = `display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;margin-bottom:${qCount ? '12px' : '0'}`;
 
