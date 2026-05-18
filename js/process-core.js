@@ -512,9 +512,9 @@ function fmtPrice(p) {
   return i.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + '.' + d;
 }
 function deadlineClass(d) { if (!d) return ''; const diff = (new Date(d)-new Date())/86400000; return diff < 0 ? 'overdue' : diff < 5 ? 'soon' : ''; }
-const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Closed','Cancelled'];
+const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Awaiting ETA','Closed','Cancelled'];
 function statusBadgeClass(s) {
-  const map = { 'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting','Partial responses':'badge-partial','Ready for Excel':'badge-ready','Pending margin':'badge-pending-margin','Closed':'badge-closed','Cancelled':'badge-cancelled' };
+  const map = { 'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting','Partial responses':'badge-partial','Ready for Excel':'badge-ready','Pending margin':'badge-pending-margin','Awaiting ETA':'badge-awaiting-eta','Closed':'badge-closed','Cancelled':'badge-cancelled' };
   return map[s] || 'badge-active';
 }
 function applyStatusBadge(el, status, color) {

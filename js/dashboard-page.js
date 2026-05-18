@@ -197,8 +197,8 @@ function toggleCharts() {
   document.getElementById('chartsSection').style.display = chartsExpanded ? '' : 'none';
 }
 function _renderStatusChart() {
-  const allStatuses = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Closed','Cancelled'];
-  const allColors   = ['#2563eb','#f59e0b','#22d3ee','#10b981','#7c3aed','#f97316','#64748b','#f87171'];
+  const allStatuses = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Awaiting ETA','Closed','Cancelled'];
+  const allColors   = ['#2563eb','#f59e0b','#22d3ee','#10b981','#7c3aed','#f97316','#38bdf8','#64748b','#f87171'];
   const FINAL = new Set(['Closed','Cancelled']);
   const filtered = _hideClosedStatus
     ? allStatuses.map((s,i) => ({ s, c: allColors[i] })).filter(x => !FINAL.has(x.s))
@@ -1127,11 +1127,11 @@ function deadlineClass(d) {
   if (diff < 5) return 'soon';
   return '';
 }
-const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Closed','Cancelled'];
+const STANDARD_STATUSES = ['Active','Waiting for suppliers','Waiting for internal info','Partial responses','Ready for Excel','Pending margin','Awaiting ETA','Closed','Cancelled'];
 function statusBadgeClass(s) {
   const map = {
     'Active':'badge-active','Waiting for suppliers':'badge-waiting','Waiting for internal info':'badge-waiting',
-    'Partial responses':'badge-partial','Ready for Excel':'badge-ready','Pending margin':'badge-pending-margin','Closed':'badge-closed','Cancelled':'badge-cancelled'
+    'Partial responses':'badge-partial','Ready for Excel':'badge-ready','Pending margin':'badge-pending-margin','Awaiting ETA':'badge-awaiting-eta','Closed':'badge-closed','Cancelled':'badge-cancelled'
   };
   return map[s] || 'badge-active';
 }

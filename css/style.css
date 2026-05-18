@@ -310,6 +310,7 @@ textarea { resize: vertical; min-height: 80px; }
 .badge-partial   { background: rgba(245,158,11,.12);  color: #fbbf24; border: 1px solid rgba(245,158,11,.25); }
 .badge-ready          { background: rgba(16,185,129,.12);  color: #34d399; border: 1px solid rgba(16,185,129,.25); }
 .badge-pending-margin { background: rgba(249,115,22,.12);  color: #fb923c; border: 1px solid rgba(249,115,22,.28); }
+.badge-awaiting-eta   { background: rgba(56,189,248,.12);  color: #38bdf8; border: 1px solid rgba(56,189,248,.28); }
 .badge-blocked   { background: rgba(248,113,113,.12); color: #f87171; border: 1px solid rgba(248,113,113,.25); }
 .badge-warn      { background: rgba(245,158,11,.12);  color: #fbbf24; border: 1px solid rgba(245,158,11,.25); }
 .badge-closed    { background: rgba(100,116,139,.12); color: #64748b; border: 1px solid rgba(100,116,139,.2); }
