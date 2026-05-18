@@ -456,7 +456,11 @@ function renderMarginAlerts(data) {
 
   const title = document.createElement('div');
   title.className = 'margin-alert-title';
-  title.appendChild(document.createTextNode('⏳ Margin pendente — follow-up '));
+  const iconEl = document.createElement('i');
+  iconEl.setAttribute('data-lucide', 'clock');
+  iconEl.style.cssText = 'width:13px;height:13px;vertical-align:middle;margin-right:5px';
+  title.appendChild(iconEl);
+  title.appendChild(document.createTextNode('Margin pendente — follow-up '));
   const cnt = document.createElement('span');
   cnt.className = 'margin-alert-count';
   cnt.textContent = String(data.length);
@@ -518,6 +522,7 @@ function renderMarginAlerts(data) {
   wrap.appendChild(hdr);
   wrap.appendChild(rowsEl);
   banner.appendChild(wrap);
+  lucide.createIcons({ nodes: [iconEl] });
 }
 
 // ── Stats ──

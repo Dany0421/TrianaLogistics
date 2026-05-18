@@ -901,7 +901,10 @@ function openMatchModal(bomItemId, supplierId) {
     const noQ = document.createElement('div'); noQ.style.cssText = 'color:var(--muted);font-size:13px;margin-bottom:16px';
     noQ.textContent = 'Este fornecedor não tem cotação carregada.';
     noQ.appendChild(document.createElement('br'));
-    const upBtn = document.createElement('button'); upBtn.className = 'btn btn-ghost btn-sm'; upBtn.style.marginTop = '8px'; upBtn.textContent = '📎 Carregar Cotação';
+    const upBtn = document.createElement('button'); upBtn.className = 'btn btn-ghost btn-sm'; upBtn.style.marginTop = '8px';
+    const upIcon = document.createElement('i'); upIcon.setAttribute('data-lucide','paperclip'); upIcon.style.cssText = 'width:13px;height:13px;vertical-align:middle;margin-right:4px';
+    upBtn.appendChild(upIcon); upBtn.appendChild(document.createTextNode('Carregar Cotação'));
+    lucide.createIcons({ nodes: [upIcon] });
     upBtn.addEventListener('click', () => { closeModal(); uploadQuotation(supplierId); });
     noQ.appendChild(upBtn);
     el.appendChild(noQ);
