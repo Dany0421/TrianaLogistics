@@ -92,9 +92,10 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
   const header=document.createElement('div');header.className='supplier-header';
   const nameEl=document.createElement('div');nameEl.className='supplier-name';nameEl.textContent=gs?.name||name;
   header.appendChild(nameEl);
-  if(gs?.email||gs?.email_cc){
+  if(gs?.email||(gs?.cc_emails||[]).length){
     const emailEl=document.createElement('div');emailEl.className='supplier-email';
-    emailEl.textContent=(gs.email||'')+(gs.email_cc?'  ·  cc: '+gs.email_cc:'');
+    const ccPart=(gs.cc_emails||[]).length?'  ·  cc: '+gs.cc_emails.join(', '):'';
+    emailEl.textContent=(gs.email||'')+ccPart;
     header.appendChild(emailEl);
   }
   const tagsRow=document.createElement('div');tagsRow.className='supplier-tags';
@@ -346,6 +347,77 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
   main.appendChild(procSec);
 }
 
+function _buildCcInput(initialValues) {
+  const vals = [...(initialValues || [])];
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 8px;min-height:36px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;cursor:text';
+  const inp = document.createElement('input');
+  inp.type = 'email'; inp.placeholder = vals.length ? '' : 'cc@email.com';
+  inp.style.cssText = 'border:none;background:transparent;outline:none;font-size:13px;color:var(--text);flex:1;min-width:130px;padding:2px 0';
+  function renderChips() {
+    while (wrap.firstChild && wrap.firstChild !== inp) wrap.removeChild(wrap.firstChild);
+    const frag = document.createDocumentFragment();
+    vals.forEach((v, i) => {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;color:var(--text);font-family:DM Mono,monospace';
+      chip.appendChild(document.createTextNode(v));
+      const x = document.createElement('span');
+      x.textContent = '×'; x.style.cssText = 'cursor:pointer;color:var(--muted);font-size:14px;line-height:1;padding-left:3px';
+      x.addEventListener('click', () => { vals.splice(i, 1); renderChips(); });
+      chip.appendChild(x); frag.appendChild(chip);
+    });
+    wrap.insertBefore(frag, inp);
+    inp.placeholder = vals.length ? '' : 'cc@email.com';
+  }
+  function tryAdd() {
+    const v = inp.value.trim().replace(/,$/,'');
+    if (!v) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { showToast('Email CC inválido.', true); return; }
+    if (!vals.includes(v)) { vals.push(v); renderChips(); }
+    inp.value = '';
+  }
+  inp.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===','||e.key==='Tab') { e.preventDefault(); tryAdd(); } });
+  inp.addEventListener('blur', tryAdd);
+  wrap.addEventListener('click', () => inp.focus());
+  wrap.appendChild(inp); renderChips();
+  return { el: wrap, getValues: () => [...vals] };
+}
+
+function _buildCatInput(initialValues) {
+  const vals = [...(initialValues || [])];
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 8px;min-height:36px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;cursor:text';
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.placeholder = vals.length ? '' : 'ex: Software, Hardware';
+  inp.style.cssText = 'border:none;background:transparent;outline:none;font-size:13px;color:var(--text);flex:1;min-width:130px;padding:2px 0';
+  function renderChips() {
+    while (wrap.firstChild && wrap.firstChild !== inp) wrap.removeChild(wrap.firstChild);
+    const frag = document.createDocumentFragment();
+    vals.forEach((v, i) => {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);border-radius:4px;padding:2px 7px;font-size:11px;color:var(--accent)';
+      chip.appendChild(document.createTextNode(v));
+      const x = document.createElement('span');
+      x.textContent = '×'; x.style.cssText = 'cursor:pointer;color:var(--muted);font-size:14px;line-height:1;padding-left:3px';
+      x.addEventListener('click', () => { vals.splice(i, 1); renderChips(); });
+      chip.appendChild(x); frag.appendChild(chip);
+    });
+    wrap.insertBefore(frag, inp);
+    inp.placeholder = vals.length ? '' : 'ex: Software, Hardware';
+  }
+  function tryAdd() {
+    const v = inp.value.trim().replace(/,$/,'');
+    if (!v) return;
+    if (!vals.includes(v)) { vals.push(v); renderChips(); }
+    inp.value = '';
+  }
+  inp.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===','||e.key==='Tab') { e.preventDefault(); tryAdd(); } });
+  inp.addEventListener('blur', tryAdd);
+  wrap.addEventListener('click', () => inp.focus());
+  wrap.appendChild(inp); renderChips();
+  return { el: wrap, getValues: () => [...vals] };
+}
+
 function _buildContactsSection(gs, contacts) {
   const sec = document.createElement('div'); sec.className = 'section-wrap';
 
@@ -376,14 +448,44 @@ function _buildContactsSection(gs, contacts) {
     list.forEach(c => {
       const card = document.createElement('div'); card.className = 'contact-card';
 
+      const nameRow = document.createElement('div'); nameRow.style.cssText = 'display:flex;align-items:center;gap:6px';
       const nameEl = document.createElement('div'); nameEl.className = 'contact-name'; nameEl.textContent = c.name;
-      const phoneEl = document.createElement('div'); phoneEl.className = 'contact-phone'; phoneEl.textContent = c.phone;
-      phoneEl.title = 'Copiar número';
-      phoneEl.addEventListener('click', () => {
-        navigator.clipboard.writeText(c.phone).then(() => showToast('Número copiado')).catch(() => {});
-      });
+      nameRow.appendChild(nameEl);
+      if (c.is_default) {
+        const badge = document.createElement('span');
+        badge.style.cssText = 'font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(37,99,235,.12);color:var(--accent);font-family:DM Mono,monospace;letter-spacing:.4px';
+        badge.textContent = 'GERAL';
+        nameRow.appendChild(badge);
+      }
+      card.appendChild(nameRow);
 
-      card.appendChild(nameEl); card.appendChild(phoneEl);
+      if (c.phone) {
+        const phoneEl = document.createElement('div'); phoneEl.className = 'contact-phone'; phoneEl.textContent = c.phone;
+        phoneEl.title = 'Copiar número';
+        phoneEl.addEventListener('click', () => { navigator.clipboard.writeText(c.phone).then(() => showToast('Número copiado')).catch(() => {}); });
+        card.appendChild(phoneEl);
+      }
+      if (c.email) {
+        const emailEl = document.createElement('div');
+        emailEl.style.cssText = "font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px";
+        emailEl.textContent = c.email;
+        card.appendChild(emailEl);
+      }
+      if ((c.cc_emails || []).length) {
+        const ccEl = document.createElement('div');
+        ccEl.style.cssText = "font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px";
+        ccEl.textContent = 'cc: ' + c.cc_emails.join(', ');
+        card.appendChild(ccEl);
+      }
+      if ((c.categories || []).length) {
+        const catsRow = document.createElement('div'); catsRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin-top:4px';
+        c.categories.forEach(cat => {
+          const chip = document.createElement('span');
+          chip.style.cssText = 'font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(37,99,235,.08);color:var(--accent);border:1px solid rgba(37,99,235,.2)';
+          chip.textContent = cat; catsRow.appendChild(chip);
+        });
+        card.appendChild(catsRow);
+      }
       if (c.notes) {
         const noteEl = document.createElement('div'); noteEl.className = 'contact-note'; noteEl.textContent = c.notes;
         card.appendChild(noteEl);
@@ -428,7 +530,7 @@ function _openContactModal(globalSupplierId, existing, list, onSave) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1000';
 
   const modal = document.createElement('div'); modal.className = 'modal-box';
-  modal.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;min-width:320px;max-width:400px;width:100%';
+  modal.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;min-width:320px;max-width:440px;width:100%';
 
   const titleEl = document.createElement('div');
   titleEl.style.cssText = 'font-size:15px;font-weight:600;color:var(--text);margin-bottom:20px';
@@ -441,18 +543,35 @@ function _openContactModal(globalSupplierId, existing, list, onSave) {
     lbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px';
     lbl.textContent = labelText;
     const inputStyle = 'width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;box-sizing:border-box';
-    inputEl.style.cssText = inputStyle;
+    if (inputEl.tagName === 'INPUT' || inputEl.tagName === 'TEXTAREA') inputEl.style.cssText = inputStyle;
     wrap.appendChild(lbl); wrap.appendChild(inputEl);
     return wrap;
   }
 
   const nameInp = document.createElement('input'); nameInp.type = 'text'; nameInp.placeholder = 'Nome completo';
-  if (existing) nameInp.value = existing.name;
+  if (existing) nameInp.value = existing.name || '';
   modal.appendChild(mkField('Nome *', nameInp));
 
   const phoneInp = document.createElement('input'); phoneInp.type = 'tel'; phoneInp.placeholder = '+258 84 000 0000';
-  if (existing) phoneInp.value = existing.phone;
-  modal.appendChild(mkField('Telefone *', phoneInp));
+  if (existing) phoneInp.value = existing.phone || '';
+  modal.appendChild(mkField('Telefone', phoneInp));
+
+  const emailInp = document.createElement('input'); emailInp.type = 'email'; emailInp.placeholder = 'email@fornecedor.com';
+  if (existing) emailInp.value = existing.email || '';
+  modal.appendChild(mkField('Email', emailInp));
+
+  const { el: ccEl, getValues: getCcVals } = _buildCcInput(existing?.cc_emails || []);
+  modal.appendChild(mkField('Email CC (múltiplos)', ccEl));
+
+  const { el: catEl, getValues: getCatVals } = _buildCatInput(existing?.categories || []);
+  modal.appendChild(mkField('Categorias', catEl));
+
+  const defaultWrap = document.createElement('div'); defaultWrap.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:14px';
+  const defaultCb = document.createElement('input'); defaultCb.type = 'checkbox'; defaultCb.style.cssText = 'width:auto;margin:0';
+  if (existing?.is_default) defaultCb.checked = true;
+  const defaultLbl = document.createElement('span'); defaultLbl.style.cssText = 'font-size:13px;color:var(--text)'; defaultLbl.textContent = 'Contacto geral (fallback do RFQ)';
+  defaultWrap.appendChild(defaultCb); defaultWrap.appendChild(defaultLbl);
+  modal.appendChild(defaultWrap);
 
   const notesInp = document.createElement('textarea'); notesInp.rows = 2; notesInp.placeholder = 'Nota (opcional)';
   notesInp.style.resize = 'vertical';
@@ -465,15 +584,25 @@ function _openContactModal(globalSupplierId, existing, list, onSave) {
   const saveBtn = document.createElement('button'); saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary btn-sm'; saveBtn.textContent = 'Guardar';
   saveBtn.addEventListener('click', async () => {
     const name = nameInp.value.trim();
-    const phone = phoneInp.value.trim();
-    if (!name || !phone) { showToast('Nome e telefone são obrigatórios', true); return; }
+    if (!name) { showToast('Nome é obrigatório', true); return; }
+    const email = emailInp.value.trim() || null;
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Email inválido.', true); return; }
+    const payload = {
+      name,
+      phone: phoneInp.value.trim() || null,
+      notes: notesInp.value.trim() || null,
+      email,
+      cc_emails: getCcVals(),
+      categories: getCatVals(),
+      is_default: defaultCb.checked,
+    };
     saveBtn.disabled = true; saveBtn.textContent = '...';
     try {
       if (isEdit) {
-        await API.updateSupplierContact(existing.id, name, phone, notesInp.value.trim());
-        Object.assign(existing, { name, phone, notes: notesInp.value.trim() || null });
+        await API.updateSupplierContact(existing.id, payload);
+        Object.assign(existing, payload);
       } else {
-        const created = await API.createSupplierContact(globalSupplierId, name, phone, notesInp.value.trim());
+        const created = await API.createSupplierContact(globalSupplierId, payload);
         list.push(created);
       }
       onSave(list);

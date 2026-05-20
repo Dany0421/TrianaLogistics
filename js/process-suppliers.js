@@ -4,6 +4,8 @@ let editingSupplierIdx = null;
 let pendingSupplierCategories = [];
 let pendingSupplierBrands = [];
 let rfqLang = 'pt';
+let _sfGetCc = () => [];
+let _rfqSelectedContact = null;
 /** Aligned with chk_quot_description_length (must not reuse api.js const name — global scope / concat builds) */
 const MAX_QUOTATION_LINE_DESC = 2000;
 
@@ -146,7 +148,7 @@ function renderSupplierSuggestions() {
     addBtn.className = 'btn btn-ghost btn-sm';
     addBtn.textContent = '+ Adicionar';
     addBtn.style.marginTop = '2px';
-    addBtn.onclick = () => openSupplierModal(null, { name: gs.name, email: gs.email || '', email_cc: gs.email_cc || '', categories: [...(gs.categories || [])] });
+    addBtn.onclick = () => openSupplierModal(null, { name: gs.name, email: gs.email || '', cc_emails: gs.cc_emails || [], categories: [...(gs.categories || [])] });
     card.appendChild(addBtn);
 
     cards.appendChild(card);
@@ -243,7 +245,7 @@ function renderSuppliers() {
     };
 
     const emailParts = [s.email || '—'];
-    if (s.email_cc) { const br = document.createElement('br'); const ccSpan = document.createElement('span'); ccSpan.style.cssText = 'font-size:11px;color:var(--muted)'; ccSpan.textContent = 'CC: ' + s.email_cc; emailParts.push(br, ccSpan); }
+    if ((s.cc_emails || []).length) { const br = document.createElement('br'); const ccSpan = document.createElement('span'); ccSpan.style.cssText = 'font-size:11px;color:var(--muted)'; ccSpan.textContent = 'CC: ' + s.cc_emails.join(', '); emailParts.push(br, ccSpan); }
     grid.appendChild(mkInfo('EMAIL', ...emailParts));
     grid.appendChild(mkInfo('ÚLTIMO CONTACTO', s.last_contact_at ? fmtDate(s.last_contact_at) : '—'));
     grid.appendChild(mkInfo('FOLLOW-UP', s.next_followup_at ? fmtDate(s.next_followup_at) : '—'));
@@ -299,7 +301,7 @@ function _rfqBomSort(items) {
   });
 }
 
-function openRFQModal(supplierIdx) {
+async function openRFQModal(supplierIdx) {
   const s = suppliers[supplierIdx];
 
   const semPreco = [], comPreco = [];
@@ -311,6 +313,18 @@ function openRFQModal(supplierIdx) {
   _rfqBomSort(semPreco).forEach((v, i) => semPreco[i] = v);
   _rfqBomSort(comPreco).forEach((v, i) => comPreco[i] = v);
 
+  // Language toggle — language lives on global_suppliers, not process suppliers
+  const _gsForLang = globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase());
+  rfqLang = _gsForLang?.language || 'pt';
+
+  // Load contacts with email (best-effort)
+  let rfqContacts = [];
+  if (_gsForLang?.id) {
+    try { rfqContacts = await API.getSupplierContactsWithEmail(_gsForLang.id); }
+    catch(_) { rfqContacts = []; }
+  }
+  _rfqSelectedContact = rfqContacts.length ? _suggestContact(rfqContacts, bomItems) : null;
+
   const el = document.createElement('div');
 
   const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Pedido de Cotação — RFQ'; el.appendChild(tag);
@@ -318,10 +332,6 @@ function openRFQModal(supplierIdx) {
   const titleRow = document.createElement('div'); titleRow.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:4px';
   const title = document.createElement('div'); title.className = 'modal-title'; title.style.marginBottom = '0'; title.textContent = s.name; titleRow.appendChild(title);
   const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;flex:1"; emailSpan.textContent = s.email; titleRow.appendChild(emailSpan);
-
-  // Language toggle — language lives on global_suppliers, not process suppliers
-  const _gsForLang = globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase());
-  rfqLang = _gsForLang?.language || 'pt';
   const langWrap = document.createElement('div'); langWrap.style.cssText = 'display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden;flex-shrink:0';
   ['pt','en'].forEach(lang => {
     const btn = document.createElement('button'); btn.type = 'button'; btn.dataset.lang = lang;
@@ -343,6 +353,40 @@ function openRFQModal(supplierIdx) {
     b.style.background = active ? 'var(--accent)' : 'var(--surface2)';
     b.style.color = active ? '#fff' : 'var(--muted)';
   });
+
+  // Contact picker (only if this global supplier has contacts with email)
+  if (rfqContacts.length) {
+    const pickerWrap = document.createElement('div');
+    pickerWrap.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;margin-bottom:10px;background:var(--surface2)';
+    const pickerLbl = document.createElement('div');
+    pickerLbl.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px";
+    pickerLbl.textContent = 'Enviar para:';
+    pickerWrap.appendChild(pickerLbl);
+    rfqContacts.forEach((c, i) => {
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:5px 0;' + (i < rfqContacts.length - 1 ? 'border-bottom:1px solid var(--border);' : '');
+      const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'rfq_contact'; radio.value = String(i);
+      radio.style.cssText = 'width:auto;margin-top:3px;flex-shrink:0';
+      if (c === _rfqSelectedContact) radio.checked = true;
+      radio.addEventListener('change', () => { _rfqSelectedContact = rfqContacts[i]; });
+      const info = document.createElement('div');
+      const nameSpan = document.createElement('span'); nameSpan.style.cssText = 'font-size:13px;color:var(--text);font-weight:500'; nameSpan.textContent = c.name;
+      info.appendChild(nameSpan);
+      if ((c.categories || []).length) {
+        const catSpan = document.createElement('span'); catSpan.style.cssText = 'font-size:11px;color:var(--muted);margin-left:6px'; catSpan.textContent = '— ' + c.categories.join(', ');
+        info.appendChild(catSpan);
+      }
+      if (c.is_default) {
+        const badge = document.createElement('span'); badge.style.cssText = 'font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(37,99,235,.12);color:var(--accent);margin-left:6px;font-family:DM Mono,monospace'; badge.textContent = 'GERAL';
+        info.appendChild(badge);
+      }
+      const emailDiv = document.createElement('div'); emailDiv.style.cssText = "font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px"; emailDiv.textContent = c.email;
+      info.appendChild(emailDiv);
+      row.appendChild(radio); row.appendChild(info);
+      pickerWrap.appendChild(row);
+    });
+    el.appendChild(pickerWrap);
+  }
 
   if (!bomItems.length) {
     const msg = document.createElement('div'); msg.style.cssText = 'color:var(--muted);font-size:13px;margin:20px 0'; msg.textContent = 'Carrega o BOM primeiro.'; el.appendChild(msg);
@@ -575,8 +619,10 @@ async function sendRFQ(supplierIdx) {
       ? 'Request for Quotation - ' + process.project_name
       : 'Pedido de Cotacao - ' + process.project_name;
     const html = buildRFQHtml(selected, lang);
-    const ccEmails = ['procurement@triana.co.mz', ...(s.email_cc ? [s.email_cc] : [])].map(encodeURIComponent).join(',');
-    const mailto = 'mailto:' + encodeURIComponent(s.email) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
+    const toEmail = _rfqSelectedContact?.email || s.email;
+    const ccArr = _rfqSelectedContact ? (_rfqSelectedContact.cc_emails || []) : (s.cc_emails || []);
+    const ccEmails = ['procurement@triana.co.mz', ...ccArr].map(encodeURIComponent).join(',');
+    const mailto = 'mailto:' + encodeURIComponent(toEmail) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
     const clipPending = _copyRfqClipboardApiPromise(html);
     let copied = _copyRfqRichSync(html);
@@ -611,9 +657,7 @@ function autoFillSupplierEmail(name) {
   const known = supplierHistory[name.trim().toLowerCase()];
   if (!known) return;
   const eEl = document.getElementById('sf_email');
-  const ccEl = document.getElementById('sf_email_cc');
   if (eEl && !eEl.value) eEl.value = known.email || '';
-  if (ccEl && !ccEl.value) ccEl.value = known.email_cc || '';
 }
 
 // ── Tag Box (shared for suppliers and process categories) ──
@@ -661,6 +705,52 @@ function removeSupplierTag(type, idx) {
 }
 
 // ── Supplier Modal ──
+function _buildCcInput(initialValues) {
+  const vals = [...(initialValues || [])];
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 8px;min-height:36px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;cursor:text';
+  const inp = document.createElement('input');
+  inp.type = 'email'; inp.placeholder = vals.length ? '' : 'cc@email.com';
+  inp.style.cssText = 'border:none;background:transparent;outline:none;font-size:13px;color:var(--text);flex:1;min-width:130px;padding:2px 0';
+  function renderChips() {
+    while (wrap.firstChild && wrap.firstChild !== inp) wrap.removeChild(wrap.firstChild);
+    const frag = document.createDocumentFragment();
+    vals.forEach((v, i) => {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;color:var(--text);font-family:DM Mono,monospace';
+      chip.appendChild(document.createTextNode(v));
+      const x = document.createElement('span');
+      x.textContent = '×'; x.style.cssText = 'cursor:pointer;color:var(--muted);font-size:14px;line-height:1;padding-left:3px';
+      x.addEventListener('click', () => { vals.splice(i, 1); renderChips(); });
+      chip.appendChild(x); frag.appendChild(chip);
+    });
+    wrap.insertBefore(frag, inp);
+    inp.placeholder = vals.length ? '' : 'cc@email.com';
+  }
+  function tryAdd() {
+    const v = inp.value.trim().replace(/,$/,'');
+    if (!v) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { showToast('Email CC inválido.', true); return; }
+    if (!vals.includes(v)) { vals.push(v); renderChips(); }
+    inp.value = '';
+  }
+  inp.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===','||e.key==='Tab') { e.preventDefault(); tryAdd(); } });
+  inp.addEventListener('blur', tryAdd);
+  wrap.addEventListener('click', () => inp.focus());
+  wrap.appendChild(inp); renderChips();
+  return { el: wrap, getValues: () => [...vals] };
+}
+
+function _suggestContact(contacts, items) {
+  const itemCats = new Set(items.map(i => (i.category || '').toLowerCase()));
+  let best = null, bestScore = -1;
+  for (const c of contacts) {
+    const score = (c.categories || []).filter(cat => itemCats.has(cat.toLowerCase())).length;
+    if (score > bestScore || (score === bestScore && c.is_default)) { best = c; bestScore = score; }
+  }
+  return best;
+}
+
 function openSupplierModal(idx = null, prefill = {}) {
   // If caller used addEventListener('click', openSupplierModal), idx is the MouseEvent — treat as new supplier
   if (typeof idx === 'object' && idx !== null) idx = null;
@@ -681,7 +771,7 @@ function openSupplierModal(idx = null, prefill = {}) {
       <div><label>Email Principal</label><input id="sf_email" placeholder="email@fornecedor.com"></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(2º contacto — opcional)</span></label><input id="sf_email_cc" placeholder="cc@fornecedor.com"></div>
+      <div><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(múltiplos — opcional)</span></label><div id="sf_cc_mount" style="min-height:36px"></div></div>
       <div></div>
     </div>
     <div class="form-grid-2">
@@ -736,7 +826,6 @@ function openSupplierModal(idx = null, prefill = {}) {
   const _sf = (id, v) => { const inp = el.querySelector('#' + id); if (inp) inp.value = v == null ? '' : String(v); };
   _sf('sf_name', s?.name || prefill.name || '');
   _sf('sf_email', s?.email || gs?.email || prefill.email || '');
-  _sf('sf_email_cc', s?.email_cc || gs?.email_cc || prefill.email_cc || '');
   _sf('sf_notes', s?.notes || '');
   _sf('sf_last', s?.last_contact_at || '');
   _sf('sf_followup', s?.next_followup_at || '');
@@ -746,6 +835,9 @@ function openSupplierModal(idx = null, prefill = {}) {
   el.querySelector('#sf_save').addEventListener('click', saveSupplier);
 
   showModal(el);
+  const { el: sfCcEl, getValues: sfCcVals } = _buildCcInput(s?.cc_emails || gs?.cc_emails || prefill.cc_emails || []);
+  _sfGetCc = sfCcVals;
+  document.getElementById('sf_cc_mount')?.replaceWith(sfCcEl);
   renderTagBox('sfCatBox', pendingSupplierCategories, 'cat');
   renderTagBox('sfBrandBox', pendingSupplierBrands, 'brand');
   if (document.getElementById('ep_catBox')) renderTagBox('ep_catBox', pendingProcessCategories, 'pcat');
@@ -763,12 +855,11 @@ async function saveSupplier() {
     last_contact_at:  document.getElementById('sf_last').value || null,
     next_followup_at: document.getElementById('sf_followup').value || null,
     notes:            document.getElementById('sf_notes').value.trim() || null,
-    email_cc:         document.getElementById('sf_email_cc').value.trim() || null,
+    cc_emails:        _sfGetCc(),
   };
   if (!fields.name) { showToast('Nome do fornecedor é obrigatório.', true); return; }
   if (fields.name.length > 200) { showToast('Nome demasiado longo (máx 200 caracteres).', true); return; }
   if (fields.email && (fields.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email))) { showToast('Email inválido.', true); return; }
-  if (fields.email_cc && (fields.email_cc.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email_cc))) { showToast('Email CC inválido.', true); return; }
   if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (máx 5000 caracteres).', true); return; }
 
   // Response time tracking
@@ -798,7 +889,7 @@ async function saveSupplier() {
       try { await API.recordSupplierResponse(fields.name, responseHours); } catch(_) {}
     }
     // Silently merge categories/brands into global supplier profile
-    try { await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.email_cc || '', pendingSupplierCategories, pendingSupplierBrands); globalSuppliersList = await API.getGlobalSuppliers(); } catch(_) {}
+    try { await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.cc_emails || [], pendingSupplierCategories, pendingSupplierBrands); globalSuppliersList = await API.getGlobalSuppliers(); } catch(_) {}
     closeModal();
     suppliers = await API.getSuppliers(processId);
     renderSuppliers();

@@ -6,6 +6,7 @@ let pendingBrands = [];
 let selectedIds = new Set();
 let supplierStatsMap = {};
 let currentVisible = [];
+let _gsGetCc = () => [];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -224,13 +225,13 @@ function renderTable(list, q) {
       em.textContent = s.email;
       tdName.appendChild(em);
     }
-    if (s.email_cc) {
+    (s.cc_emails || []).forEach(cc => {
       const emc = document.createElement('div');
       emc.className = 'supp-email';
       emc.style.color = 'var(--muted)';
-      emc.textContent = 'cc: ' + s.email_cc;
+      emc.textContent = 'cc: ' + cc;
       tdName.appendChild(emc);
-    }
+    });
     const tdCats = document.createElement('td');
     const cats = s.categories || [];
     if (cats.length) {
@@ -357,6 +358,42 @@ function removeTag(type, idx) {
   else { pendingBrands.splice(idx, 1); renderTagBox('gsBrandBox', pendingBrands, 'brand', 'tag-chip-brand'); }
 }
 
+function _buildCcInput(initialValues) {
+  const vals = [...(initialValues || [])];
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 8px;min-height:36px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;cursor:text';
+  const inp = document.createElement('input');
+  inp.type = 'email'; inp.placeholder = vals.length ? '' : 'cc@fornecedor.com';
+  inp.style.cssText = 'border:none;background:transparent;outline:none;font-size:13px;color:var(--text);flex:1;min-width:130px;padding:2px 0';
+  function renderChips() {
+    while (wrap.firstChild && wrap.firstChild !== inp) wrap.removeChild(wrap.firstChild);
+    const frag = document.createDocumentFragment();
+    vals.forEach((v, i) => {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;color:var(--text);font-family:DM Mono,monospace';
+      chip.appendChild(document.createTextNode(v));
+      const x = document.createElement('span');
+      x.textContent = '×'; x.style.cssText = 'cursor:pointer;color:var(--muted);font-size:14px;line-height:1;padding-left:3px';
+      x.addEventListener('click', () => { vals.splice(i, 1); renderChips(); });
+      chip.appendChild(x); frag.appendChild(chip);
+    });
+    wrap.insertBefore(frag, inp);
+    inp.placeholder = vals.length ? '' : 'cc@fornecedor.com';
+  }
+  function tryAdd() {
+    const v = inp.value.trim().replace(/,$/,'');
+    if (!v) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { showToast('Email CC inválido.', true); return; }
+    if (!vals.includes(v)) { vals.push(v); renderChips(); }
+    inp.value = '';
+  }
+  inp.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===','||e.key==='Tab') { e.preventDefault(); tryAdd(); } });
+  inp.addEventListener('blur', tryAdd);
+  wrap.addEventListener('click', () => inp.focus());
+  wrap.appendChild(inp); renderChips();
+  return { el: wrap, getValues: () => [...vals] };
+}
+
 // ── Modal ──
 function openSupplierModal(id = null) {
   editingId = id;
@@ -371,8 +408,8 @@ function openSupplierModal(id = null) {
       '<div><label>Nome</label><input id="gs_name" value="" placeholder="Ex: Tech Solutions"></div>' +
       '<div><label>Email Principal</label><input id="gs_email" value="" placeholder="email@fornecedor.com"></div>' +
     '</div>' +
-    '<div class="form-row"><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label>' +
-      '<input id="gs_email_cc" value="" placeholder="cc@fornecedor.com"></div>' +
+    '<div class="form-row"><label>Email CC <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional — múltiplos)</span></label>' +
+      '<div id="gs_cc_mount"></div></div>' +
     '<div class="form-grid-2">' +
       '<div><label>Categorias <span style="font-size:11px;color:var(--muted);font-weight:400">(tipos de equipamento)</span></label>' +
         '<div class="tag-input-box" id="gsCatBox"></div></div>' +
@@ -394,8 +431,10 @@ function openSupplierModal(id = null) {
   const _gs = (elId, v) => { const el = document.getElementById(elId); if (el) el.value = v == null ? '' : String(v); };
   _gs('gs_name', s?.name || '');
   _gs('gs_email', s?.email || '');
-  _gs('gs_email_cc', s?.email_cc || '');
   _gs('gs_notes', s?.notes || '');
+  const { el: ccEl, getValues: getCcVals } = _buildCcInput(s?.cc_emails || []);
+  document.getElementById('gs_cc_mount')?.replaceChildren(ccEl);
+  _gsGetCc = getCcVals;
   const langEl = document.getElementById('gs_language'); if (langEl) langEl.value = s?.language || 'pt';
   renderTagBox('gsCatBox', pendingCats, 'cat', '');
   renderTagBox('gsBrandBox', pendingBrands, 'brand', 'tag-chip-brand');
@@ -404,16 +443,15 @@ function openSupplierModal(id = null) {
 async function saveSupplier() {
   const name = document.getElementById('gs_name').value.trim();
   const email = document.getElementById('gs_email').value.trim() || null;
-  const email_cc = document.getElementById('gs_email_cc').value.trim() || null;
+  const cc_emails = _gsGetCc();
   const notes = document.getElementById('gs_notes').value.trim() || null;
 
   if (!name) { showToast('Nome obrigat\u00f3rio.', true); return; }
   if (name.length > 200) { showToast('Nome demasiado longo.', true); return; }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Email inv\u00e1lido.', true); return; }
-  if (email_cc && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email_cc)) { showToast('Email CC inv\u00e1lido.', true); return; }
 
   const language = document.getElementById('gs_language')?.value || 'pt';
-  const fields = { name, email, email_cc, categories: pendingCats, brands: pendingBrands, notes, language };
+  const fields = { name, email, cc_emails: cc_emails.length ? cc_emails : null, categories: pendingCats, brands: pendingBrands, notes, language };
   try {
     if (editingId) {
       await API.updateGlobalSupplier(editingId, fields);
@@ -534,7 +572,7 @@ async function exportSupplierReport() {
     return [
       s.name || '',
       s.email || '',
-      s.email_cc || '',
+      (s.cc_emails || []).join(', '),
       (s.categories || []).join(', '),
       (s.brands || []).join(', '),
       st.processCount || 0,

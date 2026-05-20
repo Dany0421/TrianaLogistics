@@ -736,7 +736,7 @@ const API = {
   async getKnownSuppliers() {
     const { data, error } = await supabase
       .from('global_suppliers')
-      .select('name, email, email_cc, avg_response_hours, response_count')
+      .select('name, email, cc_emails, avg_response_hours, response_count')
       .order('name');
     if (error) throw _sanitizeError(error);
     return data || [];
@@ -790,11 +790,11 @@ const API = {
     return data?.[0] || null;
   },
 
-  async upsertGlobalSupplier(name, email, emailCc, categories, brands) {
+  async upsertGlobalSupplier(name, email, ccEmails, categories, brands) {
     const { error } = await supabase.rpc('upsert_global_supplier', {
       p_name: name,
       p_email: email || '',
-      p_email_cc: emailCc || '',
+      p_cc_emails: ccEmails || [],
       p_categories: categories || [],
       p_brands: brands || [],
     });
@@ -1047,20 +1047,45 @@ const API = {
     return data || [];
   },
 
-  async createSupplierContact(globalSupplierId, name, phone, notes) {
+  async getSupplierContactsWithEmail(globalSupplierId) {
     const { data, error } = await supabase
       .from('supplier_contacts')
-      .insert({ global_supplier_id: globalSupplierId, name, phone, notes: notes || null })
+      .select('*')
+      .eq('global_supplier_id', globalSupplierId)
+      .not('email', 'is', null)
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: true });
+    if (error) throw _sanitizeError(error);
+    return data || [];
+  },
+
+  async createSupplierContact(globalSupplierId, { name, phone, notes, email, cc_emails, categories, is_default }) {
+    const { data, error } = await supabase
+      .from('supplier_contacts')
+      .insert({
+        global_supplier_id: globalSupplierId, name,
+        phone: phone || null, notes: notes || null,
+        email: email || null,
+        cc_emails: cc_emails?.length ? cc_emails : null,
+        categories: categories?.length ? categories : null,
+        is_default: is_default || false,
+      })
       .select()
       .single();
     if (error) throw _sanitizeError(error);
     return data;
   },
 
-  async updateSupplierContact(id, name, phone, notes) {
+  async updateSupplierContact(id, { name, phone, notes, email, cc_emails, categories, is_default }) {
     const { error } = await supabase
       .from('supplier_contacts')
-      .update({ name, phone, notes: notes || null })
+      .update({
+        name, phone: phone || null, notes: notes || null,
+        email: email || null,
+        cc_emails: cc_emails?.length ? cc_emails : null,
+        categories: categories?.length ? categories : null,
+        is_default: is_default || false,
+      })
       .eq('id', id);
     if (error) throw _sanitizeError(error);
   },

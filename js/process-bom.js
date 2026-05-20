@@ -416,7 +416,7 @@ function buildBomSuggestionsStep() {
         process_id: processId,
         name: gs.name,
         email: gs.email || null,
-        email_cc: gs.email_cc || null,
+        cc_emails: gs.cc_emails || [],
         status: 'Not contacted',
         is_foreign: false,
       });
