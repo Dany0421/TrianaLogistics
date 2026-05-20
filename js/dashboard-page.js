@@ -460,7 +460,7 @@ function renderMarginAlerts(data) {
   iconEl.setAttribute('data-lucide', 'clock');
   iconEl.style.cssText = 'width:13px;height:13px;vertical-align:middle;margin-right:5px';
   title.appendChild(iconEl);
-  title.appendChild(document.createTextNode('Margin pendente — follow-up '));
+  title.appendChild(document.createTextNode('Awaiting ETA — follow-up '));
   const cnt = document.createElement('span');
   cnt.className = 'margin-alert-count';
   cnt.textContent = String(data.length);
@@ -958,9 +958,9 @@ async function saveProcess() {
     }
     fields.priority = null;
   }
-  if (fields.status === 'Pending margin') {
+  if (fields.status === 'Awaiting ETA') {
     const prev = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
-    if (!prev || prev.status !== 'Pending margin') fields.last_margin_followup_at = new Date().toISOString();
+    if (!prev || prev.status !== 'Awaiting ETA') fields.last_margin_followup_at = new Date().toISOString();
   }
 
   if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto s\u00e3o obrigat\u00f3rios.', true); return; }

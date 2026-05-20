@@ -922,14 +922,14 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
-  // ── Pending Margin Alerts ──
+  // ── Awaiting ETA Alerts ──
   async getPendingMarginAlerts() {
     const _d = new Date(); _d.setHours(0, 0, 0, 0);
     const cutoff = _d.toISOString();
     const { data, error } = await supabase
       .from('processes')
       .select('id, project_name, client_name, last_margin_followup_at')
-      .eq('status', 'Pending margin')
+      .eq('status', 'Awaiting ETA')
       .or(`last_margin_followup_at.is.null,last_margin_followup_at.lt.${cutoff}`)
       .order('last_margin_followup_at', { ascending: true, nullsFirst: true });
     if (error) throw _sanitizeError(error);
