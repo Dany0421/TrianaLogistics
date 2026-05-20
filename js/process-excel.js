@@ -225,6 +225,7 @@ async function generateExcel() {
   // Build supplier items AND ordered row list (BOM order) in one pass
   const supplierItems = {};       // supplierId → items array for buildSupSheet
   const supplierCounters = {};    // supplierId → how many items added so far
+  const seenQI = {};              // supplierId → Map<qi.id, indexInSupplier>
   const allRows = [];             // flat list in BOM order: equip + service interleaved
   const skippedItems = [];
   let hasServices = false;
@@ -256,8 +257,10 @@ async function generateExcel() {
 
     if (!suppId || !qi) { skippedItems.push(bi.description || bi.part_number || '?'); continue; }
 
-    if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; }
+    if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; seenQI[suppId] = new Map(); }
+    if (seenQI[suppId].has(qi.id)) continue;
     const indexInSupplier = supplierCounters[suppId]++;
+    seenQI[suppId].set(qi.id, indexInSupplier);
     const modelDesc = bi.custom_description || (descSource === 'bom' ? bi.description : (qi.raw_description || bi.description));
     supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(qi.quantity || bi.quantity), price: String((qi.price || 0) * (1 - ((qi.discount || 0) / 100))) });
     allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: qi.quantity || bi.quantity, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
