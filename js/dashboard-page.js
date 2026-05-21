@@ -531,7 +531,7 @@ function renderStats() {
   const active   = allProcesses.filter(p => p.status !== 'Closed' && p.status !== 'Cancelled').length;
   const waiting  = allProcesses.filter(p => p.status === 'Waiting for suppliers' || p.status === 'Waiting for internal info').length;
   const ready    = allProcesses.filter(p => p.status === 'Ready for Excel').length;
-  const urgent   = allProcesses.filter(p => p.priority === 'Urgent').length;
+  const urgent   = allProcesses.filter(p => p.priority === 'Urgent' && p.status !== 'Closed' && p.status !== 'Cancelled').length;
 
   const statsGrid = document.getElementById('statsGrid');
   statsGrid.replaceChildren();
