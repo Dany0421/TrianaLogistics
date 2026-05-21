@@ -958,6 +958,8 @@ async function saveProcess() {
     }
     fields.priority = null;
   }
+  const prevProc = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
+  if ((prevProc?.status === 'Closed' || prevProc?.status === 'Cancelled') && fields.status !== 'Closed' && fields.status !== 'Cancelled' && !fields.priority) fields.priority = 'Low';
   if (fields.status === 'Awaiting ETA') {
     const prev = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
     if (!prev || prev.status !== 'Awaiting ETA') fields.last_margin_followup_at = new Date().toISOString();

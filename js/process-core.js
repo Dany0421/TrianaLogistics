@@ -425,6 +425,7 @@ async function saveEditProcess() {
   }
   if (fields.status === 'Closed' && process.status !== 'Closed') fields.closed_at = new Date().toISOString();
   if (fields.status === 'Closed' || fields.status === 'Cancelled') fields.priority = null;
+  if ((process.status === 'Closed' || process.status === 'Cancelled') && fields.status !== 'Closed' && fields.status !== 'Cancelled' && !fields.priority) fields.priority = 'Low';
   if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto são obrigatórios.', true); return; }
   if (fields.client_name.length > 200 || fields.project_name.length > 200) { showToast('Nome demasiado longo (máx 200 caracteres).', true); return; }
   if (fields.notes && fields.notes.length > 5000) { showToast('Notas demasiado longas (máx 5000 caracteres).', true); return; }
