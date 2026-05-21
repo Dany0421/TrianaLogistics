@@ -331,7 +331,7 @@ async function openRFQModal(supplierIdx) {
 
   const titleRow = document.createElement('div'); titleRow.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:4px';
   const title = document.createElement('div'); title.className = 'modal-title'; title.style.marginBottom = '0'; title.textContent = s.name; titleRow.appendChild(title);
-  const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;flex:1"; emailSpan.textContent = s.email; titleRow.appendChild(emailSpan);
+  const emailSpan = document.createElement('div'); emailSpan.style.cssText = "font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;flex:1"; emailSpan.textContent = _gsForLang?.email || s.email; titleRow.appendChild(emailSpan);
   const langWrap = document.createElement('div'); langWrap.style.cssText = 'display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden;flex-shrink:0';
   ['pt','en'].forEach(lang => {
     const btn = document.createElement('button'); btn.type = 'button'; btn.dataset.lang = lang;
@@ -619,8 +619,8 @@ async function sendRFQ(supplierIdx) {
       ? 'Request for Quotation - ' + process.project_name
       : 'Pedido de Cotacao - ' + process.project_name;
     const html = buildRFQHtml(selected, lang);
-    const toEmail = _rfqSelectedContact?.email || s.email;
-    const ccArr = _rfqSelectedContact ? (_rfqSelectedContact.cc_emails || []) : (s.cc_emails || []);
+    const toEmail = _rfqSelectedContact?.email || _gsForLang?.email || s.email;
+    const ccArr = _rfqSelectedContact ? (_rfqSelectedContact.cc_emails || []) : (_gsForLang?.cc_emails || s.cc_emails || []);
     const ccEmails = ['procurement@triana.co.mz', ...ccArr].map(encodeURIComponent).join(',');
     const mailto = 'mailto:' + encodeURIComponent(toEmail) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
