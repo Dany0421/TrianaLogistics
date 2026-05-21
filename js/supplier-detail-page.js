@@ -589,7 +589,7 @@ function _openContactModal(globalSupplierId, existing, list, onSave) {
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Email inválido.', true); return; }
     const payload = {
       name,
-      phone: phoneInp.value.trim() || null,
+      phone: phoneInp.value.trim() || '',
       notes: notesInp.value.trim() || null,
       email,
       cc_emails: getCcVals(),

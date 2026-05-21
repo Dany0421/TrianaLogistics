@@ -1064,7 +1064,7 @@ const API = {
       .from('supplier_contacts')
       .insert({
         global_supplier_id: globalSupplierId, name,
-        phone: phone || null, notes: notes || null,
+        phone: phone || '', notes: notes || null,
         email: email || null,
         cc_emails: cc_emails?.length ? cc_emails : null,
         categories: categories?.length ? categories : null,
@@ -1080,7 +1080,7 @@ const API = {
     const { error } = await supabase
       .from('supplier_contacts')
       .update({
-        name, phone: phone || null, notes: notes || null,
+        name, phone: phone || '', notes: notes || null,
         email: email || null,
         cc_emails: cc_emails?.length ? cc_emails : null,
         categories: categories?.length ? categories : null,
