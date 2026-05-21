@@ -553,7 +553,7 @@ function renderStats() {
   }
   addStatCard(() => { setFilter(''); setFilterPriority(''); }, total, 'Total', '', '');
   addStatCard(() => { setFilter(''); setFilterPriority(''); }, active, 'Em aberto', 'color:var(--accent)', '');
-  addStatCard(() => setFilter('Waiting for internal info'), waiting, 'A aguardar', 'color:#4fc3f7', '');
+  addStatCard(() => setFilter('Waiting for suppliers'), waiting, 'A aguardar', 'color:#4fc3f7', '');
   addStatCard(() => setFilter('Ready for Excel'), ready, 'Prontos Excel', 'color:var(--accent)', '');
   addStatCard(() => setFilterPriority('Urgent'), urgent, 'Urgentes', 'color:var(--danger)', '');
   addStatCard(
