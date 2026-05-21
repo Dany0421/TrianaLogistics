@@ -222,6 +222,13 @@ async function generateExcel() {
     matchLookup[m.bom_item_id][m.supplier_id] = m;
   }
 
+  // Build extra items lookup: matchId → extra[] (split lines)
+  const extraByMatchId = {};
+  for (const e of matchExtraItems) {
+    if (!extraByMatchId[e.item_match_id]) extraByMatchId[e.item_match_id] = [];
+    extraByMatchId[e.item_match_id].push(e);
+  }
+
   // Build supplier items AND ordered row list (BOM order) in one pass
   const supplierItems = {};       // supplierId → items array for buildSupSheet
   const supplierCounters = {};    // supplierId → how many items added so far
@@ -249,7 +256,9 @@ async function generateExcel() {
         let bestPrice = Infinity;
         for (const [sid, m] of Object.entries(itemMatches)) {
           const q = (quotationMap[sid] || []).find(q => q.id === m.quotation_item_id);
-          const effP = q ? (q.price || 0) * (1 - ((q.discount || 0) / 100)) : null;
+          const extras = extraByMatchId[m.id] || [];
+          const extraSum = extras.reduce((s, e) => s + ((e.quotation_items?.price || 0) * (1 - ((e.quotation_items?.discount || 0) / 100))), 0);
+          const effP = q ? (q.price || 0) * (1 - ((q.discount || 0) / 100)) + extraSum : null;
           if (effP != null && effP < bestPrice) { bestPrice = effP; suppId = sid; qi = q; }
         }
       }
@@ -257,12 +266,20 @@ async function generateExcel() {
 
     if (!suppId || !qi) { skippedItems.push(bi.description || bi.part_number || '?'); continue; }
 
+    const matchId = matchLookup[bi.id]?.[suppId]?.id;
+    const extras = extraByMatchId[matchId] || [];
+    const primaryPrice = (qi.price || 0) * (1 - ((qi.discount || 0) / 100));
+    const extraSum = extras.reduce((s, e) => s + ((e.quotation_items?.price || 0) * (1 - ((e.quotation_items?.discount || 0) / 100))), 0);
+    const totalPrice = primaryPrice + extraSum;
+    const primaryDesc = bi.custom_description || (descSource === 'bom' ? bi.description : (qi.raw_description || bi.description));
+    const extraDescs = !bi.custom_description ? extras.map(e => e.quotation_items?.raw_description || '').filter(Boolean) : [];
+    const modelDesc = extraDescs.length ? [primaryDesc, ...extraDescs].join(' + ') : primaryDesc;
+
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; seenQI[suppId] = new Map(); }
     if (seenQI[suppId].has(qi.id)) continue;
     const indexInSupplier = supplierCounters[suppId]++;
     seenQI[suppId].set(qi.id, indexInSupplier);
-    const modelDesc = bi.custom_description || (descSource === 'bom' ? bi.description : (qi.raw_description || bi.description));
-    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(qi.quantity || bi.quantity), price: String((qi.price || 0) * (1 - ((qi.discount || 0) / 100))) });
+    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(qi.quantity || bi.quantity), price: String(totalPrice) });
     allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: qi.quantity || bi.quantity, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }
 
