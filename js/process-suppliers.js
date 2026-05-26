@@ -6,6 +6,7 @@ let pendingSupplierBrands = [];
 let rfqLang = 'pt';
 let _sfGetCc = () => [];
 let _rfqSelectedContact = null;
+let _gsForLang = null;
 /** Aligned with chk_quot_description_length (must not reuse api.js const name — global scope / concat builds) */
 const MAX_QUOTATION_LINE_DESC = 2000;
 
@@ -314,7 +315,7 @@ async function openRFQModal(supplierIdx) {
   _rfqBomSort(comPreco).forEach((v, i) => comPreco[i] = v);
 
   // Language toggle — language lives on global_suppliers, not process suppliers
-  const _gsForLang = globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase());
+  _gsForLang = globalSuppliersList.find(g => g.name.trim().toLowerCase() === s.name.trim().toLowerCase()) || null;
   rfqLang = _gsForLang?.language || 'pt';
 
   // Load contacts with email (best-effort)
