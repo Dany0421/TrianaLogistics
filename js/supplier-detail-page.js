@@ -471,6 +471,12 @@ function _buildContactsSection(gs, contacts) {
         emailEl.textContent = c.email;
         card.appendChild(emailEl);
       }
+      if ((c.to_emails || []).length) {
+        const toEl = document.createElement('div');
+        toEl.style.cssText = "font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px";
+        toEl.textContent = 'to+: ' + c.to_emails.join(', ');
+        card.appendChild(toEl);
+      }
       if ((c.cc_emails || []).length) {
         const ccEl = document.createElement('div');
         ccEl.style.cssText = "font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px";
@@ -560,6 +566,9 @@ function _openContactModal(globalSupplierId, existing, list, onSave) {
   if (existing) emailInp.value = existing.email || '';
   modal.appendChild(mkField('Email', emailInp));
 
+  const { el: toExtraEl, getValues: getToVals } = _buildCcInput(existing?.to_emails || []);
+  modal.appendChild(mkField('Email To adicional (múltiplos)', toExtraEl));
+
   const { el: ccEl, getValues: getCcVals } = _buildCcInput(existing?.cc_emails || []);
   modal.appendChild(mkField('Email CC (múltiplos)', ccEl));
 
@@ -592,6 +601,7 @@ function _openContactModal(globalSupplierId, existing, list, onSave) {
       phone: phoneInp.value.trim() || '',
       notes: notesInp.value.trim() || null,
       email,
+      to_emails: getToVals(),
       cc_emails: getCcVals(),
       categories: getCatVals(),
       is_default: defaultCb.checked,

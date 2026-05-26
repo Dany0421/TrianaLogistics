@@ -1059,13 +1059,14 @@ const API = {
     return data || [];
   },
 
-  async createSupplierContact(globalSupplierId, { name, phone, notes, email, cc_emails, categories, is_default }) {
+  async createSupplierContact(globalSupplierId, { name, phone, notes, email, to_emails, cc_emails, categories, is_default }) {
     const { data, error } = await supabase
       .from('supplier_contacts')
       .insert({
         global_supplier_id: globalSupplierId, name,
         phone: phone || '', notes: notes || null,
         email: email || null,
+        to_emails: to_emails?.length ? to_emails : null,
         cc_emails: cc_emails?.length ? cc_emails : null,
         categories: categories?.length ? categories : null,
         is_default: is_default || false,
@@ -1076,12 +1077,13 @@ const API = {
     return data;
   },
 
-  async updateSupplierContact(id, { name, phone, notes, email, cc_emails, categories, is_default }) {
+  async updateSupplierContact(id, { name, phone, notes, email, to_emails, cc_emails, categories, is_default }) {
     const { error } = await supabase
       .from('supplier_contacts')
       .update({
         name, phone: phone || '', notes: notes || null,
         email: email || null,
+        to_emails: to_emails?.length ? to_emails : null,
         cc_emails: cc_emails?.length ? cc_emails : null,
         categories: categories?.length ? categories : null,
         is_default: is_default || false,

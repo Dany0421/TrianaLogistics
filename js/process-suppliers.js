@@ -620,10 +620,12 @@ async function sendRFQ(supplierIdx) {
       ? 'Request for Quotation - ' + process.project_name
       : 'Pedido de Cotacao - ' + process.project_name;
     const html = buildRFQHtml(selected, lang);
-    const toEmail = _rfqSelectedContact?.email || _gsForLang?.email || s.email;
+    const primaryEmail = _rfqSelectedContact?.email || _gsForLang?.email || s.email;
+    const extraTo = _rfqSelectedContact?.to_emails || [];
+    const allTo = [primaryEmail, ...extraTo].filter(Boolean).map(encodeURIComponent).join(',');
     const ccArr = _rfqSelectedContact ? (_rfqSelectedContact.cc_emails || []) : (_gsForLang?.cc_emails || s.cc_emails || []);
     const ccEmails = ['procurement@triana.co.mz', ...ccArr].map(encodeURIComponent).join(',');
-    const mailto = 'mailto:' + encodeURIComponent(toEmail) + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
+    const mailto = 'mailto:' + allTo + '?cc=' + ccEmails + '&subject=' + encodeURIComponent(subject);
 
     const clipPending = _copyRfqClipboardApiPromise(html);
     let copied = _copyRfqRichSync(html);
