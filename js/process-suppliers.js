@@ -838,7 +838,8 @@ function openSupplierModal(idx = null, prefill = {}) {
   el.querySelector('#sf_save').addEventListener('click', saveSupplier);
 
   showModal(el);
-  const { el: sfCcEl, getValues: sfCcVals } = _buildCcInput(s?.cc_emails || gs?.cc_emails || prefill.cc_emails || []);
+  const initCc = s?.cc_emails?.length ? s.cc_emails : gs?.cc_emails?.length ? gs.cc_emails : (prefill.cc_emails || []);
+  const { el: sfCcEl, getValues: sfCcVals } = _buildCcInput(initCc);
   _sfGetCc = sfCcVals;
   document.getElementById('sf_cc_mount')?.replaceWith(sfCcEl);
   renderTagBox('sfCatBox', pendingSupplierCategories, 'cat');
