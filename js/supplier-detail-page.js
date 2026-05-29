@@ -439,13 +439,24 @@ function _buildContactsSection(gs, contacts) {
   const grid = document.createElement('div'); grid.className = 'contacts-grid';
   sec.appendChild(grid);
 
+  function _makeGroupLabel(text) {
+    const lbl = document.createElement('div');
+    lbl.style.cssText = "font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;padding:4px 0 8px;width:100%";
+    lbl.textContent = text;
+    return lbl;
+  }
+
   function renderCards(list) {
     while (grid.firstChild) grid.removeChild(grid.firstChild);
     if (!list.length) {
       const em = document.createElement('div'); em.className = 'empty-msg';
       em.textContent = 'Sem contactos registados.'; grid.appendChild(em); return;
     }
-    list.forEach(c => {
+    const withEmail = list.filter(c => c.email);
+    const phoneOnly = list.filter(c => !c.email);
+    const showLabels = withEmail.length > 0 && phoneOnly.length > 0;
+    if (showLabels) grid.appendChild(_makeGroupLabel('RFQ / Email'));
+    const renderGroup = (group) => group.forEach(c => {
       const card = document.createElement('div'); card.className = 'contact-card';
 
       const nameRow = document.createElement('div'); nameRow.style.cssText = 'display:flex;align-items:center;gap:6px';
@@ -521,6 +532,9 @@ function _buildContactsSection(gs, contacts) {
       card.appendChild(actions);
       grid.appendChild(card);
     });
+    renderGroup(withEmail);
+    if (showLabels) grid.appendChild(_makeGroupLabel('Telefone'));
+    renderGroup(phoneOnly);
     if (window.lucide) lucide.createIcons();
   }
 
