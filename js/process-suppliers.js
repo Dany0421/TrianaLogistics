@@ -820,9 +820,9 @@ function openSupplierModal(idx = null, prefill = {}) {
   const sfStatuses = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'];
   sfStatuses.forEach(v => { const opt = document.createElement('option'); opt.value = v; opt.textContent = v; if ((s?.status || 'Not contacted') === v) opt.selected = true; statusSel.appendChild(opt); });
 
-  // Foreign checkbox
+  // Foreign checkbox — pre-fill from process supplier OR global supplier profile
   const foreignCb = el.querySelector('#sf_foreign');
-  if (s?.is_foreign) foreignCb.checked = true;
+  if (s?.is_foreign || gs?.is_foreign) foreignCb.checked = true;
   foreignCb.addEventListener('change', function() { toggleForeignBox(this.checked); });
 
   // Input values
@@ -893,7 +893,14 @@ async function saveSupplier() {
       try { await API.recordSupplierResponse(fields.name, responseHours); } catch(_) {}
     }
     // Silently merge categories/brands into global supplier profile
-    try { await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.cc_emails || [], pendingSupplierCategories, pendingSupplierBrands); globalSuppliersList = await API.getGlobalSuppliers(); } catch(_) {}
+    try {
+      await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.cc_emails || [], pendingSupplierCategories, pendingSupplierBrands);
+      globalSuppliersList = await API.getGlobalSuppliers();
+      if (fields.is_foreign) {
+        const _gsSync = globalSuppliersList.find(g => g.name.trim().toLowerCase() === fields.name.trim().toLowerCase());
+        if (_gsSync?.id) { await API.updateGlobalSupplier(_gsSync.id, { is_foreign: true }); _gsSync.is_foreign = true; }
+      }
+    } catch(_) {}
     closeModal();
     suppliers = await API.getSuppliers(processId);
     renderSuppliers();
@@ -1232,12 +1239,20 @@ function openQuotationValModal(fileName, rawPdfText) {
   ratesBlock.appendChild(_makeRateField('qf_cambio', 'Câmbio (MZN)', '64.00'));
   ratesBlock.appendChild(_makeRateField('qf_transport', 'Transporte (MZN)', '1500.00'));
   ratesBlock.appendChild(_makeRateField('qf_direitos', 'Direitos (%)', '7.5'));
+  const _qfForeignLbl = document.createElement('label');
+  _qfForeignLbl.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;margin:0';
+  const _qfForeignCb = document.createElement('input'); _qfForeignCb.type = 'checkbox'; _qfForeignCb.id = 'qf_foreign'; _qfForeignCb.style.cssText = 'width:auto';
+  _qfForeignLbl.appendChild(_qfForeignCb);
+  _qfForeignLbl.appendChild(document.createTextNode('Estrangeiro (+5%)'));
+  ratesBlock.appendChild(_qfForeignLbl);
   el.appendChild(ratesBlock);
   // Pre-populate with existing supplier values (el not in DOM yet — use el.querySelector)
   const _setRate = (id, v) => { const inp = el.querySelector('#' + id); if (inp && v) inp.value = v; };
   _setRate('qf_cambio', s?.cambio);
   _setRate('qf_transport', s?.transport);
   _setRate('qf_direitos', s?.direitos);
+  const _gsQ = globalSuppliersList.find(g => g.name.trim().toLowerCase() === s?.name?.trim().toLowerCase());
+  if (s?.is_foreign || _gsQ?.is_foreign) _qfForeignCb.checked = true;
 
   // Table (static thead, dynamic tbody populated by renderQuotValTable)
   const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
@@ -1492,13 +1507,20 @@ async function confirmQuotation() {
     // Save or clear exchange rates on the supplier record
     const hasNonMzn = valid.some(i => i.currency && i.currency !== 'MZN');
     const rateFields = hasNonMzn ? {
-      cambio:    parseFloat(document.getElementById('qf_cambio')?.value) || null,
-      transport: parseFloat(document.getElementById('qf_transport')?.value) || null,
-      direitos:  parseFloat(document.getElementById('qf_direitos')?.value) || 0,
+      cambio:     parseFloat(document.getElementById('qf_cambio')?.value) || null,
+      transport:  parseFloat(document.getElementById('qf_transport')?.value) || null,
+      direitos:   parseFloat(document.getElementById('qf_direitos')?.value) || 0,
+      is_foreign: document.getElementById('qf_foreign')?.checked || false,
     } : { cambio: null, transport: null, direitos: 0 };
     await API.updateSupplier(currentQuotSuppId, rateFields);
     const suppIdx = suppliers.findIndex(s => s.id === currentQuotSuppId);
     if (suppIdx !== -1) Object.assign(suppliers[suppIdx], rateFields);
+    // Sync is_foreign to global supplier profile when set
+    if (rateFields.is_foreign) {
+      const _suppName = suppliers.find(s => s.id === currentQuotSuppId)?.name;
+      const _gsSync = globalSuppliersList.find(g => g.name.trim().toLowerCase() === _suppName?.trim().toLowerCase());
+      if (_gsSync?.id) { try { await API.updateGlobalSupplier(_gsSync.id, { is_foreign: true }); _gsSync.is_foreign = true; } catch(_) {} }
+    }
 
     if (pendingQuotFile) {
       const ext = pendingQuotFile.name.split('.').pop();
