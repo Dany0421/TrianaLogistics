@@ -650,39 +650,36 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
               span.appendChild(rawDiv);
             }
           }
-          // 2. Incluído em
-          const inclItems = includedByLookup[bi.id + '_' + s.id] || [];
-          for (const im of inclItems) {
-            const inclBi = bomItems.find(b => b.id === im.bom_item_id);
-            if (!inclBi) continue;
-            const inclText = inclBi.description || '?';
-            const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px';
-            d.textContent = '+ ' + (showSupplierDescs ? '' : inclText);
-            if (showSupplierDescs) {
+          // 2. Incluído em + 3. Dividir em linhas — só visíveis com "Mostrar descrições" ativo
+          if (showSupplierDescs) {
+            const inclItems = includedByLookup[bi.id + '_' + s.id] || [];
+            for (const im of inclItems) {
+              const inclBi = bomItems.find(b => b.id === im.bom_item_id);
+              if (!inclBi) continue;
+              const inclText = inclBi.description || '?';
+              const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px';
+              d.textContent = '+ ';
               const inclDiv = document.createElement('div');
               inclDiv.className = 'comp-raw-desc';
               inclDiv.textContent = inclText;
               inclDiv.title = 'Clicar para expandir/colapsar';
               inclDiv.addEventListener('click', ev => { ev.stopPropagation(); inclDiv.classList.toggle('expanded'); });
               d.appendChild(inclDiv);
+              span.appendChild(d);
             }
-            span.appendChild(d);
-          }
-          // 3. Dividir em linhas
-          const extraLines2 = extraByMatchId[m?.id] || [];
-          for (const exl of extraLines2) {
-            const exlText = (exl.quotation_items?.raw_description || '?');
-            const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px';
-            d.textContent = '+ ' + (showSupplierDescs ? '' : exlText);
-            if (showSupplierDescs) {
+            const extraLines2 = extraByMatchId[m?.id] || [];
+            for (const exl of extraLines2) {
+              const exlText = (exl.quotation_items?.raw_description || '?');
+              const d = document.createElement('div'); d.style.cssText = 'font-size:9px;color:var(--muted);margin-top:2px';
+              d.textContent = '+ ';
               const exlDiv = document.createElement('div');
               exlDiv.className = 'comp-raw-desc';
               exlDiv.textContent = exlText;
               exlDiv.title = 'Clicar para expandir/colapsar';
               exlDiv.addEventListener('click', ev => { ev.stopPropagation(); exlDiv.classList.toggle('expanded'); });
               d.appendChild(exlDiv);
+              span.appendChild(d);
             }
-            span.appendChild(d);
           }
         } else {
           span.className = 'comp-cell comp-cell-none'; span.textContent = '—';
