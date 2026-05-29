@@ -229,6 +229,20 @@ async function generateExcel() {
     extraByMatchId[e.item_match_id].push(e);
   }
 
+  // Pre-compute suppTotalG per supplier (needed for DDP transport allocation)
+  const suppTotalG = {};
+  for (const m of matches) {
+    if (m.match_type === 'included_in') continue;
+    const s = suppliers.find(x => x.id === m.supplier_id);
+    if (!s) continue;
+    const q = (quotationMap[m.supplier_id] || []).find(q => q.id === m.quotation_item_id);
+    const extras = extraByMatchId[m.id] || [];
+    const p = effPrice(q, extras);
+    if (p == null) continue;
+    const bi = bomItems.find(b => b.id === m.bom_item_id);
+    suppTotalG[s.id] = (suppTotalG[s.id] || 0) + p * (bi?.quantity || 1);
+  }
+
   // Build supplier items AND ordered row list (BOM order) in one pass
   const supplierItems = {};       // supplierId → items array for buildSupSheet
   const supplierCounters = {};    // supplierId → how many items added so far
@@ -253,13 +267,15 @@ async function generateExcel() {
     } else {
       const itemMatches = matchLookup[bi.id];
       if (itemMatches) {
-        let bestPrice = Infinity;
+        let bestDDP = Infinity;
         for (const [sid, m] of Object.entries(itemMatches)) {
+          if (m.match_type === 'included_in') continue;
           const q = (quotationMap[sid] || []).find(q => q.id === m.quotation_item_id);
           const extras = extraByMatchId[m.id] || [];
-          const extraSum = extras.reduce((s, e) => s + ((e.quotation_items?.price || 0) * (1 - ((e.quotation_items?.discount || 0) / 100))), 0);
-          const effP = q ? (q.price || 0) * (1 - ((q.discount || 0) / 100)) + extraSum : null;
-          if (effP != null && effP < bestPrice) { bestPrice = effP; suppId = sid; qi = q; }
+          const p = effPrice(q, extras);
+          const s = suppliers.find(x => x.id === sid);
+          const ddp = (p != null && s) ? _ddpMZN(p, q?.currency, s, suppTotalG) : null;
+          if (ddp != null && ddp < bestDDP) { bestDDP = ddp; suppId = sid; qi = q; }
         }
       }
     }
