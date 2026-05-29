@@ -572,18 +572,20 @@ function renderUserStats() {
   if (section) section.style.display = 'none'; return; // HIDDEN temporariamente
   if (!section || !hasRole('admin') || !statNames.length) { if (section) section.style.display = 'none'; return; }
 
+  const _procDoneStatuses = new Set(['Ready for Excel','Pending margin','Awaiting ETA','Awaiting approval','Closed','Cancelled']);
   const openByUser = {};
   for (const p of allProcesses) {
     const name = p.procurement_name || p.assignee?.name;
-    if (!name || p.status === 'Closed' || p.status === 'Cancelled') continue;
+    if (!name || _procDoneStatuses.has(p.status)) continue;
     openByUser[name] = (openByUser[name] || 0) + 1;
   }
 
   const avgByUser = {};
   for (const p of allProcesses) {
     const name = p.procurement_name || p.assignee?.name;
-    if (p.status !== 'Closed' || !p.closed_at || !name) continue;
-    const hours = (new Date(p.closed_at) - new Date(p.created_at)) / 3600000;
+    const endDate = p.ready_for_excel_at || (p.status === 'Closed' ? p.closed_at : null);
+    if (!endDate || !name) continue;
+    const hours = (new Date(endDate) - new Date(p.created_at)) / 3600000;
     if (hours < 0 || hours > 730 * 24) continue;
     if (!avgByUser[name]) avgByUser[name] = [];
     avgByUser[name].push(hours);
@@ -959,6 +961,10 @@ async function saveProcess() {
       if (!prev || prev.status !== 'Closed') fields.closed_at = new Date().toISOString();
     }
     fields.priority = null;
+  }
+  if (fields.status === 'Ready for Excel') {
+    const prev = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
+    if ((!prev || prev.status !== 'Ready for Excel') && !prev?.ready_for_excel_at) fields.ready_for_excel_at = new Date().toISOString();
   }
   const prevProc = editingProcessId ? allProcesses.find(x => x.id === editingProcessId) : null;
   if ((prevProc?.status === 'Closed' || prevProc?.status === 'Cancelled') && fields.status !== 'Closed' && fields.status !== 'Cancelled' && !fields.priority) fields.priority = 'Low';

@@ -424,6 +424,7 @@ async function saveEditProcess() {
     fields.status_color = null;
   }
   if (fields.status === 'Closed' && process.status !== 'Closed') fields.closed_at = new Date().toISOString();
+  if (fields.status === 'Ready for Excel' && process.status !== 'Ready for Excel' && !process.ready_for_excel_at) fields.ready_for_excel_at = new Date().toISOString();
   if (fields.status === 'Closed' || fields.status === 'Cancelled') fields.priority = null;
   if ((process.status === 'Closed' || process.status === 'Cancelled') && fields.status !== 'Closed' && fields.status !== 'Cancelled' && !fields.priority) fields.priority = 'Low';
   if (!fields.client_name || !fields.project_name) { showToast('Cliente e Projeto são obrigatórios.', true); return; }
