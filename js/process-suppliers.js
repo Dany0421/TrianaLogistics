@@ -1461,7 +1461,7 @@ function renderQuotValTable() {
     tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdEta); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
-  if (_scrollBox) requestAnimationFrame(() => { _scrollBox.scrollTop = _savedScroll; });
+  if (_scrollBox) { _scrollBox.scrollTop = _savedScroll; requestAnimationFrame(() => { _scrollBox.scrollTop = _savedScroll; }); }
 }
 
 function addQuotRow() {
