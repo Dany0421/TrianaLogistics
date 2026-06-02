@@ -1367,6 +1367,7 @@ function renderQuotValTable() {
       pendingQuotItems[i].discount = d;
       pendingQuotItems[i]._discountManual = true;
       const entered = pendingQuotItems[i]._enteredPrice ?? pendingQuotItems[i].price;
+      pendingQuotItems[i]._enteredPrice = entered;
       pendingQuotItems[i].price = d > 0 && d < 100
         ? Math.round((entered / (1 - d / 100)) * 100) / 100
         : entered;
@@ -1379,6 +1380,11 @@ function renderQuotValTable() {
     const inPrice = document.createElement('input');
     const _displayPrice = item._enteredPrice != null ? item._enteredPrice : item.price;
     inPrice.type = 'text'; inPrice.value = _displayPrice > 0 ? fmtPrice(_displayPrice) : ''; inPrice.style.width = '80px';
+    inDisc.oninput = function() {
+      const d = parseFloat(this.value) || 0;
+      const entered = pendingQuotItems[i]._enteredPrice ?? pendingQuotItems[i].price;
+      inPrice.value = fmtPrice(entered);
+    };
     inPrice.oninput = function() { /* allow formatted input — parseNum handles it on change */ };
     inPrice.onchange = function() {
       const entered = parseNum(this.value) || 0;
