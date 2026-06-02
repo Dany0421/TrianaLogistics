@@ -187,19 +187,48 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
   });
 }
 
-function _askDescSource() {
+function _askExcelOptions() {
   return new Promise(resolve => {
     const el = document.createElement('div');
-    const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = 'Descrição no Excel'; el.appendChild(title);
-    const sub = document.createElement('div'); sub.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:20px'; sub.textContent = 'Qual descrição usar para os itens?'; el.appendChild(sub);
+    const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = 'Opções do Excel'; el.appendChild(title);
+
+    function makeRow(label, opts) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px';
+      const lbl = document.createElement('span');
+      lbl.style.cssText = 'font-size:12px;color:var(--muted);width:90px;flex-shrink:0';
+      lbl.textContent = label;
+      row.appendChild(lbl);
+      const btns = [];
+      opts.forEach(({ text, value, primary }) => {
+        const btn = document.createElement('button');
+        btn.className = primary ? 'btn btn-primary' : 'btn btn-ghost';
+        btn.style.cssText = 'font-size:12px;padding:4px 12px';
+        btn.textContent = text;
+        btn.dataset.value = value;
+        btn.addEventListener('click', () => {
+          btns.forEach(b => { b.className = 'btn btn-ghost'; b.style.cssText = 'font-size:12px;padding:4px 12px'; });
+          btn.className = 'btn btn-primary'; btn.style.cssText = 'font-size:12px;padding:4px 12px';
+          row.dataset.selected = value;
+        });
+        row.dataset.selected = primary ? value : row.dataset.selected;
+        btns.push(btn);
+        row.appendChild(btn);
+      });
+      return row;
+    }
+
+    const descRow = makeRow('Descrição:', [{ text: 'Cotação', value: 'quotation', primary: true }, { text: 'BOM', value: 'bom' }]);
+    const qtyRow  = makeRow('Quantidade:', [{ text: 'Cotação', value: 'quotation', primary: true }, { text: 'BOM', value: 'bom' }]);
+    el.appendChild(descRow);
+    el.appendChild(qtyRow);
+
     const actions = document.createElement('div'); actions.className = 'modal-actions';
-    const btnQ = document.createElement('button'); btnQ.className = 'btn btn-primary'; btnQ.textContent = 'Cotação (default)';
-    const btnB = document.createElement('button'); btnB.className = 'btn btn-ghost'; btnB.textContent = 'BOM';
-    const btnC = document.createElement('button'); btnC.className = 'btn btn-ghost'; btnC.textContent = 'Cancelar';
-    btnQ.addEventListener('click', () => { closeModal(); resolve('quotation'); });
-    btnB.addEventListener('click', () => { closeModal(); resolve('bom'); });
-    btnC.addEventListener('click', () => { closeModal(); resolve(null); });
-    actions.appendChild(btnB); actions.appendChild(btnQ); actions.appendChild(btnC);
+    const btnOk = document.createElement('button'); btnOk.className = 'btn btn-primary'; btnOk.textContent = 'Gerar Excel';
+    const btnC  = document.createElement('button'); btnC.className  = 'btn btn-ghost';  btnC.textContent  = 'Cancelar';
+    btnOk.addEventListener('click', () => { closeModal(); resolve({ descSource: descRow.dataset.selected, qtySource: qtyRow.dataset.selected }); });
+    btnC.addEventListener('click',  () => { closeModal(); resolve(null); });
+    actions.appendChild(btnOk); actions.appendChild(btnC);
     el.appendChild(actions);
     showModal(el);
   });
@@ -208,8 +237,9 @@ function _askDescSource() {
 async function generateExcel() {
   if (hasRole('commercial')) { showToast('Sem permissão para gerar Excel.', true); return; }
 
-  const descSource = await _askDescSource();
-  if (descSource === null) return;
+  const excelOpts = await _askExcelOptions();
+  if (excelOpts === null) return;
+  const { descSource, qtySource } = excelOpts;
 
   // Build selected offer lookup
   const selLookup = {};
@@ -295,8 +325,10 @@ async function generateExcel() {
     if (seenQI[suppId].has(qi.id)) continue;
     const indexInSupplier = supplierCounters[suppId]++;
     seenQI[suppId].set(qi.id, indexInSupplier);
-    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(qi.quantity || bi.quantity), price: String(totalPrice) });
-    allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: qi.quantity || bi.quantity, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
+    const matchType = matchLookup[bi.id]?.[suppId]?.match_type;
+    const effQty = (matchType === 'historical' || qtySource === 'bom') ? bi.quantity : (qi.quantity || bi.quantity);
+    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(effQty), price: String(totalPrice) });
+    allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: effQty, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
