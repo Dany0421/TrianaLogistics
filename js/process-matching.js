@@ -1279,6 +1279,7 @@ async function runAutoMatch() {
   // Build rejected set: "bomItemId:supplierId:quotItemId"
   const rejectedSet = new Set(rejectedAutoMatch.map(r => `${r.bom_item_id}:${r.supplier_id}:${r.quotation_item_id}`));
   const newMatches = [];
+  const phase0ExtraLines = []; // { bom_item_id, supplier_id, extra_quot_descs } from history
   const phase0Matched = new Set(); // "biId:sId" pairs skipped by Phase 0 and later phases
 
   // Phase -1: SKU match — exact supplier SKU is definitive evidence
@@ -1343,6 +1344,7 @@ async function runAutoMatch() {
           if (_fuzzyScore(qi.raw_description, hp.quot_desc) >= 0.9 &&
               _fuzzyScore(biDesc, hp.bom_desc) >= 0.75) {
             newMatches.push({ process_id: processId, bom_item_id: bi.id, supplier_id: s.id, quotation_item_id: qi.id, match_type: 'auto', confidence: 1.0 });
+            if (hp.extra_quot_descs?.length) phase0ExtraLines.push({ bom_item_id: bi.id, supplier_id: s.id, extra_quot_descs: hp.extra_quot_descs });
             phase0Matched.add(`${bi.id}:${s.id}`);
             p0matched = true;
             break;
@@ -1451,6 +1453,24 @@ async function runAutoMatch() {
   if (!newMatches.length) { showToast('Nenhum match automático encontrado.'); return; }
   try {
     const saved = await API.saveMatches(newMatches);
+    if (phase0ExtraLines.length) {
+      const extraPromises = [];
+      for (const pending of phase0ExtraLines) {
+        const savedMatch = saved.find(m => m.bom_item_id === pending.bom_item_id && m.supplier_id === pending.supplier_id);
+        if (!savedMatch) continue;
+        const suppQItems = quotationMap[pending.supplier_id] || [];
+        for (const extraDesc of pending.extra_quot_descs) {
+          let bestQi = null, bestScore = 0;
+          for (const qi of suppQItems) {
+            if (qi.id === savedMatch.quotation_item_id) continue;
+            const score = _fuzzyScore(qi.raw_description, extraDesc);
+            if (score > bestScore && score >= 0.85) { bestScore = score; bestQi = qi; }
+          }
+          if (bestQi) extraPromises.push(API.addMatchExtraItem(savedMatch.id, bestQi.id));
+        }
+      }
+      if (extraPromises.length) await Promise.all(extraPromises);
+    }
     await loadMatchData();
     renderMatchingTab();
     const actualCount = saved.length;
