@@ -956,7 +956,7 @@ function openMatchModal(bomItemId, supplierId) {
     const listWrap = document.createElement('div'); listWrap.style.cssText = 'max-height:300px;overflow-y:auto;margin-bottom:16px';
     for (const qi of qItems) {
       const isLinked = currentMatch?.quotation_item_id === qi.id;
-      const hasAnyMatch = matches.some(m => m.quotation_item_id === qi.id);
+      const hasAnyMatch = matches.some(m => m.quotation_item_id === qi.id) || matchExtraItems.some(e => e.quotation_item_id === qi.id);
       const row = document.createElement('div'); row.className = 'match-pick-row' + (isLinked ? ' linked' : '');
       row.dataset.search = ((qi.raw_description || '') + ' ' + (qi.raw_part_number || '')).toLowerCase();
       row.addEventListener('click', () => linkItem(bomItemId, supplierId, qi.id));
