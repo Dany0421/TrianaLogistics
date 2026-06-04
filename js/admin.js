@@ -537,55 +537,11 @@ function showToast(msg, isError = false) {
 
 // ── Tab switching ──
 function switchTab(tab) {
-  document.getElementById('sectionUsers').style.display   = tab === 'users'   ? '' : 'none';
-  document.getElementById('sectionLog').style.display     = tab === 'log'     ? '' : 'none';
-  document.getElementById('sectionReports').style.display = tab === 'reports' ? '' : 'none';
+  document.getElementById('sectionUsers').style.display = tab === 'users' ? '' : 'none';
+  document.getElementById('sectionLog').style.display   = tab === 'log'   ? '' : 'none';
   document.getElementById('tabUsers').classList.toggle('active', tab === 'users');
   document.getElementById('tabLog').classList.toggle('active', tab === 'log');
-  document.getElementById('tabReports').classList.toggle('active', tab === 'reports');
   if (tab === 'log' && !logInitialized) { logInitialized = true; initLog(); }
-}
-
-// ── Suppliers report export ──
-let reportUsersLoaded = false;
-
-async function loadReportUsers() {
-  if (reportUsersLoaded) return;
-  reportUsersLoaded = true;
-  try {
-    const users = await API.getUsersWithActiveProcesses();
-    const sel = document.getElementById('reportUserFilter');
-    users.forEach(u => {
-      const opt = document.createElement('option');
-      opt.value = u.id;
-      opt.textContent = u.name;
-      sel.appendChild(opt);
-    });
-  } catch(e) { /* silent */ }
-}
-
-async function exportSuppliersReport() {
-  const btn = document.getElementById('exportSuppliersBtn');
-  const orig = btn.textContent;
-  btn.textContent = 'A carregar...'; btn.disabled = true;
-  try {
-    const userId = document.getElementById('reportUserFilter').value || null;
-    const rows = await API.getAllSuppliersWithProcesses(userId);
-    const wsData = [
-      ['Fornecedor', 'Projeto', 'Cliente', 'Comercial', 'Procurement', 'Estado'],
-      ...rows.map(r => [r.supplier, r.project, r.client, r.commercial, r.procurement, r.status]),
-    ];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = [{ wch: 30 }, { wch: 30 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, ws, 'Fornecedores');
-    const suffix = userId ? `_${document.getElementById('reportUserFilter').selectedOptions[0].textContent}` : '';
-    XLSX.writeFile(wb, `fornecedores${suffix}_${new Date().toISOString().slice(0,10)}.xlsx`);
-  } catch(e) {
-    alert('Erro ao exportar: ' + e.message);
-  } finally {
-    btn.textContent = orig; btn.disabled = false;
-  }
 }
 
 // ── User Management ──
@@ -789,8 +745,6 @@ window.addEventListener('load', async () => {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tabUsers').addEventListener('click', () => switchTab('users'));
   document.getElementById('tabLog').addEventListener('click', () => switchTab('log'));
-  document.getElementById('tabReports').addEventListener('click', () => { switchTab('reports'); loadReportUsers(); });
-  document.getElementById('exportSuppliersBtn').addEventListener('click', exportSuppliersReport);
   document.getElementById('refreshUsersBtn').addEventListener('click', loadUsers);
   document.getElementById('filterProcess').addEventListener('input', onFilterChange);
   document.getElementById('filterUser').addEventListener('change', onFilterChange);

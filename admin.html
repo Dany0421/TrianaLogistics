@@ -7,7 +7,6 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data:;">
 <title>Procurement System — Admin</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js" integrity="sha384-+8nbzwDAyu5kAjqtR/XKxIgPHQD2TflvbZgeDZn5t3JP+OOogNH1jXnfel8ZAgzS" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="css/style.css">
 <script src="js/config.js"></script>
@@ -106,7 +105,6 @@
     <div class="admin-tabs">
       <button class="admin-tab active" id="tabUsers">Utilizadores</button>
       <button class="admin-tab" id="tabLog">Registo de Atividade</button>
-      <button class="admin-tab" id="tabReports">Relatórios</button>
     </div>
 
     <!-- Section: Users -->
@@ -119,21 +117,6 @@
         <span>Nome</span><span>Email</span><span>Cargo</span><span>Último acesso</span><span></span>
       </div>
       <div id="userList"><div class="empty-state"><span>A carregar...</span></div></div>
-    </div>
-
-    <!-- Section: Reports -->
-    <div id="sectionReports" style="display:none">
-      <div class="admin-header">
-        <div class="admin-title">Relatórios</div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:16px;max-width:500px">
-        <div style="border:1px solid var(--border);border-radius:8px;padding:20px">
-          <div style="font-weight:600;margin-bottom:6px">Lista de Fornecedores por Processo</div>
-          <div style="color:var(--text-muted);font-size:13px;margin-bottom:16px">Exporta todos os fornecedores com o respetivo processo, cliente e comercial responsável.</div>
-          <select id="reportUserFilter" style="margin-bottom:12px;width:100%"><option value="">Todos os utilizadores</option></select>
-          <button class="btn btn-primary btn-sm" id="exportSuppliersBtn">Exportar Excel</button>
-        </div>
-      </div>
     </div>
 
     <!-- Section: Log -->
