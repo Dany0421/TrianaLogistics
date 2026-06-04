@@ -113,6 +113,20 @@ const API = {
     return data || [];
   },
 
+  async getUsersWithActiveProcesses() {
+    const { data, error } = await supabase
+      .from('processes')
+      .select('assigned_to, assignee:profiles!assigned_to(id, name)')
+      .not('assigned_to', 'is', null)
+      .not('status', 'in', '("Closed","Cancelled")');
+    if (error) throw _sanitizeError(error);
+    const seen = new Set();
+    return (data || [])
+      .filter(p => p.assignee && !seen.has(p.assigned_to) && seen.add(p.assigned_to))
+      .map(p => ({ id: p.assignee.id, name: p.assignee.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+
   async createProcess(fields) {
     const { data, error } = await supabase
       .from('processes')
@@ -202,8 +216,11 @@ const API = {
     if (assignedToId) q = q.eq('processes.assigned_to', assignedToId);
     const { data, error } = await q;
     if (error) throw _sanitizeError(error);
+    const INACTIVE = ['Closed', 'Cancelled'];
     return (data || [])
-      .filter(s => s.processes && (!assignedToId || s.processes.assigned_to === assignedToId))
+      .filter(s => s.processes
+        && !INACTIVE.includes(s.processes.status)
+        && (!assignedToId || s.processes.assigned_to === assignedToId))
       .map(s => ({
         supplier: s.name,
         project: s.processes?.project_name || '',

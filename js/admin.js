@@ -553,7 +553,7 @@ async function loadReportUsers() {
   if (reportUsersLoaded) return;
   reportUsersLoaded = true;
   try {
-    const users = await API.getProcurementUsers();
+    const users = await API.getUsersWithActiveProcesses();
     const sel = document.getElementById('reportUserFilter');
     users.forEach(u => {
       const opt = document.createElement('option');
