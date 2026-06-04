@@ -194,6 +194,26 @@ const API = {
   },
 
   // ── Suppliers ──
+  async getAllSuppliersWithProcesses(assignedToId = null) {
+    let q = supabase
+      .from('suppliers')
+      .select('name, processes!process_id(project_name, client_name, commercial_name, procurement_name, status, assigned_to)')
+      .order('name');
+    if (assignedToId) q = q.eq('processes.assigned_to', assignedToId);
+    const { data, error } = await q;
+    if (error) throw _sanitizeError(error);
+    return (data || [])
+      .filter(s => s.processes && (!assignedToId || s.processes.assigned_to === assignedToId))
+      .map(s => ({
+        supplier: s.name,
+        project: s.processes?.project_name || '',
+        client: s.processes?.client_name || '',
+        commercial: s.processes?.commercial_name || '',
+        procurement: s.processes?.procurement_name || '',
+        status: s.processes?.status || '',
+      }));
+  },
+
   async getSuppliers(processId) {
     const { data, error } = await supabase
       .from('suppliers')
