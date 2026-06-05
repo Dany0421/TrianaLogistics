@@ -22,7 +22,15 @@
   .chip { display:inline-flex; align-items:center; background:rgba(37,99,235,.1); border:1px solid rgba(37,99,235,.25); border-radius:4px; padding:2px 8px; font-size:11px; color:var(--accent); font-family:'DM Mono',monospace; }
   .chip-brand { background:rgba(124,58,237,.1); border-color:rgba(124,58,237,.3); color:#a78bfa; }
   .chip-foreign { background:rgba(255,170,0,.1); border-color:rgba(255,170,0,.3); color:#ffaa00; }
-  .notes-row { font-size:13px; color:var(--muted); margin-top:4px; font-style:italic; }
+  .internal-note-wrap { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:8px; padding:14px 16px; margin-bottom:20px; }
+  .internal-note-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .internal-note-label { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; }
+  .internal-note-text { font-size:13px; color:var(--text); line-height:1.5; white-space:pre-wrap; }
+  .internal-note-empty { font-size:13px; color:var(--muted); font-style:italic; }
+  .internal-note-edit-btn { background:none; border:none; cursor:pointer; color:var(--muted); padding:2px 4px; border-radius:3px; line-height:1; display:flex; align-items:center; }
+  .internal-note-edit-btn:hover { color:var(--text); background:rgba(255,255,255,.06); }
+  .internal-note-textarea { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; padding:8px 10px; resize:vertical; min-height:70px; font-family:inherit; line-height:1.5; box-sizing:border-box; }
+  .internal-note-actions { display:flex; gap:8px; margin-top:8px; justify-content:flex-end; }
   .stats-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:28px; }
   .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
   .stat-label { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:.7px; text-transform:uppercase; margin-bottom:6px; }

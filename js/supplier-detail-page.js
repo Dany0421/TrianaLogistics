@@ -103,8 +103,52 @@ function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isFore
   (gs?.categories||[]).forEach(c=>{const s=document.createElement('span');s.className='chip';s.textContent=c;tagsRow.appendChild(s);});
   (gs?.brands||[]).forEach(b=>{const s=document.createElement('span');s.className='chip chip-brand';s.textContent=b;tagsRow.appendChild(s);});
   if(tagsRow.children.length)header.appendChild(tagsRow);
-  if(gs?.notes){const n=document.createElement('div');n.className='notes-row';n.textContent=gs.notes;header.appendChild(n);}
   main.appendChild(header);
+
+  // ── Nota interna ──
+  if(gs){
+    const noteWrap=document.createElement('div');noteWrap.className='internal-note-wrap';
+    const noteHead=document.createElement('div');noteHead.className='internal-note-header';
+    const noteLbl=document.createElement('span');noteLbl.className='internal-note-label';noteLbl.textContent='Nota interna';
+    const noteEditBtn=document.createElement('button');noteEditBtn.type='button';noteEditBtn.className='internal-note-edit-btn';noteEditBtn.title='Editar nota';
+    const noteIco=document.createElement('i');noteIco.setAttribute('data-lucide','pencil');noteIco.style.cssText='width:13px;height:13px';
+    noteEditBtn.appendChild(noteIco);
+    noteHead.appendChild(noteLbl);noteHead.appendChild(noteEditBtn);
+    const noteDisplay=document.createElement('div');
+    const noteEditArea=document.createElement('div');noteEditArea.style.display='none';
+    const noteTa=document.createElement('textarea');noteTa.className='internal-note-textarea';noteTa.placeholder='Sem nota…';noteTa.value=gs.notes||'';
+    const noteActions=document.createElement('div');noteActions.className='internal-note-actions';
+    const noteSaveBtn=document.createElement('button');noteSaveBtn.type='button';noteSaveBtn.className='btn btn-primary btn-sm';noteSaveBtn.textContent='Guardar';
+    const noteCancelBtn=document.createElement('button');noteCancelBtn.type='button';noteCancelBtn.className='btn btn-ghost btn-sm';noteCancelBtn.textContent='Cancelar';
+    noteActions.appendChild(noteCancelBtn);noteActions.appendChild(noteSaveBtn);
+    noteEditArea.appendChild(noteTa);noteEditArea.appendChild(noteActions);
+    function _refreshNoteDisplay(val){
+      noteDisplay.textContent='';
+      if(val){const t=document.createElement('div');t.className='internal-note-text';t.textContent=val;noteDisplay.appendChild(t);}
+      else{const t=document.createElement('div');t.className='internal-note-empty';t.textContent='Sem nota.';noteDisplay.appendChild(t);}
+    }
+    _refreshNoteDisplay(gs.notes||'');
+    noteEditBtn.addEventListener('click',()=>{
+      noteDisplay.style.display='none';noteEditArea.style.display='';noteTa.focus();
+    });
+    noteCancelBtn.addEventListener('click',()=>{
+      noteTa.value=gs.notes||'';noteEditArea.style.display='none';noteDisplay.style.display='';
+    });
+    noteSaveBtn.addEventListener('click',async()=>{
+      const val=noteTa.value.trim()||null;
+      noteSaveBtn.disabled=true;noteSaveBtn.textContent='A guardar…';
+      try{
+        await API.updateGlobalSupplier(gs.id,{notes:val});
+        gs.notes=val;_refreshNoteDisplay(val||'');
+        noteEditArea.style.display='none';noteDisplay.style.display='';
+        showToast('Nota guardada.');
+      }catch(e){showToast('Erro ao guardar nota.',true);}
+      finally{noteSaveBtn.disabled=false;noteSaveBtn.textContent='Guardar';}
+    });
+    noteWrap.appendChild(noteHead);noteWrap.appendChild(noteDisplay);noteWrap.appendChild(noteEditArea);
+    main.appendChild(noteWrap);
+    if(typeof lucide!=='undefined')lucide.createIcons({elements:[noteIco]});
+  }
 
   // ── Finance info ──
   if(gs){
