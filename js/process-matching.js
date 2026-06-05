@@ -19,7 +19,8 @@ function _ddpMZN(price, currency, s, suppTotalG) {
   const outros = s.is_foreign ? 0.05 : 0;
   const totalG = suppTotalG[s.id] || 0;
   const transportRatio = (transport > 0 && totalG > 0) ? transport / totalG : 0;
-  return price * (1 + transportRatio) * (1 + direitos) * (1 + outros) * cambio;
+  const infinitMargin = (s.name||'').toLowerCase().includes('infinitreach') ? 0.10 : 0;
+  return (price * (1 + transportRatio) * (1 + direitos) + price * infinitMargin) * (1 + outros) * cambio;
 }
 function switchMatchingView(v) {
   matchingView = v;

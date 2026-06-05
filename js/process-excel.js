@@ -54,6 +54,7 @@ function buildSupSheet(wb, supplier) {
   const transport = parseFloat(supplier.transport) || 0;
   const direitos = (parseFloat(supplier.direitos) || 0) / 100;
   const name = (supplier.name || 'Fornecedor').substring(0, 31);
+  const isInfinitReach = (supplier.name||'').toLowerCase().includes('infinitreach');
   const ws = wb.addWorksheet(name, {properties:{tabColor:{argb:'FFC00000'}},views:[{showGridLines:false}]});
   const wPart = items.reduce((m,i)=>Math.max(m,(i.part||'').length+2),15.7);
   const wModel = Math.min(70,items.reduce((m,i)=>Math.max(m,(i.model||'').length+2),40));
@@ -89,7 +90,7 @@ function buildSupSheet(wb, supplier) {
     sc2(ws.getCell(r,6),{value:up,font:dF,border:TB,alignment:{horizontal:'right',vertical:'middle'},numFmt:NF});
     sc2(ws.getCell(r,7),{value:{formula:`+F${r}*E${r}`},font:dF,border:TB,alignment:{horizontal:'right',vertical:'middle',wrapText:true},numFmt:NFD});
     sc2(ws.getCell(r,8),{value:{formula:`F${r}*D${r}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
-    sc2(ws.getCell(r,9),{value:{formula:`+F${r}*0%`},font:dF,border:TB,alignment:dA,numFmt:NFD});
+    sc2(ws.getCell(r,9),{value:{formula:`+F${r}*${isInfinitReach?'10%':'0%'}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,10),{value:{formula:`H${r}+F${r}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,11),{value:{formula:`J${r}*C${r}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,12),{value:{formula:`K${r}+J${r}+I${r}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
