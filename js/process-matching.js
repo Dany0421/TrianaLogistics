@@ -162,6 +162,14 @@ function renderMatchingTab() {
       toggleBar.appendChild(btn);
     }
   }
+
+  const importBomBtn = document.createElement('button');
+  importBomBtn.className = 'btn btn-ghost btn-sm';
+  importBomBtn.style.marginLeft = 'auto';
+  lbtn(importBomBtn, 'file-plus', 'Importar do BOM');
+  importBomBtn.addEventListener('click', openImportFromBomModal);
+  toggleBar.appendChild(importBomBtn);
+
   el.appendChild(toggleBar);
 
   if (matchingView === 'matching' && hasSuppliers) {
@@ -1967,4 +1975,173 @@ async function exportMissingItems() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showToast(`${missing.length} item(s) exportado(s).`);
+}
+
+// ── Import from BOM modal ──
+function openImportFromBomModal() {
+  const el = document.createElement('div');
+
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Matching';
+  const ttl = document.createElement('div'); ttl.className = 'modal-title'; ttl.textContent = 'Importar Itens do BOM';
+  el.appendChild(tag); el.appendChild(ttl);
+
+  // Supplier + Currency row
+  const row1 = document.createElement('div');
+  row1.style.cssText = 'display:grid;grid-template-columns:1fr 120px;gap:12px;margin-bottom:12px';
+
+  const suppWrap = document.createElement('div');
+  const suppLbl = document.createElement('label'); suppLbl.textContent = 'Fornecedor';
+  const suppSel = document.createElement('select');
+  const plhOpt = document.createElement('option'); plhOpt.value = ''; plhOpt.textContent = 'Selecionar...';
+  suppSel.appendChild(plhOpt);
+  for (const s of suppliers) {
+    const opt = document.createElement('option'); opt.value = s.id; opt.textContent = s.name;
+    suppSel.appendChild(opt);
+  }
+  const newOpt = document.createElement('option'); newOpt.value = '__new__'; newOpt.textContent = '+ Adicionar novo...';
+  suppSel.appendChild(newOpt);
+  suppWrap.appendChild(suppLbl); suppWrap.appendChild(suppSel);
+
+  const curWrap = document.createElement('div');
+  const curLbl = document.createElement('label'); curLbl.textContent = 'Moeda';
+  const curSel = document.createElement('select');
+  for (const c of ['USD', 'EUR', 'MZN', 'ZAR']) {
+    const opt = document.createElement('option'); opt.value = c; opt.textContent = c; curSel.appendChild(opt);
+  }
+  curWrap.appendChild(curLbl); curWrap.appendChild(curSel);
+  row1.appendChild(suppWrap); row1.appendChild(curWrap);
+  el.appendChild(row1);
+
+  // New supplier sub-form
+  const newSuppWrap = document.createElement('div');
+  newSuppWrap.style.cssText = 'display:none;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:12px';
+  const newGrid = document.createElement('div');
+  newGrid.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end';
+  const newNameWrap = document.createElement('div');
+  const newNameLbl = document.createElement('label'); newNameLbl.textContent = 'Nome do fornecedor';
+  const newNameInp = document.createElement('input'); newNameInp.placeholder = 'Ex: Tech Solutions'; newNameInp.id = 'ib_new_name';
+  newNameWrap.appendChild(newNameLbl); newNameWrap.appendChild(newNameInp);
+  const foreignLbl = document.createElement('label');
+  foreignLbl.style.cssText = 'display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;padding-bottom:6px;font-size:13px;white-space:nowrap';
+  const foreignCb = document.createElement('input'); foreignCb.type = 'checkbox'; foreignCb.id = 'ib_new_foreign'; foreignCb.style.width = 'auto';
+  foreignLbl.appendChild(foreignCb); foreignLbl.appendChild(document.createTextNode('Estrangeiro'));
+  newGrid.appendChild(newNameWrap); newGrid.appendChild(foreignLbl);
+  newSuppWrap.appendChild(newGrid);
+  suppSel.addEventListener('change', () => { newSuppWrap.style.display = suppSel.value === '__new__' ? 'block' : 'none'; });
+  el.appendChild(newSuppWrap);
+
+  // Items header
+  const itemsHdr = document.createElement('div');
+  itemsHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px';
+  const itemsLbl = document.createElement('label'); itemsLbl.style.margin = '0'; itemsLbl.textContent = 'Itens';
+  const selAllBtn = document.createElement('button');
+  selAllBtn.className = 'btn btn-ghost btn-sm'; selAllBtn.style.fontSize = '11px'; selAllBtn.textContent = 'Desselecionar todos';
+  itemsHdr.appendChild(itemsLbl); itemsHdr.appendChild(selAllBtn);
+  el.appendChild(itemsHdr);
+
+  // Items list
+  const itemsList = document.createElement('div');
+  itemsList.style.cssText = 'max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:7px';
+
+  const updateConfirmBtn = () => {
+    const btn = el.querySelector('#ib_confirm');
+    if (!btn) return;
+    const n = itemsList.querySelectorAll('input[type=checkbox]:checked').length;
+    btn.textContent = n > 0 ? `Criar ${n} item${n > 1 ? 's' : ''}` : 'Criar itens';
+    btn.disabled = n === 0;
+  };
+
+  bomItems.forEach((bi, i) => {
+    const desc = bi.custom_description || bi.description || '';
+    const row = document.createElement('div');
+    row.className = 'ib-item-row';
+    row.style.cssText = `display:flex;align-items:center;gap:10px;padding:9px 12px;${i > 0 ? 'border-top:1px solid var(--border)' : ''}`;
+    row.dataset.desc = desc;
+
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true;
+    cb.style.cssText = 'width:auto;flex-shrink:0;cursor:pointer';
+    cb.addEventListener('change', updateConfirmBtn);
+
+    const descWrap = document.createElement('div'); descWrap.style.cssText = 'flex:1;min-width:0;cursor:pointer';
+    const descTxt = document.createElement('div');
+    descTxt.style.cssText = 'font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    descTxt.textContent = desc; descTxt.title = desc;
+    descWrap.appendChild(descTxt);
+    if (bi.category) {
+      const cat = document.createElement('div');
+      cat.style.cssText = 'font-size:10px;color:var(--muted);margin-top:1px';
+      cat.textContent = bi.category; descWrap.appendChild(cat);
+    }
+    descWrap.addEventListener('click', () => { cb.checked = !cb.checked; updateConfirmBtn(); });
+
+    const priceInp = document.createElement('input');
+    priceInp.type = 'number'; priceInp.min = '0'; priceInp.step = 'any'; priceInp.placeholder = '—';
+    priceInp.className = 'ib-price';
+    priceInp.style.cssText = "width:110px;flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:12px;text-align:right;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);outline:none";
+
+    row.appendChild(cb); row.appendChild(descWrap); row.appendChild(priceInp);
+    itemsList.appendChild(row);
+  });
+  el.appendChild(itemsList);
+
+  let allSelected = true;
+  selAllBtn.addEventListener('click', () => {
+    allSelected = !allSelected;
+    itemsList.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = allSelected; });
+    selAllBtn.textContent = allSelected ? 'Desselecionar todos' : 'Selecionar todos';
+    updateConfirmBtn();
+  });
+
+  // Actions
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'modal-actions'; actionsDiv.style.marginTop = '16px';
+
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar';
+  cancelBtn.addEventListener('click', closeModal);
+
+  const confirmBtn = document.createElement('button'); confirmBtn.className = 'btn btn-primary'; confirmBtn.id = 'ib_confirm';
+  const n0 = bomItems.length;
+  confirmBtn.textContent = `Criar ${n0} item${n0 !== 1 ? 's' : ''}`;
+  confirmBtn.disabled = n0 === 0;
+  confirmBtn.addEventListener('click', () => _doImportFromBom(suppSel, newNameInp, foreignCb, curSel, itemsList, confirmBtn));
+
+  actionsDiv.appendChild(cancelBtn); actionsDiv.appendChild(confirmBtn);
+  el.appendChild(actionsDiv);
+
+  showModalLg(el);
+}
+
+async function _doImportFromBom(suppSel, newNameInp, foreignCb, curSel, itemsList, confirmBtn) {
+  if (!suppSel.value) { showToast('Seleciona um fornecedor.', true); return; }
+  confirmBtn.disabled = true;
+  try {
+    let supplierId;
+    if (suppSel.value === '__new__') {
+      const name = newNameInp.value.trim();
+      if (!name) { showToast('Nome do fornecedor é obrigatório.', true); confirmBtn.disabled = false; return; }
+      const newSupp = await API.createSupplier({ process_id: processId, name, status: 'Not contacted', is_foreign: foreignCb.checked });
+      supplierId = newSupp.id;
+      suppliers = await API.getSuppliers(processId);
+    } else {
+      supplierId = suppSel.value;
+    }
+
+    const checkedRows = [...itemsList.querySelectorAll('.ib-item-row')].filter(r => r.querySelector('input[type=checkbox]').checked);
+    if (!checkedRows.length) { showToast('Seleciona pelo menos um item.', true); confirmBtn.disabled = false; return; }
+
+    const currency = curSel.value;
+    const rows = checkedRows.map(row => {
+      const v = parseFloat(row.querySelector('.ib-price').value);
+      return { supplier_id: supplierId, raw_description: row.dataset.desc, price: (isNaN(v) || v < 0) ? null : v, quantity: 1, currency };
+    });
+
+    const created = await API.saveQuotationItems(rows);
+    if (!quotationMap[supplierId]) quotationMap[supplierId] = [];
+    quotationMap[supplierId].push(...created);
+
+    closeModal();
+    renderSuppliers();
+    renderMatchingTab();
+    showToast(`${created.length} item${created.length > 1 ? 's' : ''} criados.`);
+  } catch(e) { showToast('Erro: ' + e.message, true); confirmBtn.disabled = false; }
 }
