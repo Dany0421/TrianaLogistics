@@ -927,7 +927,7 @@ function openMatchModal(bomItemId, supplierId) {
   if (!UUID_RE.test(bomItemId) || !UUID_RE.test(supplierId)) return;
   const bi    = bomItems.find(x => x.id === bomItemId);
   const s     = suppliers.find(x => x.id === supplierId);
-  const qItems = quotationMap[supplierId] || [];
+  const qItems = (quotationMap[supplierId] || []).filter(qi => qi.price != null);
   const currentMatch = matches.find(m => m.bom_item_id === bomItemId && m.supplier_id === supplierId);
   const selOffer = selectedOffers.find(o => o.bom_item_id === bomItemId);
   const isSelectedSupp = selOffer?.supplier_id === supplierId;
@@ -1281,7 +1281,7 @@ function _matchTokenize(str) {
 
 async function runAutoMatch() {
   if (!bomItems.length) { showToast('Carrega o BOM primeiro.', true); return; }
-  const suppliersWithItems = suppliers.filter(s => (quotationMap[s.id]||[]).length > 0);
+  const suppliersWithItems = suppliers.filter(s => (quotationMap[s.id]||[]).some(qi => qi.price != null));
   if (!suppliersWithItems.length) { showToast('Nenhum fornecedor com cotação carregada.', true); return; }
 
   const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
@@ -1348,6 +1348,7 @@ async function runAutoMatch() {
       if (!histPairs.length) continue;
       let p0matched = false;
       for (const qi of (quotationMap[s.id] || [])) {
+        if (qi.price == null) continue;
         if (rejectedSet.has(`${bi.id}:${s.id}:${qi.id}`)) continue;
         for (const hp of histPairs) {
           if (_fuzzyScore(qi.raw_description, hp.quot_desc) >= 0.9 &&
@@ -1376,6 +1377,7 @@ async function runAutoMatch() {
       let bestItem = null, bestScore = 0;
 
       for (const qi of quotationMap[s.id]) {
+        if (qi.price == null) continue;
         // 1. Part number exact match — highest priority, skip word matching
         if (bi.part_number && qi.raw_part_number && norm(bi.part_number) === norm(qi.raw_part_number)) {
           bestItem = qi; bestScore = 1.0; break;
