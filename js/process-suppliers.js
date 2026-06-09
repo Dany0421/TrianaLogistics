@@ -1317,6 +1317,13 @@ function renderQuotValTable() {
   if (!tbody) return;
   const _scrollBox = tbody.closest('.modal-box-lg, .modal-box');
   const _savedScroll = _scrollBox ? _scrollBox.scrollTop : 0;
+  // Save focus position so re-render doesn't trigger browser scroll
+  const _af = document.activeElement;
+  const _afTr = _af ? _af.closest('tr') : null;
+  const _afTrs = [...tbody.querySelectorAll('tr')];
+  const _afRowIdx = _afTr ? _afTrs.indexOf(_afTr) : -1;
+  const _afTds = _afTr ? [..._afTr.querySelectorAll('td')] : [];
+  const _afColIdx = _af ? _afTds.indexOf(_af.closest('td')) : -1;
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
   const hasNonMzn = pendingQuotItems.some(i => i.currency && i.currency !== 'MZN');
   const ratesBlock = document.getElementById('quotRatesBlock');
@@ -1393,7 +1400,7 @@ function renderQuotValTable() {
       pendingQuotItems[i].price = d > 0 && d < 100
         ? Math.round((entered / (1 - d / 100)) * 100) / 100
         : entered;
-      checkPriceAnomalies(pendingQuotItems).then(a => { priceAnomalies = a; renderQuotValTable(); });
+      checkPriceAnomalies(pendingQuotItems).then(a => { if (JSON.stringify(a) !== JSON.stringify(priceAnomalies)) { priceAnomalies = a; renderQuotValTable(); } else { priceAnomalies = a; } });
     };
     tdPrice.appendChild(inPrice);
     const a = priceAnomalies[i];
@@ -1467,6 +1474,13 @@ function renderQuotValTable() {
     tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdEta); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
+  if (_afRowIdx >= 0 && _afColIdx >= 0) {
+    const newTr = tbody.querySelectorAll('tr')[_afRowIdx];
+    if (newTr) {
+      const target = newTr.querySelectorAll('td')[_afColIdx]?.querySelector('input, select');
+      if (target) target.focus({ preventScroll: true });
+    }
+  }
   if (_scrollBox) { _scrollBox.scrollTop = _savedScroll; requestAnimationFrame(() => { _scrollBox.scrollTop = _savedScroll; }); }
 }
 
