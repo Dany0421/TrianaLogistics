@@ -1223,6 +1223,7 @@ async function unlinkItem(bomItemId, supplierId, matchId) {
     const wasSelected = !!selectedOffers.find(o => o.bom_item_id === bomItemId && o.supplier_id === supplierId);
     // Optimistic update
     matches = matches.filter(m => m.id !== matchId);
+    matchExtraItems = matchExtraItems.filter(e => e.item_match_id !== matchId);
     if (wasSelected) selectedOffers = selectedOffers.filter(o => !(o.bom_item_id === bomItemId && o.supplier_id === supplierId));
     if (quotItemId) rejectedAutoMatch.push({ process_id: processId, bom_item_id: bomItemId, supplier_id: supplierId, quotation_item_id: quotItemId });
     const _preScroll = _captureMatchingScroll(document.getElementById('matchingContent'));
