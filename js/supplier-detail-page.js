@@ -25,13 +25,18 @@ function _confirmModal(message) {
 }
 
 function computeTrend(items){
-  const now=new Date();
-  const thisStart=new Date(now.getFullYear(),now.getMonth(),1);
-  const prevStart=new Date(now.getFullYear(),now.getMonth()-1,1);
   const priced=items.filter(i=>i.price>0);
-  const thisM=priced.filter(i=>new Date(i.created_at)>=thisStart);
-  const prevM=priced.filter(i=>{const d=new Date(i.created_at);return d>=prevStart&&d<thisStart;});
-  if(!thisM.length||!prevM.length)return null;
+  if(!priced.length)return null;
+  const byMonth={};
+  priced.forEach(i=>{
+    const d=new Date(i.created_at);
+    const key=d.getFullYear()*100+d.getMonth();
+    if(!byMonth[key])byMonth[key]=[];
+    byMonth[key].push(i);
+  });
+  const months=Object.keys(byMonth).map(Number).sort((a,b)=>b-a);
+  if(months.length<2)return null;
+  const thisM=byMonth[months[0]],prevM=byMonth[months[1]];
   const avg=arr=>arr.reduce((s,i)=>s+Number(i.price),0)/arr.length;
   const tA=avg(thisM),pA=avg(prevM);
   return{thisAvg:tA,prevAvg:pA,change:((tA-pA)/pA)*100,cur:thisM[0].currency||'MZN'};
