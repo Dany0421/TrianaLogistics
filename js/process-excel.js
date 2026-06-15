@@ -114,15 +114,14 @@ function buildSupSheet(wb, supplier) {
 
 function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
   const trCol=hasServices?4+suppliers.length:null;
-  const ddpCol=hasServices?trCol+1:4+suppliers.length;
-  const vc=ddpCol+1;
+  const vc=hasServices?trCol+1:4+suppliers.length;
   const tc=vc+1;
   const suppEndCol=3+suppliers.length; // last supplier column (col 4 to suppEndCol)
   const wMainPart = allRows.reduce((m,r)=>Math.max(m,(r.part||'').length+2),4.5);
   const wMainModel = Math.min(70,allRows.reduce((m,r)=>Math.max(m,(r.model||'').length+2),45.8));
   ws.columns=hasServices
-    ?[{width:wMainPart},{width:wMainModel},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:13.9},{width:14.5},{width:13.9}]
-    :[{width:wMainPart},{width:wMainModel},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:13.9},{width:14.5},{width:13.9}];
+    ?[{width:wMainPart},{width:wMainModel},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:14.5},{width:13.9}]
+    :[{width:wMainPart},{width:wMainModel},{width:4.5},...suppliers.map(()=>({width:17.8})),{width:14.5},{width:13.9}];
   const hF={bold:true,size:11,name:'Calibri',color:{argb:'FF000000'}};
   const hA={horizontal:'center',vertical:'middle',wrapText:true};
   const dF={size:11,name:'Calibri'};
@@ -134,7 +133,6 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
   sc2(ws.getCell(3,3),{value:'QTY',font:hF,border:MB,alignment:hA});
   suppliers.forEach((s,si)=>sc2(ws.getCell(3,4+si),{value:sheetNames[si],font:hF,border:MB,alignment:hA}));
   if(hasServices)sc2(ws.getCell(3,trCol),{value:'Triana',font:hF,border:MB,alignment:hA});
-  sc2(ws.getCell(3,ddpCol),{value:'Custo DDP',font:hF,border:MB,alignment:hA});
   sc2(ws.getCell(3,vc),{value:'Preco de Venda',font:hF,fill:OF,border:MB,alignment:hA});
   sc2(ws.getCell(3,tc),{value:'Preco Total',font:hF,fill:OF,border:MB,alignment:hA});
   let row=4;
@@ -169,13 +167,11 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
       sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
       sc2(ws.getCell(row,3),{value:item.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
       sc2(ws.getCell(row,4+si),{value:{formula:`${ss}!R${ds+item.indexInSupplier}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-      sc2(ws.getCell(row,ddpCol),{value:{formula:`${col2l(4+si)}${row}*1`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
     } else {
       sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
       sc2(ws.getCell(row,3),{value:item.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
       if(trCol){
         sc2(ws.getCell(row,trCol),{value:item.unitPrice,font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
-        sc2(ws.getCell(row,ddpCol),{value:{formula:`${trL}${row}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
       }
     }
     row++;
