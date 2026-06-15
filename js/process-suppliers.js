@@ -1110,9 +1110,10 @@ function openQuotationValModal(fileName, rawPdfText) {
   const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = fileName; el.appendChild(title);
   const sub = document.createElement('div'); sub.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:12px'; sub.textContent = `${pendingQuotItems.length} linha(s) detetada(s). Revê e confirma antes de guardar.`; el.appendChild(sub);
 
-  // Reset global discount + ETA controls (per-item values already loaded from DB)
+  // Reset global discount + ETA + validity controls
   quotGlobalDiscount = 0;
   quotGlobalEta = { value: '', unit: 'dias' };
+  quotGlobalValidity = { value: s?.validity_value || '', unit: s?.validity_unit || 'dias' };
   pendingQuotItems.forEach(item => {
     if (item.discount == null) item.discount = 0;
     item._discountManual = false;
@@ -1179,6 +1180,28 @@ function openQuotationValModal(fileName, rawPdfText) {
   };
   etaBar.appendChild(etaLabel); etaBar.appendChild(etaValIn); etaBar.appendChild(etaGlobalUnitBtn); etaBar.appendChild(resetEtaBtn);
   el.appendChild(etaBar);
+
+  // Validity global bar
+  const valBar = document.createElement('div'); valBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
+  const valLabel = document.createElement('label'); valLabel.style.cssText = 'font-size:12px;color:var(--muted)'; valLabel.textContent = 'Validade global';
+  const valValIn = document.createElement('input'); valValIn.type = 'text'; valValIn.placeholder = '—'; valValIn.value = quotGlobalValidity.value; valValIn.style.cssText = 'width:70px;padding:4px 6px;font-size:12px';
+  const valUnitBtn = document.createElement('button');
+  valUnitBtn.textContent = quotGlobalValidity.unit === 'dias' ? 'Dias' : 'Semanas';
+  valUnitBtn.dataset.unit = quotGlobalValidity.unit;
+  valUnitBtn.style.cssText = 'font-size:11px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;font-family:inherit';
+  valUnitBtn.addEventListener('click', () => {
+    const next = valUnitBtn.dataset.unit === 'dias' ? 'semanas' : 'dias';
+    valUnitBtn.dataset.unit = next;
+    valUnitBtn.textContent = next === 'dias' ? 'Dias' : 'Semanas';
+    quotGlobalValidity.unit = next;
+  });
+  valValIn.addEventListener('input', () => { quotGlobalValidity.value = valValIn.value.trim(); });
+  const resetValBtn = document.createElement('button'); resetValBtn.className = 'btn btn-ghost btn-sm'; resetValBtn.textContent = 'Reset';
+  resetValBtn.onclick = () => {
+    quotGlobalValidity = { value: '', unit: 'dias' }; valValIn.value = ''; valUnitBtn.dataset.unit = 'dias'; valUnitBtn.textContent = 'Dias';
+  };
+  valBar.appendChild(valLabel); valBar.appendChild(valValIn); valBar.appendChild(valUnitBtn); valBar.appendChild(resetValBtn);
+  el.appendChild(valBar);
 
   // Ref type toggle — pre-fill from global supplier record
   const _gsForRef = globalSuppliersList.find(g => g.name.trim().toLowerCase() === (s?.name || '').trim().toLowerCase());
@@ -1532,9 +1555,10 @@ async function confirmQuotation() {
       direitos:   parseFloat(document.getElementById('qf_direitos')?.value) || 0,
       is_foreign: document.getElementById('qf_foreign')?.checked || false,
     } : { cambio: null, transport: null, direitos: 0 };
-    await API.updateSupplier(currentQuotSuppId, rateFields);
+    const validityFields = { validity_value: quotGlobalValidity.value || null, validity_unit: quotGlobalValidity.value ? (quotGlobalValidity.unit || 'dias') : null };
+    await API.updateSupplier(currentQuotSuppId, { ...rateFields, ...validityFields });
     const suppIdx = suppliers.findIndex(s => s.id === currentQuotSuppId);
-    if (suppIdx !== -1) Object.assign(suppliers[suppIdx], rateFields);
+    if (suppIdx !== -1) Object.assign(suppliers[suppIdx], { ...rateFields, ...validityFields });
     // Sync is_foreign to global supplier profile when set
     if (rateFields.is_foreign) {
       const _suppName = suppliers.find(s => s.id === currentQuotSuppId)?.name;

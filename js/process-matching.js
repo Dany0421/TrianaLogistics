@@ -647,6 +647,12 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
             etaDiv.textContent = etaVal + ' ' + etaUnit;
             span.appendChild(etaDiv);
           }
+          if (!m?.quotation_items?.is_manual && s.validity_value) {
+            const valDiv = document.createElement('div');
+            valDiv.style.cssText = `font-size:10px;margin-top:1px;color:${isSel ? 'var(--accent)' : 'var(--muted)'};font-family:'IBM Plex Mono',monospace`;
+            valDiv.textContent = 'val. ' + s.validity_value + ' ' + (s.validity_unit || 'dias');
+            span.appendChild(valDiv);
+          }
           // 1. Item pai — sempre primeiro quando showSupplierDescs
           if (showSupplierDescs) {
             const rawText = (m?.quotation_items?.raw_description || '').trim();
@@ -2135,7 +2141,7 @@ async function _doImportFromBom(suppSel, newNameInp, foreignCb, curSel, itemsLis
     const currency = curSel.value;
     const rows = checkedRows.map(row => {
       const v = parseFloat(row.querySelector('.ib-price').value);
-      return { supplier_id: supplierId, raw_description: row.dataset.desc, price: (isNaN(v) || v < 0) ? null : v, quantity: 1, currency };
+      return { supplier_id: supplierId, raw_description: row.dataset.desc, price: (isNaN(v) || v < 0) ? null : v, quantity: 1, currency, is_manual: true };
     });
 
     const created = await API.saveQuotationItems(rows);

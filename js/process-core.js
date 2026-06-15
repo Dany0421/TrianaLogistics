@@ -41,6 +41,7 @@ let priceAnomalies = {};   // modal: itemIndex → { type, median, ratio }
 let savedAnomalyMap = {};  // supplier cards: qi.id → { type, median, ratio }
 let quotGlobalDiscount = 0;
 let quotGlobalEta = { value: '', unit: 'dias' };
+let quotGlobalValidity = { value: '', unit: 'dias' };
 let pendingProcessCategories = [];
 let rejectedAutoMatch = []; // persisted rejections: never auto-recreate these matches
 
