@@ -258,7 +258,12 @@ function renderSuppliers() {
       const quotSec = document.createElement('div'); quotSec.style.cssText = 'border-top:1px solid var(--border);padding-top:12px';
       const quotHdr = document.createElement('div'); quotHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
       const quotLbl = document.createElement('div'); quotLbl.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px"; quotLbl.textContent = `COTAÇÃO — ${qCount} ITENS`; quotHdr.appendChild(quotLbl);
-      if (quotationFilesMap[s.id]) { const vBtn = document.createElement('button'); vBtn.className = 'btn btn-ghost btn-sm'; lbtn(vBtn, 'file-text', 'Ver original'); vBtn.addEventListener('click', e => { e.stopPropagation(); viewQuotFile(quotationFilesMap[s.id].file_path); }); quotHdr.appendChild(vBtn); }
+      if (quotationFilesMap[s.id]) {
+        const qfBtnWrap = document.createElement('div'); qfBtnWrap.style.cssText = 'display:flex;gap:4px';
+        const vBtn = document.createElement('button'); vBtn.className = 'btn btn-ghost btn-sm'; lbtn(vBtn, 'file-text', 'Ver'); vBtn.addEventListener('click', e => { e.stopPropagation(); viewQuotFile(quotationFilesMap[s.id].file_path); }); qfBtnWrap.appendChild(vBtn);
+        const dlBtn = document.createElement('button'); dlBtn.className = 'btn btn-ghost btn-sm'; lbtn(dlBtn, 'download', 'Baixar'); dlBtn.addEventListener('click', e => { e.stopPropagation(); downloadQuotFile(quotationFilesMap[s.id].file_path, quotationFilesMap[s.id].original_name); }); qfBtnWrap.appendChild(dlBtn);
+        quotHdr.appendChild(qfBtnWrap);
+      }
       quotSec.appendChild(quotHdr);
       const qTable = document.createElement('table'); qTable.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px';
       qItems.slice(0, 6).forEach(qi => {
@@ -1613,6 +1618,20 @@ async function viewQuotFile(filePath) {
     const url = await API.getSignedUrl('procurement-files', filePath);
     window.open(url, '_blank');
   } catch(e) { showToast('Erro ao abrir ficheiro.', true); }
+}
+
+async function downloadQuotFile(filePath, originalName) {
+  if (!_isValidFilePath(filePath)) { showToast('Caminho de ficheiro inválido.', true); return; }
+  try {
+    const url = await API.getSignedUrl('procurement-files', filePath);
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = originalName || filePath.split('/').pop();
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch(e) { showToast('Erro ao baixar ficheiro.', true); }
 }
 
 // ── PDF Quotation (ported from planilha-generator) ──
