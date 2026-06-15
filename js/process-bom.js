@@ -401,8 +401,24 @@ function buildBomSuggestionsStep() {
     addBtn.textContent = `Adicionar selecionados (${n})`;
     addBtn.disabled = n === 0;
   };
-  checkboxMap.forEach(cb => cb.addEventListener('change', updateCount));
+  const toggleAllBtn = document.createElement('button');
+  toggleAllBtn.className = 'btn btn-ghost';
+  toggleAllBtn.style.cssText = 'font-size:12px;padding:2px 8px;margin-bottom:var(--sp-2)';
+  const updateToggleLabel = () => {
+    const allChecked = [...checkboxMap.values()].every(c => c.checked);
+    toggleAllBtn.textContent = allChecked ? 'Deselecionar todos' : 'Selecionar todos';
+  };
+  toggleAllBtn.addEventListener('click', () => {
+    const allChecked = [...checkboxMap.values()].every(c => c.checked);
+    checkboxMap.forEach(c => { c.checked = !allChecked; });
+    updateCount();
+    updateToggleLabel();
+  });
+  wrap.insertBefore(toggleAllBtn, step);
+
+  checkboxMap.forEach(cb => cb.addEventListener('change', () => { updateCount(); updateToggleLabel(); }));
   updateCount();
+  updateToggleLabel();
 
   addBtn.addEventListener('click', async () => {
     addBtn.disabled = true;
