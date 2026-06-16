@@ -495,7 +495,7 @@ function _showConfirmModal(title, message, confirmLabel = 'Confirmar') {
 
 // ── Helpers ──
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('pt-PT'); }
+function fmtDate(d) { if (!d) return '—'; const s=String(d).substring(0,10).split('-').map(Number); return new Date(s[0],s[1]-1,s[2]).toLocaleDateString('pt-PT'); }
 function formatResponseTime(hours) { if (!hours || hours <= 0) return '—'; return hours < 24 ? Math.round(hours) + 'h' : (hours / 24).toFixed(1) + ' dias'; }
 function fmtPrice(p) {
   if (p == null || p === '') return '—';

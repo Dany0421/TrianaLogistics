@@ -1,7 +1,7 @@
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function showToast(msg,isErr){const t=document.getElementById('toast');t.textContent=msg;t.className='toast'+(isErr?' toast-error':' toast-success')+' show';setTimeout(()=>t.className='toast',3000);}
 function formatResponseTime(h){if(!h||h<=0)return '—';return h<24?Math.round(h)+'h':(h/24).toFixed(1)+' dias';}
-function fmtDate(d){if(!d)return '—';return new Date(d).toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'});}
+function fmtDate(d){if(!d)return '—';const s=String(d).substring(0,10).split('-').map(Number);return new Date(s[0],s[1]-1,s[2]).toLocaleDateString('pt-PT',{day:'2-digit',month:'short',year:'numeric'});}
 function fmtPrice(p,cur){if(!p&&p!==0)return '—';return Number(p).toLocaleString('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+(cur||'MZN');}
 
 function _confirmModal(message) {

@@ -258,7 +258,7 @@ function renderResults(data, query) {
   area.appendChild(scroll);
 }
 
-function fmtDate(d) { if (!d) return '\u2014'; return new Date(d).toLocaleDateString('pt-PT'); }
+function fmtDate(d) { if (!d) return '\u2014'; const s=String(d).substring(0,10).split('-').map(Number); return new Date(s[0],s[1]-1,s[2]).toLocaleDateString('pt-PT'); }
 function fmtPrice(p) {
   if (p == null || p === '') return '\u2014';
   let n;

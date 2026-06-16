@@ -1134,7 +1134,7 @@ function closeModal() {
 
 // ── Helpers ──
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function fmtDate(d) { if (!d) return '\u2014'; const dt = new Date(d); return dt.toLocaleDateString('pt-PT'); }
+function fmtDate(d) { if (!d) return '\u2014'; const s=String(d).substring(0,10).split('-').map(Number); return new Date(s[0],s[1]-1,s[2]).toLocaleDateString('pt-PT'); }
 function deadlineClass(d) {
   if (!d) return '';
   const diff = (new Date(d) - new Date()) / 86400000;

@@ -947,7 +947,7 @@ const API = {
 
   // ── Follow-up Alerts ──
   async getOverdueFollowups() {
-    const today = new Date().toISOString().split('T')[0];
+    const _n=new Date(); const today=_n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');
     const { data, error } = await supabase
       .from('suppliers')
       .select('id, name, next_followup_at, status, processes(id, project_name, client_name, assigned_to)')
