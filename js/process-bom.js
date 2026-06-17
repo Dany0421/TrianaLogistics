@@ -114,7 +114,7 @@ async function openBomValidationModal(fileName) {
   }
 
   // Table
-  const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
+  const tableWrap = document.createElement('div'); tableWrap.id = 'bomTableWrap'; tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
   const table = document.createElement('table'); table.className = 'bom-validate-table';
   // Static thead (isRevision flag is developer-controlled, not user data)
   const theadStr = `<thead><tr>
@@ -456,6 +456,14 @@ function buildBomSuggestionsStep() {
 function renderBomValTable() {
   const tbody = document.getElementById('bomValTbody');
   if (!tbody) return;
+  const _scrollBox = document.getElementById('bomTableWrap');
+  const _savedScroll = _scrollBox ? _scrollBox.scrollTop : 0;
+  const _af = document.activeElement;
+  const _afTr = _af ? _af.closest('tr') : null;
+  const _afTrs = [...tbody.querySelectorAll('tr')];
+  const _afRowIdx = _afTr ? _afTrs.indexOf(_afTr) : -1;
+  const _afTds = _afTr ? [..._afTr.querySelectorAll('td')] : [];
+  const _afColIdx = _af ? _afTds.indexOf(_af.closest('td')) : -1;
   const isRevision = pendingDiff !== null;
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
@@ -603,6 +611,14 @@ function renderBomValTable() {
 
     tbody.appendChild(tr);
   });
+  if (_afRowIdx >= 0 && _afColIdx >= 0) {
+    const newTr = tbody.querySelectorAll('tr')[_afRowIdx];
+    if (newTr) {
+      const target = newTr.querySelectorAll('td')[_afColIdx]?.querySelector('input, select');
+      if (target) target.focus({ preventScroll: true });
+    }
+  }
+  if (_scrollBox) { _scrollBox.scrollTop = _savedScroll; requestAnimationFrame(() => { _scrollBox.scrollTop = _savedScroll; }); }
 }
 
 async function confirmBom() {
