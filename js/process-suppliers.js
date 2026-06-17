@@ -1283,7 +1283,7 @@ function openQuotationValModal(fileName, rawPdfText) {
   if (s?.is_foreign || _gsQ?.is_foreign) _qfForeignCb.checked = true;
 
   // Table (static thead, dynamic tbody populated by renderQuotValTable)
-  const tableWrap = document.createElement('div'); tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
+  const tableWrap = document.createElement('div'); tableWrap.id = 'quotTableWrap'; tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
   const table = document.createElement('table'); table.className = 'bom-validate-table';
   table.insertAdjacentHTML('afterbegin', `<thead><tr>
     <th style="width:9%">${_quotRefType === 'sku' ? 'SKU' : 'Part #'}</th><th style="width:34%">Descrição</th>
@@ -1343,7 +1343,7 @@ function openQuotationValModal(fileName, rawPdfText) {
 function renderQuotValTable() {
   const tbody = document.getElementById('quotValTbody');
   if (!tbody) return;
-  const _scrollBox = tbody.closest('.modal-box-lg, .modal-box');
+  const _scrollBox = document.getElementById('quotTableWrap');
   const _savedScroll = _scrollBox ? _scrollBox.scrollTop : 0;
   // Save focus position so re-render doesn't trigger browser scroll
   const _af = document.activeElement;
