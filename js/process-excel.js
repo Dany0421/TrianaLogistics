@@ -307,7 +307,12 @@ async function generateExcel() {
       }
     }
 
-    if (!suppId || !qi) { skippedItems.push(bi.description || bi.part_number || '?'); continue; }
+    if (!suppId || !qi) {
+      const allIncluded = !confirmed && Object.values(matchLookup[bi.id] || {}).length > 0 &&
+        Object.values(matchLookup[bi.id]).every(m => m.match_type === 'included_in');
+      if (!allIncluded) skippedItems.push(bi.description || bi.part_number || '?');
+      continue;
+    }
 
     const matchId = matchLookup[bi.id]?.[suppId]?.id;
     const extras = extraByMatchId[matchId] || [];
