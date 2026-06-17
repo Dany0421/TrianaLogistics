@@ -329,10 +329,15 @@ function buildBomSuggestionsStep() {
       const row = document.createElement('div');
       row.className = 'bom-sugg-row';
 
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = true;
-      checkboxMap.set(gs.name, cb);
+      let cb;
+      if (checkboxMap.has(gs.name)) {
+        cb = checkboxMap.get(gs.name);
+      } else {
+        cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        checkboxMap.set(gs.name, cb);
+      }
 
       const name = document.createElement('span');
       name.className = 'bom-sugg-name';
