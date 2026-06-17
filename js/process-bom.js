@@ -580,6 +580,14 @@ function renderBomValTable() {
     if (i === pendingBomItems.length - 1) downBtn.style.opacity = '0.25';
     downBtn.onclick = () => { [pendingBomItems[i], pendingBomItems[i+1]] = [pendingBomItems[i+1], pendingBomItems[i]]; renderBomValTable(); };
 
+    const insBtn = document.createElement('button');
+    insBtn.type = 'button';
+    insBtn.className = 'btn btn-ghost btn-sm';
+    insBtn.textContent = '+';
+    insBtn.title = 'Inserir linha abaixo';
+    insBtn.style.padding = '3px 6px';
+    insBtn.onclick = () => { pendingBomItems.splice(i + 1, 0, { part_number: null, description: '', quantity: 1, unit: '', category: item.category || '', sheet_name: item.sheet_name || null }); renderBomValTable(); };
+
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'btn btn-danger btn-sm';
@@ -589,6 +597,7 @@ function renderBomValTable() {
 
     tdActions.appendChild(upBtn);
     tdActions.appendChild(downBtn);
+    tdActions.appendChild(insBtn);
     tdActions.appendChild(delBtn);
     tr.appendChild(tdActions);
 

@@ -1492,11 +1492,16 @@ function renderQuotValTable() {
     if (i === pendingQuotItems.length - 1) downBtn.style.opacity = '0.25';
     downBtn.onclick = () => { downBtn.blur(); [pendingQuotItems[i], pendingQuotItems[i+1]] = [pendingQuotItems[i+1], pendingQuotItems[i]]; renderQuotValTable(); };
 
+    const insBtn = document.createElement('button');
+    insBtn.type = 'button'; insBtn.className = 'btn btn-ghost btn-sm'; insBtn.textContent = '+';
+    insBtn.title = 'Inserir linha abaixo'; insBtn.style.padding = '3px 6px';
+    insBtn.onclick = () => { insBtn.blur(); pendingQuotItems.splice(i + 1, 0, { raw_part_number: null, raw_description: '', quantity: 1, price: 0, currency: item.currency || 'MZN', discount: item.discount ?? 0, eta_value: item.eta_value, eta_unit: item.eta_unit }); renderQuotValTable(); };
+
     const delBtn = document.createElement('button');
     delBtn.className = 'btn btn-danger btn-sm'; delBtn.textContent = '\u00d7';
     delBtn.onclick = () => { delBtn.blur(); pendingQuotItems.splice(i, 1); renderQuotValTable(); };
 
-    tdDel.appendChild(upBtn); tdDel.appendChild(downBtn); tdDel.appendChild(delBtn);
+    tdDel.appendChild(upBtn); tdDel.appendChild(downBtn); tdDel.appendChild(insBtn); tdDel.appendChild(delBtn);
 
     tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty);
     tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdEta); tr.appendChild(tdDel);
