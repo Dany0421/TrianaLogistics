@@ -187,7 +187,11 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
 function _askExcelOptions() {
   return new Promise(resolve => {
     const el = document.createElement('div');
-    const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = 'Opções do Excel'; el.appendChild(title);
+
+    // ── MAIN VIEW ──────────────────────────────────────────────────────────
+    const mainView = document.createElement('div');
+
+    const title = document.createElement('div'); title.className = 'modal-title'; title.textContent = 'Opções do Excel'; mainView.appendChild(title);
 
     function makeRow(label, opts) {
       const row = document.createElement('div');
@@ -202,7 +206,6 @@ function _askExcelOptions() {
         btn.className = primary ? 'btn btn-primary' : 'btn btn-ghost';
         btn.style.cssText = 'font-size:12px;padding:4px 12px';
         btn.textContent = text;
-        btn.dataset.value = value;
         btn.addEventListener('click', () => {
           btns.forEach(b => { b.className = 'btn btn-ghost'; b.style.cssText = 'font-size:12px;padding:4px 12px'; });
           btn.className = 'btn btn-primary'; btn.style.cssText = 'font-size:12px;padding:4px 12px';
@@ -212,21 +215,143 @@ function _askExcelOptions() {
         btns.push(btn);
         row.appendChild(btn);
       });
-      return row;
+      return { row, btns };
     }
 
-    const descRow = makeRow('Descrição:', [{ text: 'Cotação', value: 'quotation', primary: true }, { text: 'BOM', value: 'bom' }]);
-    const qtyRow  = makeRow('Quantidade:', [{ text: 'Cotação', value: 'quotation', primary: true }, { text: 'BOM', value: 'bom' }]);
-    el.appendChild(descRow);
-    el.appendChild(qtyRow);
+    const { row: descRow } = makeRow('Descrição:', [{ text: 'Cotação', value: 'quotation', primary: true }, { text: 'BOM', value: 'bom' }]);
 
-    const actions = document.createElement('div'); actions.className = 'modal-actions';
+    // Quantity row — built manually to control all 3 buttons (Cotação, BOM, Custom) together
+    const qtyRow = document.createElement('div');
+    qtyRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px';
+    const qtyLbl = document.createElement('span');
+    qtyLbl.style.cssText = 'font-size:12px;color:var(--muted);width:90px;flex-shrink:0';
+    qtyLbl.textContent = 'Quantidade:';
+    qtyRow.appendChild(qtyLbl);
+    qtyRow.dataset.selected = 'quotation';
+
+    let qtyOverrides = {}; // bomItemId → 'bom' | 'quotation'
+
+    const qtyBtns = [];
+    function selectQtyGlobal(btn, value) {
+      qtyBtns.forEach(b => { b.className = 'btn btn-ghost'; b.style.cssText = 'font-size:12px;padding:4px 12px'; });
+      btn.className = 'btn btn-primary'; btn.style.cssText = 'font-size:12px;padding:4px 12px';
+      qtyRow.dataset.selected = value;
+    }
+
+    const btnQtyCot = document.createElement('button'); btnQtyCot.className = 'btn btn-primary'; btnQtyCot.style.cssText = 'font-size:12px;padding:4px 12px'; btnQtyCot.textContent = 'Cotação';
+    const btnQtyBom = document.createElement('button'); btnQtyBom.className = 'btn btn-ghost';    btnQtyBom.style.cssText = 'font-size:12px;padding:4px 12px'; btnQtyBom.textContent = 'BOM';
+    const btnQtyCus = document.createElement('button'); btnQtyCus.className = 'btn btn-ghost';    btnQtyCus.style.cssText = 'font-size:12px;padding:4px 12px'; btnQtyCus.textContent = 'Custom';
+    qtyBtns.push(btnQtyCot, btnQtyBom, btnQtyCus);
+
+    btnQtyCot.addEventListener('click', () => selectQtyGlobal(btnQtyCot, 'quotation'));
+    btnQtyBom.addEventListener('click', () => selectQtyGlobal(btnQtyBom, 'bom'));
+    btnQtyCus.addEventListener('click', () => {
+      openCustomView(qtyRow.dataset.selected === 'custom' ? null : qtyRow.dataset.selected);
+    });
+    qtyRow.appendChild(btnQtyCot); qtyRow.appendChild(btnQtyBom); qtyRow.appendChild(btnQtyCus);
+
+    mainView.appendChild(descRow);
+    mainView.appendChild(qtyRow);
+
+    const mainActions = document.createElement('div'); mainActions.className = 'modal-actions';
     const btnOk = document.createElement('button'); btnOk.className = 'btn btn-primary'; btnOk.textContent = 'Gerar Excel';
     const btnC  = document.createElement('button'); btnC.className  = 'btn btn-ghost';  btnC.textContent  = 'Cancelar';
-    btnOk.addEventListener('click', () => { closeModal(); resolve({ descSource: descRow.dataset.selected, qtySource: qtyRow.dataset.selected }); });
+    btnOk.addEventListener('click', () => { closeModal(); resolve({ descSource: descRow.dataset.selected, qtySource: qtyRow.dataset.selected, qtyOverrides }); });
     btnC.addEventListener('click',  () => { closeModal(); resolve(null); });
-    actions.appendChild(btnOk); actions.appendChild(btnC);
-    el.appendChild(actions);
+    mainActions.appendChild(btnOk); mainActions.appendChild(btnC);
+    mainView.appendChild(mainActions);
+
+    // ── CUSTOM QTY VIEW ────────────────────────────────────────────────────
+    const customView = document.createElement('div');
+    customView.style.display = 'none';
+
+    const customTitle = document.createElement('div'); customTitle.className = 'modal-title'; customTitle.textContent = 'Quantidade por Item'; customView.appendChild(customTitle);
+
+    const tableWrap = document.createElement('div');
+    tableWrap.style.cssText = 'max-height:340px;overflow-y:auto;margin-bottom:14px;border:1px solid var(--border);border-radius:6px';
+    customView.appendChild(tableWrap);
+
+    const table = document.createElement('table');
+    table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px';
+
+    const thead = document.createElement('thead');
+    const headerTr = document.createElement('tr');
+    headerTr.style.cssText = 'background:var(--base-200,#f0f0f0)';
+    ['Item', 'Quantidade'].forEach((h, i) => {
+      const th = document.createElement('th');
+      th.style.cssText = `padding:8px 10px;text-align:${i === 0 ? 'left' : 'center'};font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;position:sticky;top:0;background:var(--base-200,#f0f0f0);z-index:1`;
+      th.textContent = h;
+      headerTr.appendChild(th);
+    });
+    thead.appendChild(headerTr);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+
+    function openCustomView(defaultSrc) {
+      const src = defaultSrc || 'quotation';
+      // Build table rows — only done on open, toggles never rebuild
+      tbody.replaceChildren();
+      const equipItems = bomItems.filter(bi => bi.service_price == null);
+      equipItems.forEach((bi, idx) => {
+        if (!(bi.id in qtyOverrides)) qtyOverrides[bi.id] = src;
+
+        const tr = document.createElement('tr');
+        tr.style.cssText = `border-top:1px solid var(--border);background:${idx % 2 === 1 ? 'var(--base-50,#fafafa)' : ''}`;
+
+        const tdDesc = document.createElement('td');
+        tdDesc.style.cssText = 'padding:7px 10px;max-width:260px';
+        const descSpan = document.createElement('span');
+        descSpan.style.cssText = 'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px';
+        descSpan.title = bi.description || bi.part_number || '';
+        descSpan.textContent = bi.description || bi.part_number || '—';
+        tdDesc.appendChild(descSpan);
+        tr.appendChild(tdDesc);
+
+        const tdTog = document.createElement('td');
+        tdTog.style.cssText = 'padding:7px 10px;text-align:center;white-space:nowrap';
+
+        const bCot = document.createElement('button'); bCot.type = 'button'; bCot.style.cssText = 'font-size:11px;padding:2px 9px;margin-right:4px'; bCot.textContent = 'Cotação';
+        const bBom = document.createElement('button'); bBom.type = 'button'; bBom.style.cssText = 'font-size:11px;padding:2px 9px'; bBom.textContent = 'BOM';
+
+        function applyToggle(val) {
+          qtyOverrides[bi.id] = val;
+          bCot.className = val === 'quotation' ? 'btn btn-primary' : 'btn btn-ghost';
+          bBom.className = val === 'bom'       ? 'btn btn-primary' : 'btn btn-ghost';
+        }
+        applyToggle(qtyOverrides[bi.id]);
+        // Toggle clicks only update classes — table never rebuilt — scroll preserved
+        bCot.addEventListener('click', () => applyToggle('quotation'));
+        bBom.addEventListener('click', () => applyToggle('bom'));
+
+        tdTog.appendChild(bCot); tdTog.appendChild(bBom);
+        tr.appendChild(tdTog);
+        tbody.appendChild(tr);
+      });
+
+      mainView.style.display = 'none';
+      customView.style.display = '';
+    }
+
+    const customActions = document.createElement('div'); customActions.className = 'modal-actions';
+    const btnConfirm = document.createElement('button'); btnConfirm.className = 'btn btn-primary'; btnConfirm.textContent = 'Confirmar';
+    const btnBack    = document.createElement('button'); btnBack.className    = 'btn btn-ghost';   btnBack.textContent    = '← Voltar';
+    btnConfirm.addEventListener('click', () => {
+      selectQtyGlobal(btnQtyCus, 'custom');
+      customView.style.display = 'none';
+      mainView.style.display = '';
+    });
+    btnBack.addEventListener('click', () => {
+      customView.style.display = 'none';
+      mainView.style.display = '';
+    });
+    customActions.appendChild(btnConfirm); customActions.appendChild(btnBack);
+    customView.appendChild(customActions);
+
+    el.appendChild(mainView);
+    el.appendChild(customView);
     showModal(el);
   });
 }
@@ -236,7 +361,7 @@ async function generateExcel() {
 
   const excelOpts = await _askExcelOptions();
   if (excelOpts === null) return;
-  const { descSource, qtySource } = excelOpts;
+  const { descSource, qtySource, qtyOverrides } = excelOpts;
 
   // Build selected offer lookup
   const selLookup = {};
@@ -328,7 +453,8 @@ async function generateExcel() {
     const indexInSupplier = supplierCounters[suppId]++;
     seenQI[suppId].set(qi.id, indexInSupplier);
     const matchType = matchLookup[bi.id]?.[suppId]?.match_type;
-    const effQty = (matchType === 'historical' || qtySource === 'bom') ? bi.quantity : (qi.quantity || bi.quantity);
+    const itemQtySrc = qtySource === 'custom' ? (qtyOverrides[bi.id] || 'quotation') : qtySource;
+    const effQty = (matchType === 'historical' || itemQtySrc === 'bom') ? bi.quantity : (qi.quantity || bi.quantity);
     supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(effQty), price: String(totalPrice) });
     allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: effQty, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }
