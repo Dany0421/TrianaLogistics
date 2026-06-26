@@ -1046,6 +1046,12 @@ async function handleQuotationUpload(input) {
       quantity: qi.quantity,
       price: qi.price,
       currency: qi.currency,
+      discount: qi.discount ?? 0,
+      _enteredPrice: (qi.price || 0) * (1 - (qi.discount || 0) / 100),
+      eta_value: qi.eta_value || '',
+      eta_unit: qi.eta_unit || 'dias',
+      _discountManual: true,
+      _etaManual: true,
     }));
     if (existing.length && newItems.length) {
       _askReplaceOrAppend(existing, newItems,
@@ -1121,8 +1127,8 @@ function openQuotationValModal(fileName, rawPdfText) {
   quotGlobalValidity = { value: s?.validity_value || '', unit: s?.validity_unit || 'dias' };
   pendingQuotItems.forEach(item => {
     if (item.discount == null) item.discount = 0;
-    item._discountManual = false;
-    item._etaManual = false;
+    item._discountManual ??= false;
+    item._etaManual ??= false;
     if (item.eta_value == null) item.eta_value = '';
     if (item.eta_unit == null) item.eta_unit = 'dias';
   });
@@ -1700,6 +1706,12 @@ async function handlePdfQuotation(file) {
       quantity: qi.quantity,
       price: qi.price,
       currency: qi.currency,
+      discount: qi.discount ?? 0,
+      _enteredPrice: (qi.price || 0) * (1 - (qi.discount || 0) / 100),
+      eta_value: qi.eta_value || '',
+      eta_unit: qi.eta_unit || 'dias',
+      _discountManual: true,
+      _etaManual: true,
     }));
     if (existingPdf.length && newPdfItems.length) {
       _askReplaceOrAppend(existingPdf, newPdfItems,

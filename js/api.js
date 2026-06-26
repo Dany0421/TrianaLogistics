@@ -235,7 +235,8 @@ const API = {
       .from('quotation_items')
       .select('*')
       .eq('supplier_id', supplierId)
-      .order('created_at');
+      .order('created_at')
+      .order('id');
     if (error) throw _sanitizeError(error);
     return data;
   },
@@ -246,7 +247,8 @@ const API = {
       .from('quotation_items')
       .select('*')
       .in('supplier_id', supplierIds)
-      .order('created_at');
+      .order('created_at')
+      .order('id');
     if (error) throw _sanitizeError(error);
     return data || [];
   },
