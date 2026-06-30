@@ -952,10 +952,11 @@ const API = {
     const _n=new Date(); const today=_n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');
     const { data, error } = await supabase
       .from('suppliers')
-      .select('id, name, next_followup_at, status, processes(id, project_name, client_name, assigned_to)')
+      .select('id, name, next_followup_at, status, processes!inner(id, project_name, client_name, assigned_to)')
       .lte('next_followup_at', today)
       .not('next_followup_at', 'is', null)
       .not('status', 'in', '("Replied complete","No stock","Not available","Ignored / no response")')
+      .not('processes.status', 'in', '("Closed","Cancelled")')
       .order('next_followup_at', { ascending: true });
     if (error) throw _sanitizeError(error);
     return data;
