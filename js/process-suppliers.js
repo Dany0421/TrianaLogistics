@@ -1163,6 +1163,26 @@ function openQuotationValModal(fileName, rawPdfText) {
   discBar.appendChild(discLabel); discBar.appendChild(discIn); discBar.appendChild(discPct); discBar.appendChild(resetDiscBtn);
   el.appendChild(discBar);
 
+  // Moeda global bar
+  const curBar = document.createElement('div'); curBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
+  const curLabel = document.createElement('label'); curLabel.style.cssText = 'font-size:12px;color:var(--muted)'; curLabel.textContent = 'Moeda global';
+  const curSel = document.createElement('select'); curSel.style.cssText = 'width:80px;padding:4px 6px;font-size:12px';
+  const curPlaceholder = document.createElement('option');
+  curPlaceholder.value = ''; curPlaceholder.textContent = '—'; curPlaceholder.selected = true;
+  curSel.appendChild(curPlaceholder);
+  ['MZN','USD','EUR','ZAR'].forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    curSel.appendChild(opt);
+  });
+  curSel.onchange = function() {
+    if (!this.value) return;
+    pendingQuotItems.forEach(item => { item.currency = this.value; });
+    renderQuotValTable();
+  };
+  curBar.appendChild(curLabel); curBar.appendChild(curSel);
+  el.appendChild(curBar);
+
   // ETA global bar
   const etaBar = document.createElement('div'); etaBar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
   const etaLabel = document.createElement('label'); etaLabel.style.cssText = 'font-size:12px;color:var(--muted)'; etaLabel.textContent = 'ETA global';
@@ -1242,7 +1262,7 @@ function openQuotationValModal(fileName, rawPdfText) {
         }
       });
       // Update column header
-      const th = table.querySelector('thead th');
+      const th = table.querySelector('thead th:nth-child(2)');
       if (th) th.textContent = value === 'sku' ? 'SKU' : 'Part #';
       renderQuotValTable();
     });
@@ -1292,7 +1312,8 @@ function openQuotationValModal(fileName, rawPdfText) {
   const tableWrap = document.createElement('div'); tableWrap.id = 'quotTableWrap'; tableWrap.style.cssText = 'max-height:380px;overflow-y:auto;margin-bottom:12px';
   const table = document.createElement('table'); table.className = 'bom-validate-table';
   table.insertAdjacentHTML('afterbegin', `<thead><tr>
-    <th style="width:9%">${_quotRefType === 'sku' ? 'SKU' : 'Part #'}</th><th style="width:34%">Descrição</th>
+    <th style="width:3%">#</th>
+    <th style="width:9%">${_quotRefType === 'sku' ? 'SKU' : 'Part #'}</th><th style="width:31%">Descrição</th>
     <th style="width:5%">Qty</th><th style="width:10%">Preço Unit.</th>
     <th style="width:6%">Desc.%</th>
     <th style="width:10%">Moeda</th><th style="width:13%">ETA</th><th style="width:13%"></th>
@@ -1371,6 +1392,11 @@ function renderQuotValTable() {
     )) return;
 
     const tr = document.createElement('tr');
+
+    // Nº da linha (índice em pendingQuotItems — estável com pesquisa ativa)
+    const tdNum = document.createElement('td');
+    tdNum.style.cssText = 'font-size:11px;color:var(--muted);text-align:right;padding-right:6px';
+    tdNum.textContent = i + 1;
 
     // Part #
     const tdPart = document.createElement('td');
@@ -1509,7 +1535,7 @@ function renderQuotValTable() {
 
     tdDel.appendChild(upBtn); tdDel.appendChild(downBtn); tdDel.appendChild(insBtn); tdDel.appendChild(delBtn);
 
-    tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty);
+    tr.appendChild(tdNum); tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty);
     tr.appendChild(tdPrice); tr.appendChild(tdDisc); tr.appendChild(tdCur); tr.appendChild(tdEta); tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
