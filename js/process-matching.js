@@ -170,6 +170,12 @@ function renderMatchingTab() {
   importBomBtn.addEventListener('click', openImportFromBomModal);
   toggleBar.appendChild(importBomBtn);
 
+  const bomFromQuotBtn = document.createElement('button');
+  bomFromQuotBtn.className = 'btn btn-ghost btn-sm';
+  lbtn(bomFromQuotBtn, 'list-plus', 'Criar BOM da cotação');
+  bomFromQuotBtn.addEventListener('click', openCreateBomFromQuotModal);
+  toggleBar.appendChild(bomFromQuotBtn);
+
   el.appendChild(toggleBar);
 
   if (matchingView === 'matching' && hasSuppliers) {
@@ -2152,5 +2158,180 @@ async function _doImportFromBom(suppSel, newNameInp, foreignCb, curSel, itemsLis
     renderSuppliers();
     renderMatchingTab();
     showToast(`${created.length} item${created.length > 1 ? 's' : ''} criados.`);
+  } catch(e) { showToast('Erro: ' + e.message, true); confirmBtn.disabled = false; }
+}
+
+// ── Create BOM from quotation modal (inverse of Importar do BOM) ──
+function openCreateBomFromQuotModal() {
+  const suppsWithQuot = suppliers.filter(s => (quotationMap[s.id] || []).length);
+  if (!suppsWithQuot.length) { showToast('Nenhum fornecedor com cotação carregada.', true); return; }
+
+  const el = document.createElement('div');
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'Matching';
+  const ttl = document.createElement('div'); ttl.className = 'modal-title'; ttl.textContent = 'Criar BOM da Cotação';
+  el.appendChild(tag); el.appendChild(ttl);
+
+  // Supplier + Category row
+  const row1 = document.createElement('div');
+  row1.style.cssText = 'display:grid;grid-template-columns:1fr 180px;gap:12px;margin-bottom:12px';
+  const suppWrap = document.createElement('div');
+  const suppLbl = document.createElement('label'); suppLbl.textContent = 'Fornecedor';
+  const suppSel = document.createElement('select');
+  const plhOpt = document.createElement('option'); plhOpt.value = ''; plhOpt.textContent = 'Selecionar...';
+  suppSel.appendChild(plhOpt);
+  for (const s of suppsWithQuot) {
+    const opt = document.createElement('option');
+    opt.value = s.id; opt.textContent = `${s.name} (${(quotationMap[s.id] || []).length} itens)`;
+    suppSel.appendChild(opt);
+  }
+  suppWrap.appendChild(suppLbl); suppWrap.appendChild(suppSel);
+  const catWrap = document.createElement('div');
+  const catLbl = document.createElement('label'); catLbl.textContent = 'Categoria (opcional)';
+  const catInp = document.createElement('input'); catInp.placeholder = 'Ex: Equipamento';
+  catWrap.appendChild(catLbl); catWrap.appendChild(catInp);
+  row1.appendChild(suppWrap); row1.appendChild(catWrap);
+  el.appendChild(row1);
+
+  // Items header with select/deselect-all toggle
+  const itemsHdr = document.createElement('div');
+  itemsHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px';
+  const itemsLbl = document.createElement('label'); itemsLbl.style.margin = '0'; itemsLbl.textContent = 'Itens da cotação';
+  const selAllBtn = document.createElement('button');
+  selAllBtn.className = 'btn btn-ghost btn-sm'; selAllBtn.style.fontSize = '11px'; selAllBtn.textContent = 'Desselecionar todos';
+  itemsHdr.appendChild(itemsLbl); itemsHdr.appendChild(selAllBtn);
+  el.appendChild(itemsHdr);
+
+  const itemsList = document.createElement('div');
+  itemsList.style.cssText = 'max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:7px';
+  el.appendChild(itemsList);
+
+  const updateConfirmBtn = () => {
+    const btn = el.querySelector('#cbq_confirm');
+    if (!btn) return;
+    const n = itemsList.querySelectorAll('input[type=checkbox]:checked').length;
+    btn.textContent = n > 0 ? `Criar ${n} item${n > 1 ? 's' : ''} no BOM` : 'Criar itens no BOM';
+    btn.disabled = n === 0 || !suppSel.value;
+  };
+
+  let allSelected = true;
+  function renderItems() {
+    while (itemsList.firstChild) itemsList.removeChild(itemsList.firstChild);
+    allSelected = true; selAllBtn.textContent = 'Desselecionar todos';
+    const qis = quotationMap[suppSel.value] || [];
+    const norm = s => (s || '').trim().toLowerCase();
+    const keyOf = qi => norm(qi.raw_part_number || qi.raw_sku) || 'd:' + norm(qi.raw_description);
+    const counts = {};
+    qis.forEach(qi => { const k = keyOf(qi); counts[k] = (counts[k] || 0) + 1; });
+    qis.forEach((qi, i) => {
+      const row = document.createElement('div');
+      row.className = 'cbq-item-row';
+      row.style.cssText = `display:flex;align-items:center;gap:10px;padding:9px 12px;${i > 0 ? 'border-top:1px solid var(--border)' : ''}`;
+      row.dataset.qid = qi.id;
+
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true;
+      cb.style.cssText = 'width:auto;flex-shrink:0;cursor:pointer';
+      cb.addEventListener('change', updateConfirmBtn);
+
+      const num = document.createElement('span');
+      num.style.cssText = 'font-size:11px;color:var(--muted);width:28px;text-align:right;flex-shrink:0';
+      num.textContent = i + 1;
+
+      const descWrap = document.createElement('div'); descWrap.style.cssText = 'flex:1;min-width:0;cursor:pointer';
+      const descTxt = document.createElement('div');
+      descTxt.style.cssText = 'font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      descTxt.textContent = qi.raw_description || ''; descTxt.title = qi.raw_description || '';
+      descWrap.appendChild(descTxt);
+      const partTxt = (qi.raw_part_number || qi.raw_sku || '').trim();
+      if (partTxt) {
+        const part = document.createElement('div');
+        part.style.cssText = 'font-size:10px;color:var(--muted);margin-top:1px';
+        part.textContent = partTxt; descWrap.appendChild(part);
+      }
+      descWrap.addEventListener('click', () => { cb.checked = !cb.checked; updateConfirmBtn(); });
+
+      const qty = document.createElement('span');
+      qty.style.cssText = "font-size:11px;color:var(--muted);flex-shrink:0;font-family:'IBM Plex Mono',monospace";
+      qty.textContent = `× ${qi.quantity || 1}`;
+
+      row.appendChild(cb); row.appendChild(num); row.appendChild(descWrap);
+      if (counts[keyOf(qi)] > 1) {
+        const dup = document.createElement('span');
+        dup.style.cssText = 'font-size:10px;color:#eab308;border:1px solid rgba(234,179,8,.4);border-radius:4px;padding:1px 6px;flex-shrink:0';
+        dup.textContent = 'duplicado';
+        row.appendChild(dup);
+      }
+      row.appendChild(qty);
+      itemsList.appendChild(row);
+    });
+    updateConfirmBtn();
+  }
+  suppSel.addEventListener('change', renderItems);
+  selAllBtn.addEventListener('click', () => {
+    allSelected = !allSelected;
+    itemsList.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = allSelected; });
+    selAllBtn.textContent = allSelected ? 'Desselecionar todos' : 'Selecionar todos';
+    updateConfirmBtn();
+  });
+  if (suppsWithQuot.length === 1) suppSel.value = suppsWithQuot[0].id;
+  renderItems();
+
+  // Actions
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'modal-actions'; actionsDiv.style.marginTop = '16px';
+  const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-ghost'; cancelBtn.textContent = 'Cancelar';
+  cancelBtn.addEventListener('click', closeModal);
+  const confirmBtn = document.createElement('button'); confirmBtn.className = 'btn btn-primary'; confirmBtn.id = 'cbq_confirm';
+  confirmBtn.addEventListener('click', () => _doCreateBomFromQuot(suppSel, catInp, itemsList, confirmBtn));
+  actionsDiv.appendChild(cancelBtn); actionsDiv.appendChild(confirmBtn);
+  el.appendChild(actionsDiv);
+
+  showModalLg(el);
+  updateConfirmBtn();
+}
+
+async function _doCreateBomFromQuot(suppSel, catInp, itemsList, confirmBtn) {
+  const supplierId = suppSel.value;
+  if (!supplierId) { showToast('Seleciona um fornecedor.', true); return; }
+  const checkedIds = new Set(
+    [...itemsList.querySelectorAll('.cbq-item-row')]
+      .filter(r => r.querySelector('input[type=checkbox]').checked)
+      .map(r => r.dataset.qid)
+  );
+  const chosen = (quotationMap[supplierId] || []).filter(qi => checkedIds.has(qi.id));
+  if (!chosen.length) { showToast('Seleciona pelo menos um item.', true); return; }
+  confirmBtn.disabled = true;
+  try {
+    const s = suppliers.find(x => x.id === supplierId);
+    let version = bomVersions[0];
+    if (!version) {
+      version = await API.createBomVersion(processId, `Cotação — ${s?.name || ''}`, null, 1);
+    }
+    const category = catInp.value.trim() || null;
+    let sort = bomItems.length ? Math.max(...bomItems.map(b => b.sort_order || 0)) + 1 : 0;
+    const rows = chosen.map(qi => ({
+      process_id: processId,
+      bom_version_id: version.id,
+      description: String(qi.raw_description || '').slice(0, BOM_MAX_DESCRIPTION_LEN),
+      part_number: (qi.raw_part_number || qi.raw_sku || '').trim().slice(0, BOM_MAX_PART_LEN) || null,
+      quantity: qi.quantity || 1,
+      category,
+      sheet_name: 'Sheet1',
+      sort_order: sort++,
+      is_service: false,
+      service_price: 0,
+    }));
+    const saved = await API.saveBomItems(rows);
+    await API.saveMatches(saved.map((b, i) => ({
+      process_id: processId,
+      bom_item_id: b.id,
+      supplier_id: supplierId,
+      quotation_item_id: chosen[i].id,
+      match_type: 'manual',
+      confidence: 1,
+    })));
+    closeModal();
+    showToast(`${saved.length} item${saved.length > 1 ? 's' : ''} criados no BOM e linkados.`);
+    await loadAll();
+    renderMatchingTab();
   } catch(e) { showToast('Erro: ' + e.message, true); confirmBtn.disabled = false; }
 }
