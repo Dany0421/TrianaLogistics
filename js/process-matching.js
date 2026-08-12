@@ -2145,9 +2145,10 @@ async function _doImportFromBom(suppSel, newNameInp, foreignCb, curSel, itemsLis
     if (!checkedRows.length) { showToast('Seleciona pelo menos um item.', true); confirmBtn.disabled = false; return; }
 
     const currency = curSel.value;
-    const rows = checkedRows.map(row => {
+    const sortBase = (quotationMap[supplierId] || []).length;
+    const rows = checkedRows.map((row, idx) => {
       const v = parseFloat(row.querySelector('.ib-price').value);
-      return { supplier_id: supplierId, raw_description: row.dataset.desc, price: (isNaN(v) || v < 0) ? null : v, quantity: 1, currency, is_manual: true };
+      return { supplier_id: supplierId, raw_description: row.dataset.desc, price: (isNaN(v) || v < 0) ? null : v, quantity: 1, currency, is_manual: true, sort_order: sortBase + idx };
     });
 
     const created = await API.saveQuotationItems(rows);

@@ -1569,12 +1569,13 @@ async function confirmQuotation() {
     const keepIds = new Set(valid.filter(i => i.id).map(i => i.id));
     const idsToDelete = [...existingIds].filter(id => !keepIds.has(id));
     await API.updateQuotationItems(
-      valid.map(i => {
+      valid.map((i, idx) => {
         const { _discountManual, _etaManual, _enteredPrice, ...rest } = i;
         return {
           ...rest,
           supplier_id: currentQuotSuppId,
           raw_description: String(rest.raw_description).slice(0, MAX_QUOTATION_LINE_DESC),
+          sort_order: idx,
         };
       }),
       idsToDelete

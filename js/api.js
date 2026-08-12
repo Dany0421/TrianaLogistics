@@ -235,6 +235,7 @@ const API = {
       .from('quotation_items')
       .select('*')
       .eq('supplier_id', supplierId)
+      .order('sort_order', { nullsFirst: false })
       .order('created_at')
       .order('id');
     if (error) throw _sanitizeError(error);
@@ -247,6 +248,7 @@ const API = {
       .from('quotation_items')
       .select('*')
       .in('supplier_id', supplierIds)
+      .order('sort_order', { nullsFirst: false })
       .order('created_at')
       .order('id');
     if (error) throw _sanitizeError(error);
@@ -689,6 +691,7 @@ const API = {
               discount:         qi.discount,
               eta_value:        qi.eta_value,
               eta_unit:         qi.eta_unit,
+              sort_order:       qi.sort_order,
             }));
             const savedQ = await API.saveQuotationItems(newQItems);
             savedQ.forEach((nq, idx) => { quotItemMap[items[idx].id] = nq.id; });
