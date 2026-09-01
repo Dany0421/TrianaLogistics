@@ -6,6 +6,21 @@ let currentProfile = null;
 const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 hours
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes
 let _inactivityTimer = null;
+let _intentionalLogout = false;
+
+function _mountSessionGuard(redirectTo) {
+  // Refresh failure / signOut elsewhere → avisar e mandar para o login em vez de 401s silenciosos
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT' && !_intentionalLogout) {
+      alert('A tua sessão expirou. Faz login de novo.');
+      window.location.href = redirectTo;
+    }
+  });
+  // Ao voltar ao tab (PC adormeceu / tab inativo), força verificação — getSession renova o token se expirou
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') supabase.auth.getSession();
+  });
+}
 
 async function requireAuth(redirectTo = 'index.html') {
   const { data: { session } } = await supabase.auth.getSession();
@@ -31,6 +46,7 @@ async function requireAuth(redirectTo = 'index.html') {
   }
 
   currentProfile = profile;
+  _mountSessionGuard(redirectTo);
   _startInactivityTimer(redirectTo);
 
   return { user: currentUser, profile };
@@ -40,6 +56,7 @@ function _startInactivityTimer(redirectTo) {
   const reset = () => {
     clearTimeout(_inactivityTimer);
     _inactivityTimer = setTimeout(async () => {
+      _intentionalLogout = true;
       await supabase.auth.signOut();
       window.location.href = redirectTo;
     }, INACTIVITY_TIMEOUT_MS);
@@ -52,6 +69,7 @@ function _startInactivityTimer(redirectTo) {
 
 async function logout() {
   clearTimeout(_inactivityTimer);
+  _intentionalLogout = true;
   await supabase.auth.signOut();
   window.location.href = 'index.html';
 }
