@@ -37,6 +37,10 @@
   .charts-grid { grid-template-columns: 1fr; }
   .chart-card-wide { grid-column: span 1; }
 }
+@media (max-width: 768px) {
+  /* No mobile o sino está no rail do topo: painel abre para baixo e cresce para a esquerda */
+  .notif-panel { bottom: auto; top: calc(100% + 8px); left: auto; right: 0; max-width: calc(100vw - 24px); }
+}
 .followup-banner {
   background: rgba(251,191,36,.06);
   border: 1px solid rgba(251,191,36,.2);
