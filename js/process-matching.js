@@ -1648,7 +1648,119 @@ async function openHistoricalPriceModal(bi) {
   searchBtn.textContent = 'Pesquisar';
   searchRow.appendChild(searchInput);
   searchRow.appendChild(searchBtn);
+  const manualBtn = document.createElement('button');
+  manualBtn.type = 'button'; manualBtn.className = 'btn btn-sm btn-ghost';
+  manualBtn.textContent = '+ Manual';
+  manualBtn.title = 'Adicionar preço histórico manualmente';
+  searchRow.appendChild(manualBtn);
   el.appendChild(searchRow);
+
+  // Manual entry form (hidden until + Manual)
+  const manualDiv = document.createElement('div');
+  manualDiv.style.cssText = 'display:none;flex-direction:column;gap:8px;border:1px solid var(--border);border-radius:6px;padding:12px;background:var(--surface2)';
+  const mTitle = document.createElement('div');
+  mTitle.style.cssText = 'font-size:11px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase';
+  mTitle.textContent = 'Adicionar preço histórico manualmente';
+  manualDiv.appendChild(mTitle);
+
+  const inpCss = 'padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);width:100%';
+  const mkField = (labelTxt, inputEl, flexBasis) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex:1 1 ' + (flexBasis || '120px') + ';min-width:0';
+    const lab = document.createElement('label');
+    lab.style.cssText = 'font-size:11px;color:var(--muted)';
+    lab.textContent = labelTxt;
+    wrap.appendChild(lab); wrap.appendChild(inputEl);
+    return wrap;
+  };
+
+  const suppInput = document.createElement('input');
+  suppInput.type = 'text'; suppInput.style.cssText = inpCss;
+  suppInput.setAttribute('list', 'histManualSuppList');
+  const suppDl = document.createElement('datalist'); suppDl.id = 'histManualSuppList';
+  for (const gs of (globalSuppliersList || [])) { const o = document.createElement('option'); o.value = gs.name; suppDl.appendChild(o); }
+  manualDiv.appendChild(suppDl);
+
+  const mDescInput = document.createElement('input');
+  mDescInput.type = 'text'; mDescInput.style.cssText = inpCss;
+  mDescInput.value = bi.custom_description || bi.description || '';
+
+  const mPriceInput = document.createElement('input');
+  mPriceInput.type = 'number'; mPriceInput.min = '0'; mPriceInput.step = '0.01'; mPriceInput.style.cssText = inpCss;
+
+  const mCurSel = document.createElement('select');
+  mCurSel.style.cssText = inpCss;
+  for (const c of ['MZN', 'USD', 'EUR', 'ZAR']) { const o = document.createElement('option'); o.value = c; o.textContent = c; mCurSel.appendChild(o); }
+
+  const mCambioInput = document.createElement('input');
+  mCambioInput.type = 'number'; mCambioInput.min = '0'; mCambioInput.step = '0.0001'; mCambioInput.style.cssText = inpCss;
+  const mCambioWrap = mkField('Câmbio → MZN', mCambioInput, '90px');
+  mCambioWrap.style.display = 'none';
+  mCurSel.addEventListener('change', () => { mCambioWrap.style.display = mCurSel.value === 'MZN' ? 'none' : 'flex'; });
+
+  const mDateInput = document.createElement('input');
+  mDateInput.type = 'date'; mDateInput.style.cssText = inpCss;
+  mDateInput.value = new Date().toISOString().slice(0, 10);
+
+  const mRow1 = document.createElement('div'); mRow1.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+  mRow1.appendChild(mkField('Fornecedor', suppInput, '200px'));
+  mRow1.appendChild(mkField('Data da cotação', mDateInput, '130px'));
+  const mRow2 = document.createElement('div'); mRow2.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+  mRow2.appendChild(mkField('Descrição (como o fornecedor deu)', mDescInput, '100%'));
+  const mRow3 = document.createElement('div'); mRow3.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+  mRow3.appendChild(mkField('Preço', mPriceInput, '110px'));
+  mRow3.appendChild(mkField('Moeda', mCurSel, '80px'));
+  mRow3.appendChild(mCambioWrap);
+  manualDiv.appendChild(mRow1); manualDiv.appendChild(mRow2); manualDiv.appendChild(mRow3);
+
+  const mSaveRow = document.createElement('div'); mSaveRow.style.cssText = 'display:flex;justify-content:flex-end';
+  const mSaveBtn = document.createElement('button');
+  mSaveBtn.type = 'button'; mSaveBtn.className = 'btn btn-sm btn-primary';
+  mSaveBtn.textContent = 'Gravar e usar';
+  mSaveRow.appendChild(mSaveBtn);
+  manualDiv.appendChild(mSaveRow);
+  el.appendChild(manualDiv);
+
+  manualBtn.addEventListener('click', () => {
+    manualDiv.style.display = manualDiv.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  mSaveBtn.addEventListener('click', async () => {
+    const name = suppInput.value.trim();
+    const desc = mDescInput.value.trim();
+    const price = parseFloat(mPriceInput.value);
+    const currency = mCurSel.value;
+    const cambio = parseFloat(mCambioInput.value) || 0;
+    const dateVal = mDateInput.value;
+    if (!name) { showToast('Indica o fornecedor.', true); return; }
+    if (!desc) { showToast('Indica a descrição.', true); return; }
+    if (!(price > 0)) { showToast('Preço inválido.', true); return; }
+    if (!dateVal) { showToast('Indica a data.', true); return; }
+    if (currency !== 'MZN' && !(cambio > 0)) { showToast('Indica o câmbio para MZN.', true); return; }
+    mSaveBtn.disabled = true; mSaveBtn.textContent = '…';
+    const restoreBtn = () => { mSaveBtn.disabled = false; mSaveBtn.textContent = 'Gravar e usar'; };
+    try {
+      let targetSupp = suppliers.find(s => s.name.trim().toLowerCase() === name.toLowerCase());
+      if (targetSupp && matches.some(m => m.bom_item_id === bi.id && m.supplier_id === targetSupp.id)) {
+        if (!await _showConfirmModal('Substituir match?', name + ' já tem match neste item — o preço manual substitui-o. Continuar?', 'Substituir')) { restoreBtn(); return; }
+      }
+      if (!targetSupp) {
+        targetSupp = await API.createSupplier({ process_id: processId, name, status: 'Historical price', cambio: currency !== 'MZN' && cambio > 0 ? cambio : undefined });
+        suppliers = await API.getSuppliers(processId);
+      }
+      // Meio-dia local evita o off-by-one de timezone ao converter para ISO
+      const createdAt = new Date(dateVal + 'T12:00:00').toISOString();
+      await API.createHistoricalMatch(processId, bi.id, targetSupp.id, desc, price, currency, { createdAt, isManual: true });
+      closeModal();
+      await loadMatchData();
+      quotationMap[targetSupp.id] = await API.getQuotationItems(targetSupp.id);
+      renderMatchingTab();
+      showToast('Preço histórico manual gravado.');
+    } catch(e) {
+      restoreBtn();
+      showToast('Erro: ' + e.message, true);
+    }
+  });
 
   // Results container
   const resultsDiv = document.createElement('div');

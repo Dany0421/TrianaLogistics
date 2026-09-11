@@ -1000,10 +1000,13 @@ const API = {
       .filter(r => r.supplier_name && r.bom_desc && r.quot_desc);
   },
 
-  async createHistoricalMatch(processId, biId, supplierId, rawDesc, finalPrice, currency = 'MZN') {
+  async createHistoricalMatch(processId, biId, supplierId, rawDesc, finalPrice, currency = 'MZN', opts = {}) {
+    const row = { supplier_id: supplierId, raw_description: String(rawDesc).slice(0, 500), price: finalPrice, quantity: 1, currency: currency || 'MZN' };
+    if (opts.createdAt) row.created_at = opts.createdAt;
+    if (opts.isManual) row.is_manual = true;
     const { data: qi, error: e1 } = await supabase
       .from('quotation_items')
-      .insert({ supplier_id: supplierId, raw_description: String(rawDesc).slice(0, 500), price: finalPrice, quantity: 1, currency: currency || 'MZN' })
+      .insert(row)
       .select()
       .single();
     if (e1) throw _sanitizeError(e1);
