@@ -374,6 +374,19 @@ async function generateExcel() {
     matchLookup[m.bom_item_id][m.supplier_id] = m;
   }
 
+  // Itens cobertos por uma inclusão ativa: o fornecedor escolhido do item que cobre é o mesmo
+  // que marcou este item como incluído → já está pago, a linha dele não puxa nada.
+  const _effSuppForItem = (biId) => {
+    if (selLookup[biId]) return selLookup[biId].supplier_id;
+    const real = Object.values(matchLookup[biId] || {}).filter(m => m.match_type !== 'included_in');
+    return real.length === 1 ? real[0].supplier_id : null;  // 1 match só = escolhido (regra core)
+  };
+  const coveredByInclusion = new Set();
+  for (const m of matches) {
+    if (m.match_type !== 'included_in' || !m.included_in_bom_item_id) continue;
+    if (_effSuppForItem(m.included_in_bom_item_id) === m.supplier_id) coveredByInclusion.add(m.bom_item_id);
+  }
+
   // Build extra items lookup: matchId → extra[] (split lines)
   const extraByMatchId = {};
   for (const e of matchExtraItems) {
@@ -409,6 +422,8 @@ async function generateExcel() {
       allRows.push({ type: 'service', model: bi.description, qty: bi.quantity || 1, unitPrice: bi.service_price || 0, sheetName: bi.sheet_name || null });
       continue;
     }
+
+    if (coveredByInclusion.has(bi.id)) continue;
 
     const confirmed = selLookup[bi.id];
     let suppId = null, qi = null;
