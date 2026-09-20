@@ -11,6 +11,30 @@ function effPrice(qi, extras = []) {
 
 // Full DDP cost in MZN per unit — mirrors the Excel buildSupSheet formula exactly.
 // suppTotalG[s.id] = sum of effPrice×qty for all non-included_in matches of this supplier.
+// Itens cobertos por uma inclusão ativa: o fornecedor efetivo do item que cobre (escolhido, ou
+// match único pela regra core) é o mesmo que marcou a inclusão → o item já está pago nessa linha,
+// não soma totais nem puxa lowest price. Usado também pelo gerador de Excel.
+function _coveredByInclusionSet() {
+  const selBy = {};
+  for (const o of selectedOffers) selBy[o.bom_item_id] = o.supplier_id;
+  const byItem = {};
+  for (const m of matches) {
+    if (!byItem[m.bom_item_id]) byItem[m.bom_item_id] = [];
+    byItem[m.bom_item_id].push(m);
+  }
+  const effSupp = (biId) => {
+    if (selBy[biId]) return selBy[biId];
+    const real = (byItem[biId] || []).filter(m => m.match_type !== 'included_in');
+    return real.length === 1 ? real[0].supplier_id : null;
+  };
+  const set = new Set();
+  for (const m of matches) {
+    if (m.match_type !== 'included_in' || !m.included_in_bom_item_id) continue;
+    if (effSupp(m.included_in_bom_item_id) === m.supplier_id) set.add(m.bom_item_id);
+  }
+  return set;
+}
+
 function _ddpMZN(price, currency, s, suppTotalG) {
   if (price == null) return null;
   const cambio = (currency && currency !== 'MZN') ? (parseFloat(s.cambio) || 1) : 1;
@@ -178,17 +202,19 @@ function renderMatchingTab() {
 
   el.appendChild(toggleBar);
 
+  const coveredIncl = _coveredByInclusionSet();
+
   if (matchingView === 'matching' && hasSuppliers) {
-    _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, extraByMatchId, suppTotalG);
+    _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, extraByMatchId, suppTotalG, coveredIncl);
   } else {
     const mode = matchingView === 'resumo' ? 'resumo' : 'itens';
-    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems, mode, extraByMatchId, suppTotalG);
+    _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems, mode, extraByMatchId, suppTotalG, coveredIncl);
   }
 
   scheduleRestoreScroll();
 }
 
-function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, extraByMatchId, suppTotalG) {
+function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, extraByMatchId, suppTotalG, coveredIncl) {
   const includedByLookup = {};
   for (const m of matches) {
     if (m.match_type === 'included_in' && m.included_in_bom_item_id) {
@@ -353,7 +379,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     }
     const selectedSuppId = selLookup[bi.id];
     let lowestPriceMZN = Infinity;
-    for (const s of suppliers) {
+    for (const s of (coveredIncl.has(bi.id) ? [] : suppliers)) {
       const _m = matchLookup[bi.id]?.[s.id];
       if (_m?.match_type === 'included_in') continue;
       const p = effPrice(_m?.quotation_items, extraByMatchId[_m?.id] || []);
@@ -469,7 +495,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
   el.appendChild(scrollWrap);
 }
 
-function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems, mode, extraByMatchId, suppTotalG) {
+function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covered, equipItems, serviceItems, mode, extraByMatchId, suppTotalG, coveredIncl) {
   mode = mode || 'itens';
   const includeServices = mode === 'resumo' && serviceItems.length > 0;
   const includedByLookup = {};
@@ -488,7 +514,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
   // For items with multiple matches and no selection: track which supplier has the lowest price
   const lowestSuppForItem = {};
   for (const bi of equipItems) {
-    if (selLookup[bi.id]) continue;
+    if (selLookup[bi.id] || coveredIncl.has(bi.id)) continue;
     const matchCount = Object.keys(matchLookup[bi.id] || {}).length;
     if (matchCount <= 1) continue;
     let lowestDDP = null, lowestSuppId = null;
@@ -511,7 +537,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const selectedSuppId = selLookup[bi.id];
       const isSelected = selectedSuppId === s.id;
       const thisMatch = matchLookup[bi.id]?.[s.id];
-      if (thisMatch?.match_type === 'included_in') return sum;
+      if (thisMatch?.match_type === 'included_in' || coveredIncl.has(bi.id)) return sum;
       const isOnlyMatch = matchCount === 1 && thisMatch != null && thisMatch.match_type !== 'included_in';
       if (isSelected || isOnlyMatch) {
         const p = effPrice(thisMatch?.quotation_items, extraByMatchId[thisMatch?.id] || []);
@@ -526,6 +552,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
     }, 0);
   }
   const totalCovered = equipItems.reduce((sum, bi) => {
+    if (coveredIncl.has(bi.id)) return sum;
     const matchCount = Object.keys(matchLookup[bi.id] || {}).length;
     const selectedSuppId = selLookup[bi.id];
     if (selectedSuppId) {
@@ -620,7 +647,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const dDiv = document.createElement('div'); dDiv.style.fontSize = '13px'; dDiv.textContent = bi.description; tdItem.appendChild(dDiv);
       if (bi.part_number) { const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv); }
       let lowestPriceMZN = Infinity;
-      for (const s of suppliers) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const p = effPrice(cm?.quotation_items, extraByMatchId[cm?.id] || []); const cur = cm?.quotation_items?.currency; const pDDP = _ddpMZN(p, cur, s, suppTotalG); if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP; }
+      for (const s of (coveredIncl.has(bi.id) ? [] : suppliers)) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const p = effPrice(cm?.quotation_items, extraByMatchId[cm?.id] || []); const cur = cm?.quotation_items?.currency; const pDDP = _ddpMZN(p, cur, s, suppTotalG); if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP; }
       const selectedSuppId = selLookup[bi.id];
       for (const s of suppliers) {
         const m = matchLookup[bi.id]?.[s.id];
