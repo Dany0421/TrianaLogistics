@@ -392,10 +392,10 @@ async function generateExcel() {
     if (!s) continue;
     const q = (quotationMap[m.supplier_id] || []).find(q => q.id === m.quotation_item_id);
     const extras = extraByMatchId[m.id] || [];
-    const p = effPrice(q, extras);
-    if (p == null) continue;
     const bi = bomItems.find(b => b.id === m.bom_item_id);
-    suppTotalG[s.id] = (suppTotalG[s.id] || 0) + p * (bi?.quantity || 1);
+    const v = matchLineValue({ ...m, quotation_items: q }, extras, bi);
+    if (!v) continue;
+    suppTotalG[s.id] = (suppTotalG[s.id] || 0) + v.total;
   }
 
   // Build supplier items AND ordered row list (BOM order) in one pass
@@ -429,9 +429,9 @@ async function generateExcel() {
           if (m.match_type === 'included_in') continue;
           const q = (quotationMap[sid] || []).find(q => q.id === m.quotation_item_id);
           const extras = extraByMatchId[m.id] || [];
-          const p = effPrice(q, extras);
+          const v = matchLineValue({ ...m, quotation_items: q }, extras, bi);
           const s = suppliers.find(x => x.id === sid);
-          const ddp = (p != null && s) ? _ddpMZN(p, q?.currency, s, suppTotalG) : null;
+          const ddp = (v && s) ? _ddpMZN(v.unit, q?.currency, s, suppTotalG) : null;
           if (ddp != null && ddp < bestDDP) { bestDDP = ddp; suppId = sid; qi = q; }
         }
       }
@@ -446,9 +446,17 @@ async function generateExcel() {
 
     const matchId = matchLookup[bi.id]?.[suppId]?.id;
     const extras = extraByMatchId[matchId] || [];
-    const primaryPrice = (qi.price || 0) * (1 - ((qi.discount || 0) / 100));
-    const extraSum = extras.reduce((s, e) => s + ((e.quotation_items?.price || 0) * (1 - ((e.quotation_items?.discount || 0) / 100))), 0);
-    const totalPrice = primaryPrice + extraSum;
+    // Quantidade e preço unitário saem da mesma regra da tab Matching (qty_source por match).
+    // O picker global só força quando escolhes BOM — 'Cotação' respeita o que marcaste em cada célula.
+    const _theMatch = matchLookup[bi.id]?.[suppId];
+    const _itemQtySrc = qtySource === 'custom' ? (qtyOverrides[bi.id] || 'quotation') : qtySource;
+    const _mCalc = { ..._theMatch, quotation_items: qi };
+    if (_itemQtySrc === 'bom') _mCalc.qty_source = 'bom';
+    const _lv = matchLineValue(_mCalc, extras, bi) || { unit: 0, total: 0, src: 'quotation' };
+    const effQty = _lv.src === 'bom'
+      ? (bi.quantity || 1)
+      : (Number(qi.quantity) > 0 ? Number(qi.quantity) : (bi.quantity || 1));
+    const totalPrice = effQty > 0 ? _lv.total / effQty : 0;
     const primaryDesc = bi.custom_description || (descSource === 'bom' ? bi.description : (qi.raw_description || bi.description));
     const extraDescs = !bi.custom_description ? extras.map(e => e.quotation_items?.raw_description || '').filter(Boolean) : [];
     const modelDesc = extraDescs.length ? [primaryDesc, ...extraDescs].join(' + ') : primaryDesc;
@@ -457,9 +465,6 @@ async function generateExcel() {
     if (seenQI[suppId].has(qi.id)) continue;
     const indexInSupplier = supplierCounters[suppId]++;
     seenQI[suppId].set(qi.id, indexInSupplier);
-    const matchType = matchLookup[bi.id]?.[suppId]?.match_type;
-    const itemQtySrc = qtySource === 'custom' ? (qtyOverrides[bi.id] || 'quotation') : qtySource;
-    const effQty = (matchType === 'historical' || itemQtySrc === 'bom') ? bi.quantity : (qi.quantity || bi.quantity);
     supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(effQty), price: String(totalPrice) });
     allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: effQty, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }

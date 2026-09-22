@@ -1,16 +1,42 @@
 // ── Matching Tab ──
-function effPrice(qi, extras = []) {
+// Como a quantidade desta célula é contada nos totais.
+//   'quotation' (defeito) — soma honesta Σ(preço × qty cotada)
+//   'bom'                 — a cotação é preço unitário, × quantidade do BOM
+// Históricos e linhas criadas pela própria app (is_manual) têm qty 1 por construção,
+// não por stock do fornecedor — por isso seguem 'bom' quando não há marca explícita.
+function _qtySourceOf(m) {
+  if (m?.qty_source === 'bom' || m?.qty_source === 'quotation') return m.qty_source;
+  if (m?.match_type === 'historical' || m?.quotation_items?.is_manual) return 'bom';
+  return 'quotation';
+}
+
+// Valor de uma célula (item BOM × fornecedor), antes de DDP e câmbio:
+//   unit      — preço por unidade, para mostrar na célula e comparar o mais barato
+//   total     — o que o fornecedor fatura nesta linha, já com as quantidades
+//   quotedQty — quantidade da linha principal, para o badge de cobertura
+function matchLineValue(m, extras, bi) {
+  const qi = m?.quotation_items;
   if (qi == null) return null;
-  const primary = (qi.price || 0) * (1 - ((qi.discount || 0) / 100));
-  const extraSum = extras.reduce((s, e) => {
-    const eqi = e.quotation_items;
-    return s + (eqi ? (eqi.price || 0) * (1 - ((eqi.discount || 0) / 100)) : 0);
-  }, 0);
-  return primary + extraSum;
+  const net = x => (x.price || 0) * (1 - ((x.discount || 0) / 100));
+  const qty = x => (Number(x?.quantity) > 0 ? Number(x.quantity) : 1);
+  const exts = (extras || []).map(e => e.quotation_items).filter(Boolean);
+  const priQty = qty(qi);
+  const bomQty = qty(bi);
+  if (_qtySourceOf(m) === 'bom') {
+    // Extras entram na proporção com que foram cotados (2 prateleiras por rack → 2×)
+    const unit = net(qi) + exts.reduce((acc, e) => acc + net(e) * (qty(e) / priQty), 0);
+    return { unit, total: unit * bomQty, quotedQty: bomQty, src: 'bom' };
+  }
+  return {
+    unit: net(qi) + exts.reduce((acc, e) => acc + net(e), 0),
+    total: net(qi) * priQty + exts.reduce((acc, e) => acc + net(e) * qty(e), 0),
+    quotedQty: priQty,
+    src: 'quotation',
+  };
 }
 
 // Full DDP cost in MZN per unit — mirrors the Excel buildSupSheet formula exactly.
-// suppTotalG[s.id] = sum of effPrice×qty for all non-included_in matches of this supplier.
+// suppTotalG[s.id] = soma dos totais (matchLineValue) de todos os matches não-included_in do fornecedor.
 // Itens cobertos por uma inclusão ativa: o fornecedor efetivo do item que cobre (escolhido, ou
 // match único pela regra core) é o mesmo que marcou a inclusão → o item já está pago nessa linha,
 // não soma totais nem puxa lowest price. Usado também pelo gerador de Excel.
@@ -161,8 +187,8 @@ function renderMatchingTab() {
     for (const bi of equipItems) {
       const m = matchLookup[bi.id]?.[s.id];
       if (!m || m.match_type === 'included_in') continue;
-      const p = effPrice(m.quotation_items, extraByMatchId[m.id] || []);
-      if (p != null) total += p * (bi.quantity || 1);
+      const v = matchLineValue(m, extraByMatchId[m.id] || [], bi);
+      if (v) total += v.total;
     }
     suppTotalG[s.id] = total;
   }
@@ -382,9 +408,9 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     for (const s of (coveredIncl.has(bi.id) ? [] : suppliers)) {
       const _m = matchLookup[bi.id]?.[s.id];
       if (_m?.match_type === 'included_in') continue;
-      const p = effPrice(_m?.quotation_items, extraByMatchId[_m?.id] || []);
+      const _lv = matchLineValue(_m, extraByMatchId[_m?.id] || [], bi);
       const _cur = _m?.quotation_items?.currency;
-      const pDDP = _ddpMZN(p, _cur, s, suppTotalG);
+      const pDDP = _ddpMZN(_lv ? _lv.unit : null, _cur, s, suppTotalG);
       if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP;
     }
     const row = tbody.insertRow();
@@ -424,7 +450,8 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       const isIncludedIn = m?.match_type === 'included_in';
       const isHistorical = m?.match_type === 'historical';
       const isSel = selectedSuppId === s.id;
-      const price = effPrice(m?.quotation_items, extraByMatchId[m?.id] || []);
+      const lv = matchLineValue(m, extraByMatchId[m?.id] || [], bi);
+      const price = lv ? lv.unit : null;
       const _cur2 = m?.quotation_items?.currency;
       const priceDDP = _ddpMZN(price, _cur2, s, suppTotalG);
       const isLowest = !isIncludedIn && priceDDP != null && priceDDP === lowestPriceMZN && lowestPriceMZN < Infinity;
@@ -450,6 +477,14 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
             ddpDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-top:1px";
             ddpDiv.textContent = fmtPrice(priceDDP) + ' MZN';
             cellDiv.appendChild(ddpDiv);
+          }
+          // Cotou menos (ou mais) do que o BOM pede — só visível quando conta por quantidade cotada
+          if (lv && lv.src === 'quotation' && lv.quotedQty !== (Number(bi.quantity) > 0 ? Number(bi.quantity) : 1)) {
+            const qDiv = document.createElement('div');
+            qDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f59e0b;margin-top:1px";
+            qDiv.textContent = lv.quotedQty + '/' + (bi.quantity || 1);
+            qDiv.title = 'Quantidade cotada na linha principal vs. quantidade do BOM';
+            cellDiv.appendChild(qDiv);
           }
           if (isSel) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px'; lbl.textContent = 'SELECIONADO'; cellDiv.appendChild(lbl); }
           else if (isLowest) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:#4fc3f7;letter-spacing:1px'; lbl.textContent = 'MAIS BAIXO'; cellDiv.appendChild(lbl); }
@@ -517,17 +552,18 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
     if (selLookup[bi.id] || coveredIncl.has(bi.id)) continue;
     const matchCount = Object.keys(matchLookup[bi.id] || {}).length;
     if (matchCount <= 1) continue;
-    let lowestDDP = null, lowestSuppId = null;
+    let lowestDDP = null, lowestSuppId = null, lowestTotal = 0;
     for (const s of suppliers) {
       const m = matchLookup[bi.id]?.[s.id];
       if (!m || m.match_type === 'included_in') continue;
-      const p = effPrice(m.quotation_items, extraByMatchId[m.id] || []);
-      if (p == null) continue;
+      const v = matchLineValue(m, extraByMatchId[m.id] || [], bi);
+      if (v == null) continue;
       const cur = m.quotation_items?.currency;
-      const ddp = _ddpMZN(p, cur, s, suppTotalG);
-      if (lowestDDP === null || ddp < lowestDDP) { lowestDDP = ddp; lowestSuppId = s.id; }
+      const ddp = _ddpMZN(v.unit, cur, s, suppTotalG);
+      const totalDDP = _ddpMZN(v.total, cur, s, suppTotalG);
+      if (lowestDDP === null || ddp < lowestDDP) { lowestDDP = ddp; lowestSuppId = s.id; lowestTotal = totalDDP; }
     }
-    if (lowestSuppId !== null) lowestSuppForItem[bi.id] = { suppId: lowestSuppId, ddp: lowestDDP };
+    if (lowestSuppId !== null) lowestSuppForItem[bi.id] = { suppId: lowestSuppId, ddp: lowestDDP, totalDDP: lowestTotal };
   }
 
   const colTotals = {};
@@ -540,13 +576,13 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       if (thisMatch?.match_type === 'included_in' || coveredIncl.has(bi.id)) return sum;
       const isOnlyMatch = matchCount === 1 && thisMatch != null && thisMatch.match_type !== 'included_in';
       if (isSelected || isOnlyMatch) {
-        const p = effPrice(thisMatch?.quotation_items, extraByMatchId[thisMatch?.id] || []);
+        const v = matchLineValue(thisMatch, extraByMatchId[thisMatch?.id] || [], bi);
         const cur = thisMatch?.quotation_items?.currency;
-        const ddp = _ddpMZN(p, cur, s, suppTotalG);
-        return sum + (ddp != null ? ddp * (bi.quantity || 1) : 0);
+        const ddp = v ? _ddpMZN(v.total, cur, s, suppTotalG) : null;
+        return sum + (ddp != null ? ddp : 0);
       }
       if (!selectedSuppId && lowestSuppForItem[bi.id]?.suppId === s.id) {
-        return sum + (lowestSuppForItem[bi.id].ddp || 0) * (bi.quantity || 1);
+        return sum + (lowestSuppForItem[bi.id].totalDDP || 0);
       }
       return sum;
     }, 0);
@@ -558,25 +594,25 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
     if (selectedSuppId) {
       const selMatch = matchLookup[bi.id]?.[selectedSuppId];
       if (selMatch?.match_type === 'included_in') return sum;
-      const p = effPrice(selMatch?.quotation_items, extraByMatchId[selMatch?.id] || []);
+      const v = matchLineValue(selMatch, extraByMatchId[selMatch?.id] || [], bi);
       const selSupp = suppliers.find(s => s.id === selectedSuppId);
       const cur = selMatch?.quotation_items?.currency;
-      const ddp = _ddpMZN(p, cur, selSupp, suppTotalG);
-      return sum + (ddp ? ddp * (bi.quantity || 1) : 0);
+      const ddp = v ? _ddpMZN(v.total, cur, selSupp, suppTotalG) : null;
+      return sum + (ddp ? ddp : 0);
     }
     if (matchCount === 1) {
       const onlySuppId = Object.keys(matchLookup[bi.id])[0];
       const onlyMatch = matchLookup[bi.id][onlySuppId];
       if (onlyMatch?.match_type === 'included_in') return sum;
-      const p = effPrice(onlyMatch?.quotation_items, extraByMatchId[onlyMatch?.id] || []);
+      const v = matchLineValue(onlyMatch, extraByMatchId[onlyMatch?.id] || [], bi);
       const onlySupp = suppliers.find(s => s.id === onlySuppId);
       const cur = onlyMatch?.quotation_items?.currency;
-      const ddp = _ddpMZN(p, cur, onlySupp, suppTotalG);
-      return sum + (ddp ? ddp * (bi.quantity || 1) : 0);
+      const ddp = v ? _ddpMZN(v.total, cur, onlySupp, suppTotalG) : null;
+      return sum + (ddp ? ddp : 0);
     }
     if (matchCount > 1 && lowestSuppForItem[bi.id]) {
       const low = lowestSuppForItem[bi.id];
-      return sum + (low.ddp || 0) * (bi.quantity || 1);
+      return sum + (low.totalDDP || 0);
     }
     return sum;
   }, 0);
@@ -647,12 +683,13 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const dDiv = document.createElement('div'); dDiv.style.fontSize = '13px'; dDiv.textContent = bi.description; tdItem.appendChild(dDiv);
       if (bi.part_number) { const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv); }
       let lowestPriceMZN = Infinity;
-      for (const s of (coveredIncl.has(bi.id) ? [] : suppliers)) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const p = effPrice(cm?.quotation_items, extraByMatchId[cm?.id] || []); const cur = cm?.quotation_items?.currency; const pDDP = _ddpMZN(p, cur, s, suppTotalG); if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP; }
+      for (const s of (coveredIncl.has(bi.id) ? [] : suppliers)) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const clv = matchLineValue(cm, extraByMatchId[cm?.id] || [], bi); const cur = cm?.quotation_items?.currency; const pDDP = _ddpMZN(clv ? clv.unit : null, cur, s, suppTotalG); if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP; }
       const selectedSuppId = selLookup[bi.id];
       for (const s of suppliers) {
         const m = matchLookup[bi.id]?.[s.id];
         const isIncl = m?.match_type === 'included_in';
-        const price = effPrice(m?.quotation_items, extraByMatchId[m?.id] || []);
+        const lv = matchLineValue(m, extraByMatchId[m?.id] || [], bi);
+        const price = lv ? lv.unit : null;
         const currency = m?.quotation_items?.currency || '';
         const isSel = selectedSuppId === s.id;
         const cur2 = m?.quotation_items?.currency;
@@ -671,6 +708,14 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
             ddpDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:1px";
             ddpDiv.textContent = fmtPrice(cellDDP) + ' MZN';
             span.appendChild(ddpDiv);
+          }
+          // Cotou menos (ou mais) do que o BOM pede — só visível quando conta por quantidade cotada
+          if (lv && lv.src === 'quotation' && lv.quotedQty !== (Number(bi.quantity) > 0 ? Number(bi.quantity) : 1)) {
+            const qDiv = document.createElement('div');
+            qDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f59e0b;margin-top:1px";
+            qDiv.textContent = lv.quotedQty + '/' + (bi.quantity || 1);
+            qDiv.title = 'Quantidade cotada na linha principal vs. quantidade do BOM';
+            span.appendChild(qDiv);
           }
           const etaVal = m?.quotation_items?.eta_value || '';
           const etaUnit = m?.quotation_items?.eta_unit || 'dias';
@@ -975,7 +1020,68 @@ function openMatchModal(bomItemId, supplierId) {
 
   const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = s?.name || ''; el.appendChild(tag);
   const title = document.createElement('div'); title.className = 'modal-title'; title.style.cssText = 'font-size:15px;margin-bottom:4px'; title.textContent = bi?.description || ''; el.appendChild(title);
-  const qtyLine = document.createElement('div'); qtyLine.style.cssText = 'font-size:12px;color:var(--muted);margin-bottom:16px'; qtyLine.textContent = `Qty BOM: ${bi?.quantity} ${bi?.unit || ''}`; el.appendChild(qtyLine);
+  const qtyLine = document.createElement('div');
+  qtyLine.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:16px';
+  const qtyTxt = document.createElement('span');
+  qtyTxt.textContent = `Qty BOM: ${bi?.quantity} ${bi?.unit || ''}`;
+  qtyLine.appendChild(qtyTxt);
+
+  // Seletor de como a quantidade desta célula conta nos totais e no Excel
+  if (currentMatch?.quotation_items && currentMatch.match_type !== 'included_in') {
+    const mExtras = matchExtraItems.filter(e => e.item_match_id === currentMatch.id);
+    const cotQty = Number(currentMatch.quotation_items.quantity) > 0 ? Number(currentMatch.quotation_items.quantity) : 1;
+    const bomQty = Number(bi?.quantity) > 0 ? Number(bi.quantity) : 1;
+    const cotSpan = document.createElement('span');
+    cotSpan.style.cssText = "font-family:'IBM Plex Mono',monospace" + (cotQty !== bomQty ? ';color:#f59e0b' : '');
+    cotSpan.textContent = `\u00b7 Cotado: ${cotQty}`;
+    if (mExtras.length) cotSpan.textContent += ` (+${mExtras.length} linha${mExtras.length > 1 ? 's' : ''})`;
+    qtyLine.appendChild(cotSpan);
+
+    const lbl = document.createElement('span');
+    lbl.style.marginLeft = 'auto';
+    lbl.textContent = 'Contar por:';
+    qtyLine.appendChild(lbl);
+
+    const srcBtns = {};
+    const applySrc = (val) => {
+      for (const k of Object.keys(srcBtns)) {
+        srcBtns[k].className = 'btn btn-sm' + (k === val ? ' btn-primary' : ' btn-ghost');
+      }
+      const v = matchLineValue({ ...currentMatch, qty_source: val }, mExtras, bi);
+      hint.textContent = v ? `= ${fmtPrice(v.total)} ${currentMatch.quotation_items.currency || ''}` : '';
+    };
+    for (const [val, label, tip] of [
+      ['quotation', 'Cota\u00e7\u00e3o', 'Soma o que foi cotado: pre\u00e7o \u00d7 quantidade de cada linha'],
+      ['bom', 'BOM', 'A cota\u00e7\u00e3o \u00e9 pre\u00e7o unit\u00e1rio: multiplica pela quantidade do BOM'],
+    ]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.title = tip;
+      b.style.cssText = 'font-size:11px;padding:3px 10px';
+      b.addEventListener('click', async () => {
+        const prev = currentMatch.qty_source;
+        currentMatch.qty_source = val;
+        applySrc(val);
+        try {
+          await API.setMatchQtySource(currentMatch.id, val);
+          renderMatchingTab();
+        } catch (e) {
+          currentMatch.qty_source = prev;
+          applySrc(_qtySourceOf(currentMatch));
+          showToast('Erro: ' + e.message, true);
+        }
+      });
+      srcBtns[val] = b;
+      qtyLine.appendChild(b);
+    }
+    const hint = document.createElement('span');
+    hint.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text)";
+    qtyLine.appendChild(hint);
+    applySrc(_qtySourceOf(currentMatch));
+  }
+
+  el.appendChild(qtyLine);
 
   if (!qItems.length) {
     const noQ = document.createElement('div'); noQ.style.cssText = 'color:var(--muted);font-size:13px;margin-bottom:16px';

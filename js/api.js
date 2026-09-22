@@ -347,6 +347,11 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async setMatchQtySource(matchId, value) {
+    const { error } = await supabase.from('item_matches').update({ qty_source: value }).eq('id', matchId);
+    if (error) throw _sanitizeError(error);
+  },
+
   async getMatchExtraItems(matchIds) {
     if (!matchIds || !matchIds.length) return [];
     const BATCH = 80;
