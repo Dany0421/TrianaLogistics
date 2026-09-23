@@ -47,13 +47,28 @@ function __wrappedLineCount(text, widthPx){
   return total;
 }
 
+// Nome de folha válido e único no livro. O Excel exige: único sem diferenciar maiúsculas,
+// máx. 31 caracteres, sem * ? : \ / [ ] e sem apóstrofo no início/fim.
+// Ex.: cliente "Infotech" + fornecedor "Infotech" no mesmo processo → "Infotech" e "Infotech (2)".
+function _uniqueSheetName(raw, used, fallback) {
+  let base = String(raw || '').replace(/[*?:\\/\[\]]/g, '-').replace(/^'+|'+$/g, '').trim() || fallback;
+  base = base.substring(0, 31);
+  let name = base, i = 2;
+  while (used.has(name.toLowerCase())) {
+    const suffix = ` (${i++})`;
+    name = base.substring(0, 31 - suffix.length) + suffix;
+  }
+  used.add(name.toLowerCase());
+  return name;
+}
+
 function buildSupSheet(wb, supplier) {
   const items = supplier.items.filter(i => i.model && i.model.trim());
   const isForeign = supplier.isForeign;
   const cambio = parseFloat(supplier.cambio) || 1;
   const transport = parseFloat(supplier.transport) || 0;
   const direitos = (parseFloat(supplier.direitos) || 0) / 100;
-  const name = (supplier.name || 'Fornecedor').substring(0, 31);
+  const name = supplier.sheetName;
   const isInfinitReach = (supplier.name||'').toLowerCase().includes('infinitreach');
   const ws = wb.addWorksheet(name, {properties:{tabColor:{argb:'FFC00000'}},views:[{showGridLines:false}]});
   const wPart = items.reduce((m,i)=>Math.max(m,(i.part||'').length+2),15.7);
@@ -161,7 +176,7 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
     if (item.type === 'equip') {
       const si=suppliers.findIndex(s=>s.id===item.suppId);
       if(si<0){row++;continue;}
-      const ss=sheetNames[si].includes(' ')?`'${sheetNames[si]}'`:sheetNames[si];
+      const ss=`'${sheetNames[si].replace(/'/g, "''")}'`;
       const ds=dataStarts[si];
       sc2(ws.getCell(row,1),{value:item.part||'',font:dF,alignment:{horizontal:'center',vertical:'middle'}});
       sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
@@ -481,15 +496,17 @@ async function generateExcel() {
 
   try {
     const wb = new ExcelJS.Workbook();
-    const mainWs = wb.addWorksheet((process.client_name||'Principal').substring(0,31), {views:[{showGridLines:false}]});
+    const usedSheetNames = new Set();
+    const mainWs = wb.addWorksheet(_uniqueSheetName(process.client_name, usedSheetNames, 'Principal'), {views:[{showGridLines:false}]});
     const sheetNames=[], dataStarts=[];
     const suppliersForMain = activeSuppliers.map(s => ({
       name: s.name, isForeign: s.is_foreign, cambio: s.cambio||1, transport: s.transport||0, direitos: s.direitos||0,
       items: supplierItems[s.id],
+      sheetName: _uniqueSheetName(s.name, usedSheetNames, 'Fornecedor'),
     }));
     for (const s of suppliersForMain) {
       const { dataStart } = buildSupSheet(wb, s);
-      sheetNames.push(s.name.substring(0, 31));
+      sheetNames.push(s.sheetName);
       dataStarts.push(dataStart);
     }
     fillMain(mainWs, activeSuppliers, sheetNames, dataStarts, allRows, hasServices);
