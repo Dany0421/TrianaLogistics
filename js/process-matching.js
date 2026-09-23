@@ -1634,7 +1634,8 @@ async function runAutoMatch() {
     if (actualCount === 0) {
       showToast('Auto-match: 0 guardados (possível erro de permissões).', true);
     } else {
-      showAutoMatchSummary(newMatches, actualCount, propagated);
+      // saved (e não newMatches) — as linhas locais não têm id, e o × do resumo precisa dele para apagar
+      showAutoMatchSummary(saved, actualCount, propagated);
     }
   } catch(e) {
     await loadMatchData(); renderMatchingTab();
