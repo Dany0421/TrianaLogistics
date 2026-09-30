@@ -74,10 +74,24 @@ function _sheetCurrency(items) {
   return best ? best[0] : 'MZN';
 }
 
+// O Excel multiplica todas as linhas pelo câmbio; a aba Matching só as que não são MZN.
+// Tudo MZN → a folha usa câmbio 1 (ver buildSupSheet). Misturado → só avisar, não mexer nas contas.
+function _currencyWarnings(suppliers) {
+  const out = [];
+  for (const s of suppliers) {
+    const curs = [...new Set(s.items.map(i => String(i.currency || 'MZN').trim().toUpperCase()))];
+    const foreign = curs.filter(c => c !== 'MZN');
+    const cambio = parseFloat(s.cambio) || 1;
+    if (!foreign.length && cambio !== 1) out.push(`${s.name}: câmbio ${cambio} mas a cotação está toda em MZN — no Excel fica câmbio 1. Confirma a moeda da cotação.`);
+    else if (foreign.length && curs.includes('MZN')) out.push(`${s.name}: linhas em MZN e em ${foreign.join('/')} — confirma o câmbio na folha dele.`);
+  }
+  return out;
+}
+
 function buildSupSheet(wb, supplier) {
   const items = supplier.items.filter(i => i.model && i.model.trim());
   const isForeign = supplier.isForeign;
-  const cambio = parseFloat(supplier.cambio) || 1;
+  const cambio = _sheetCurrency(items) === 'MZN' ? 1 : (parseFloat(supplier.cambio) || 1);
   const transport = parseFloat(supplier.transport) || 0;
   const direitos = (parseFloat(supplier.direitos) || 0) / 100;
   const name = supplier.sheetName;
@@ -521,6 +535,8 @@ async function generateExcel() {
       sheetNames.push(s.sheetName);
       dataStarts.push(dataStart);
     }
+    const currencyWarns = _currencyWarnings(suppliersForMain);
+    if (currencyWarns.length) console.warn('[Excel] Moedas:', currencyWarns);
     fillMain(mainWs, activeSuppliers, sheetNames, dataStarts, allRows, hasServices);
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -530,6 +546,6 @@ async function generateExcel() {
     a.download = `Planilha_Financeira_${(process.project_name||'Processo').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}_${(process.client_name||'').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}.xlsx`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('Excel gerado!');
+    showToast(currencyWarns.length ? 'Excel gerado. Atenção — ' + currencyWarns.join(' ') : 'Excel gerado!', currencyWarns.length > 0);
   } catch(e) { showToast('Erro ao gerar Excel: ' + e.message, true); console.error(e); }
 }

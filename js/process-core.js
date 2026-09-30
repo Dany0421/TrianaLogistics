@@ -553,5 +553,6 @@ function showToast(msg, isError = false) {
   el.style.color = isError ? 'var(--danger)' : 'var(--text)';
   el.style.borderLeftColor = isError ? 'var(--danger)' : 'var(--accent)';
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3200);
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => el.classList.remove('show'), Math.max(3200, String(msg).length * 60)); // mensagens longas ficam mais tempo
 }
