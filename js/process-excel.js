@@ -62,6 +62,18 @@ function _uniqueSheetName(raw, used, fallback) {
   return name;
 }
 
+// Moeda da cotação para a célula TRANSPORTE: a estrangeira mais frequente, senão MZN
+function _sheetCurrency(items) {
+  const count = {};
+  for (const i of items) {
+    const c = String(i.currency || 'MZN').trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(c) || c === 'MZN') continue;
+    count[c] = (count[c] || 0) + 1;
+  }
+  const best = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
+  return best ? best[0] : 'MZN';
+}
+
 function buildSupSheet(wb, supplier) {
   const items = supplier.items.filter(i => i.model && i.model.trim());
   const isForeign = supplier.isForeign;
@@ -121,7 +133,7 @@ function buildSupSheet(wb, supplier) {
   ws.getRow(totalRow).height=18.5;
   sc2(ws.getCell(totalRow,7),{value:{formula:`SUM(G${DS}:G${lastItemRow})`},font:{bold:true,size:11,name:'Calibri'},alignment:{horizontal:'right',vertical:'middle'},numFmt:NF});
   sc2(ws.getCell(transportRow,5),{value:'TRANSPORTE',font:{size:14,name:'Calibri'},fill:YF});
-  sc2(ws.getCell(transportRow,6),{value:transport,font:{size:14,name:'Calibri'},fill:YF,numFmt:'"MZN" #,##0.00'});
+  sc2(ws.getCell(transportRow,6),{value:transport,font:{size:14,name:'Calibri'},fill:YF,numFmt:`"${_sheetCurrency(items)}" #,##0.00`});
   sc2(ws.getCell(cambioRow,5),{value:'Cambio',font:{size:14,name:'Calibri'},fill:YF});
   sc2(ws.getCell(cambioRow,6),{value:cambio,font:{size:14,name:'Calibri'},fill:YF,numFmt:'"MZN" #,##0.00'});
   return { dataStart: DS };
@@ -480,7 +492,7 @@ async function generateExcel() {
     if (seenQI[suppId].has(qi.id)) continue;
     const indexInSupplier = supplierCounters[suppId]++;
     seenQI[suppId].set(qi.id, indexInSupplier);
-    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(effQty), price: String(totalPrice) });
+    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(effQty), price: String(totalPrice), currency: qi.currency });
     allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: effQty, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
   }
 

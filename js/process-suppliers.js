@@ -1291,7 +1291,7 @@ function openQuotationValModal(fileName, rawPdfText) {
     return wrap;
   }
   ratesBlock.appendChild(_makeRateField('qf_cambio', 'Câmbio (MZN)', '64.00'));
-  ratesBlock.appendChild(_makeRateField('qf_transport', 'Transporte (MZN)', '1500.00'));
+  ratesBlock.appendChild(_makeRateField('qf_transport', 'Transporte (moeda da cotação)', '1500.00'));
   ratesBlock.appendChild(_makeRateField('qf_direitos', 'Direitos (%)', '7.5'));
   const _qfForeignLbl = document.createElement('label');
   _qfForeignLbl.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;margin:0';
