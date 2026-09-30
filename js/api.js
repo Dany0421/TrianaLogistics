@@ -94,6 +94,19 @@ function _splitGroupUpdates(sourceBomItems, bomItemMap) {
   return Object.entries(byGroup).map(([split_group, ids]) => ({ split_group, ids }));
 }
 
+/** Duplicação de processos: rejeições do auto-match com os ids novos. Sem elas o auto-match volta a ligar
+ *  ao processo copiado o que foi rejeitado — incluindo cotações já usadas numa linha repartida. */
+function _remapRejections(sourceRejections, newProcessId, bomItemMap, supplierMap, quotItemMap) {
+  return sourceRejections
+    .filter(r => bomItemMap[r.bom_item_id] && supplierMap[r.supplier_id] && quotItemMap[r.quotation_item_id])
+    .map(r => ({
+      process_id:        newProcessId,
+      bom_item_id:       bomItemMap[r.bom_item_id],
+      supplier_id:       supplierMap[r.supplier_id],
+      quotation_item_id: quotItemMap[r.quotation_item_id],
+    }));
+}
+
 const API = {
 
   // ── Processes ──
@@ -658,13 +671,14 @@ const API = {
       ? await API.getBomItems(sourceId, latestVersion.id)
       : [];
 
-    let sourceQuotItems = [], sourceMatches = [], sourceOffers = [];
+    let sourceQuotItems = [], sourceMatches = [], sourceOffers = [], sourceRejections = [];
     if (copySuppliers && copyQuotations && sourceSuppliers.length) {
       const supIds = sourceSuppliers.map(s => s.id);
-      [sourceQuotItems, sourceMatches, sourceOffers] = await Promise.all([
+      [sourceQuotItems, sourceMatches, sourceOffers, sourceRejections] = await Promise.all([
         API.getQuotationItemsForSuppliers(supIds),
         API.getMatches(sourceId),
         API.getSelectedOffers(sourceId),
+        API.getRejectedAutoMatch(sourceId),
       ]);
     }
 
@@ -749,6 +763,15 @@ const API = {
           }));
         if (newMatches.length) {
           const { error } = await supabase.from('item_matches').insert(newMatches);
+          if (error) throw _sanitizeError(error);
+        }
+      }
+
+      // 5b. Rebuild auto-match rejections with new IDs
+      if (copyBom && copyQuotations && sourceRejections.length) {
+        const newRejections = _remapRejections(sourceRejections, newId, bomItemMap, supplierMap, quotItemMap);
+        if (newRejections.length) {
+          const { error } = await supabase.from('rejected_automatch').insert(newRejections);
           if (error) throw _sanitizeError(error);
         }
       }
