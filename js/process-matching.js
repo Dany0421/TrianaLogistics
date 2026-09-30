@@ -35,6 +35,31 @@ function matchLineValue(m, extras, bi) {
   };
 }
 
+// Linhas de cotação ligadas a um item, para o modal Repartir: a principal de cada match
+// (excepto included_in) e as extras desse match. Ordem: colunas de fornecedor, principal antes das extras.
+function _splitLinesForItem(biId, matchesArr, extrasArr, suppliersArr) {
+  const out = [];
+  for (const s of suppliersArr) {
+    const m = matchesArr.find(x => x.bom_item_id === biId && x.supplier_id === s.id && x.match_type !== 'included_in');
+    if (!m || !m.quotation_item_id || !m.quotation_items) continue;
+    out.push({ supplier: s, qi: { ...m.quotation_items, id: m.quotation_item_id } });
+    for (const e of extrasArr) {
+      if (e.item_match_id === m.id && e.quotation_items) out.push({ supplier: s, qi: { ...e.quotation_items, id: e.quotation_item_id } });
+    }
+  }
+  return out;
+}
+
+// Estado do total no modal Repartir (arredonda para não tropeçar em 0.1 + 0.2)
+function _splitSumStatus(sum, need) {
+  const f = n => Number(n).toLocaleString('pt-PT');
+  const diff = Math.round((sum - need) * 1000) / 1000;
+  if (!(sum > 0)) return { cls: 'none', text: 'Escreve pelo menos uma quantidade' };
+  if (diff === 0) return { cls: 'ok', text: 'Completo' };
+  if (diff < 0) return { cls: 'warn', text: `Faltam ${f(-diff)} — fica uma linha sem fornecedor` };
+  return { cls: 'warn', text: `Passa ${f(diff)} do pedido` };
+}
+
 // Full DDP cost in MZN per unit — mirrors the Excel buildSupSheet formula exactly.
 // suppTotalG[s.id] = soma dos totais (matchLineValue) de todos os matches não-included_in do fornecedor.
 // Itens cobertos por uma inclusão ativa: o fornecedor efetivo do item que cobre (escolhido, ou
@@ -436,6 +461,18 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
     clockBtn.appendChild(licon('clock', 12));
     clockBtn.addEventListener('click', (e) => { e.stopPropagation(); openHistoricalPriceModal(bi); });
     descWrap.appendChild(descDiv); descWrap.appendChild(editBtn); descWrap.appendChild(clockBtn);
+    const hasSplitLines = !bi.is_service && suppliers.some(s => {
+      const m = matchLookup[bi.id]?.[s.id];
+      return m && m.match_type !== 'included_in' && m.quotation_item_id;
+    });
+    if (hasSplitLines) {
+      const splitBtn = document.createElement('button');
+      splitBtn.style.cssText = `background:none;border:none;cursor:pointer;padding:2px;color:var(--muted);display:flex;align-items:center;flex-shrink:0;transition:.15s`;
+      splitBtn.title = 'Repartir por fornecedores';
+      splitBtn.appendChild(licon('split', 12));
+      splitBtn.addEventListener('click', (e) => { e.stopPropagation(); openSplitBomModal(bi); });
+      descWrap.appendChild(splitBtn);
+    }
     tdItem.appendChild(descWrap);
     if (bi.part_number) {
       const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv);
@@ -1744,6 +1781,105 @@ function showAutoMatchSummary(newMatches, actualCount, propagated) {
   actions.appendChild(closeBtn);
   el.appendChild(actions);
   showModal(el);
+}
+
+function openSplitBomModal(bi) {
+  const lines = _splitLinesForItem(bi.id, matches, matchExtraItems, suppliers);
+  const need = Number(bi.quantity) || 0;
+  const qtys = lines.map(() => 0);
+  const fq = n => Number(n).toLocaleString('pt-PT');
+
+  const el = document.createElement('div');
+  el.style.cssText = 'display:flex;flex-direction:column;gap:14px';
+
+  const tag = document.createElement('div'); tag.className = 'modal-tag'; tag.textContent = 'REPARTIR';
+  const title = document.createElement('div'); title.className = 'modal-title'; title.style.fontSize = '15px';
+  title.textContent = bi.custom_description || bi.description || '';
+  const intro = document.createElement('div'); intro.style.cssText = 'font-size:13px;color:var(--muted)';
+  const strong = document.createElement('strong'); strong.textContent = `${fq(need)} un.`;
+  intro.append('O BOM pede ', strong, '. Escreve quanto compras de cada linha. Deixa a 0 o que não queres usar.');
+  el.append(tag, title, intro);
+
+  const list = document.createElement('div');
+  list.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto';
+  lines.forEach((ln, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;opacity:.6';
+    const info = document.createElement('div'); info.style.minWidth = '0';
+    const sup = document.createElement('div'); sup.style.cssText = 'font-size:12px;font-weight:600;color:var(--accent)'; sup.textContent = ln.supplier.name;
+    const desc = document.createElement('div'); desc.style.fontSize = '13px'; desc.textContent = ln.qi.raw_description || '—';
+    const quote = document.createElement('div'); quote.style.cssText = "font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)";
+    const net = (ln.qi.price || 0) * (1 - ((ln.qi.discount || 0) / 100));
+    quote.textContent = `cotou ${fq(ln.qi.quantity || 1)} a ${fmtPrice(net)} ${ln.qi.currency || 'MZN'}`;
+    info.append(sup, desc, quote);
+
+    const wrap = document.createElement('div'); wrap.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:2px';
+    const lab = document.createElement('label'); lab.htmlFor = `split-q-${i}`; lab.textContent = 'Comprar';
+    lab.style.cssText = 'font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em';
+    const inp = document.createElement('input'); inp.type = 'number'; inp.min = '0'; inp.step = 'any'; inp.id = `split-q-${i}`; inp.value = '0';
+    inp.style.cssText = "width:96px;text-align:right;font-family:'DM Mono',monospace";
+    inp.addEventListener('focus', () => inp.select());
+    inp.addEventListener('input', () => {
+      const v = parseFloat(inp.value);
+      qtys[i] = isNaN(v) || v < 0 ? 0 : v;
+      row.style.opacity = qtys[i] > 0 ? '1' : '.6';
+      refresh();
+    });
+    wrap.append(lab, inp);
+    row.append(info, wrap);
+    list.appendChild(row);
+  });
+  el.appendChild(list);
+
+  const foot = document.createElement('div');
+  foot.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px';
+  const totalEl = document.createElement('span'); totalEl.style.cssText = "font-family:'DM Mono',monospace;font-size:14px";
+  const statusEl = document.createElement('span'); statusEl.style.cssText = 'font-size:12px;border-radius:20px;padding:3px 10px';
+  foot.append(totalEl, statusEl);
+  el.appendChild(foot);
+
+  const actions = document.createElement('div'); actions.className = 'modal-actions';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'btn btn-ghost'; cancel.textContent = 'Cancelar';
+  cancel.addEventListener('click', closeModal);
+  const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'btn btn-primary'; ok.textContent = 'Repartir';
+  actions.append(cancel, ok);
+  el.appendChild(actions);
+
+  const STATUS_STYLE = {
+    none: ['var(--muted)', 'var(--surface2)'],
+    ok:   ['var(--success)', 'rgba(16,185,129,.12)'],
+    warn: ['var(--warn)', 'rgba(245,158,11,.12)'],
+  };
+  function refresh() {
+    const sum = qtys.reduce((a, b) => a + b, 0);
+    totalEl.textContent = `Total: ${fq(sum)} / ${fq(need)}`;
+    const st = _splitSumStatus(sum, need);
+    statusEl.textContent = st.text;
+    statusEl.style.color = STATUS_STYLE[st.cls][0];
+    statusEl.style.background = STATUS_STYLE[st.cls][1];
+    ok.disabled = st.cls === 'none';
+  }
+
+  ok.addEventListener('click', async () => {
+    ok.disabled = true; ok.textContent = '…';
+    try {
+      const payload = lines.map((ln, i) => ({ supplier_id: ln.supplier.id, quotation_item_id: ln.qi.id, quantity: qtys[i] }));
+      await API.splitBomItem(bi.id, payload);
+      const sum = qtys.reduce((a, b) => a + b, 0);
+      const rem = Math.round((need - sum) * 1000) / 1000;
+      const parts = qtys.filter(q => q > 0).length;
+      closeModal();
+      await loadAll();
+      renderMatchingTab();
+      showToast(`Linha repartida em ${parts}.` + (rem > 0 ? ` Falta ${fq(rem)}.` : ''));
+    } catch (e) {
+      ok.disabled = false; ok.textContent = 'Repartir';
+      showToast('Erro: ' + e.message, true);
+    }
+  });
+
+  showModal(el);
+  refresh();
 }
 
 async function openHistoricalPriceModal(bi) {
