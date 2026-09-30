@@ -81,6 +81,19 @@ function _quotationItemRowForDb(row) {
   return out;
 }
 
+/** Duplicação de processos: split_group aponta para um id de bom_items, por isso é remapeado para os ids novos. */
+function _splitGroupUpdates(sourceBomItems, bomItemMap) {
+  const byGroup = {};
+  for (const bi of sourceBomItems) {
+    if (!bi.split_group) continue;
+    const newGroup = bomItemMap[bi.split_group];
+    const newId = bomItemMap[bi.id];
+    if (!newGroup || !newId) continue;
+    (byGroup[newGroup] = byGroup[newGroup] || []).push(newId);
+  }
+  return Object.entries(byGroup).map(([split_group, ids]) => ({ split_group, ids }));
+}
+
 const API = {
 
   // ── Processes ──
@@ -350,6 +363,18 @@ const API = {
   async setMatchQtySource(matchId, value) {
     const { error } = await supabase.from('item_matches').update({ qty_source: value }).eq('id', matchId);
     if (error) throw _sanitizeError(error);
+  },
+
+  async splitBomItem(bomItemId, lines) {
+    const { data, error } = await supabase.rpc('split_bom_item', { p_bom_item_id: bomItemId, p_lines: lines });
+    if (error) throw _sanitizeError(error);
+    return data;
+  },
+
+  async mergeBomSplit(group) {
+    const { data, error } = await supabase.rpc('merge_bom_split', { p_group: group });
+    if (error) throw _sanitizeError(error);
+    return data;
   },
 
   async getMatchExtraItems(matchIds) {
@@ -660,9 +685,14 @@ const API = {
         unit:           bi.unit,
         category:       bi.category,
         sort_order:     bi.sort_order,
+        split_origin_qty: bi.split_origin_qty ?? null,
       }));
       const savedItems = await API.saveBomItems(newItems);
       savedItems.forEach((ni, idx) => { bomItemMap[sourceBomItems[idx].id] = ni.id; });
+      for (const u of _splitGroupUpdates(sourceBomItems, bomItemMap)) {
+        const { error } = await supabase.from('bom_items').update({ split_group: u.split_group }).in('id', u.ids);
+        if (error) throw _sanitizeError(error);
+      }
     }
 
     // 4. Clone suppliers → build supplierMap + quotItemMap
@@ -715,6 +745,7 @@ const API = {
             quotation_item_id: quotItemMap[m.quotation_item_id],
             match_type:        m.match_type,
             confidence:        m.confidence,
+            qty_source:        m.qty_source ?? null,
           }));
         if (newMatches.length) {
           const { error } = await supabase.from('item_matches').insert(newMatches);
