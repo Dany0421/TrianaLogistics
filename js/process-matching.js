@@ -60,6 +60,25 @@ function _splitSumStatus(sum, need) {
   return { cls: 'warn', text: `Passa ${f(diff)} do pedido` };
 }
 
+// Quantas linhas tem um grupo repartido e para que quantidade volta ao juntar
+// (a original, guardada na âncora; se a âncora foi apagada, a soma do que sobra)
+function _splitGroupInfo(group, bomItemsArr) {
+  const rows = bomItemsArr.filter(b => b.split_group === group);
+  const anchor = rows.find(b => b.id === group);
+  const sum = rows.reduce((a, b) => a + (Number(b.quantity) || 0), 0);
+  return { count: rows.length, qty: anchor?.split_origin_qty != null ? Number(anchor.split_origin_qty) : sum };
+}
+
+// Descrição da cotação escolhida, mostrada por baixo das linhas repartidas para as distinguir
+function _splitSubtitle(bi, selectedOffersArr, quotationMapObj) {
+  if (!bi?.split_group) return null;
+  const o = selectedOffersArr.find(x => x.bom_item_id === bi.id);
+  if (!o) return null;
+  const qi = o.quotation_items || (quotationMapObj[o.supplier_id] || []).find(q => q.id === o.quotation_item_id);
+  const d = (qi?.raw_description || '').trim();
+  return d || null;
+}
+
 // Full DDP cost in MZN per unit — mirrors the Excel buildSupSheet formula exactly.
 // suppTotalG[s.id] = soma dos totais (matchLineValue) de todos os matches não-included_in do fornecedor.
 // Itens cobertos por uma inclusão ativa: o fornecedor efetivo do item que cobre (escolhido, ou
@@ -473,7 +492,22 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       splitBtn.addEventListener('click', (e) => { e.stopPropagation(); openSplitBomModal(bi); });
       descWrap.appendChild(splitBtn);
     }
+    if (bi.split_group) {
+      const mergeBtn = document.createElement('button');
+      mergeBtn.style.cssText = `background:none;border:none;cursor:pointer;padding:2px;color:var(--muted);display:flex;align-items:center;flex-shrink:0;transition:.15s`;
+      mergeBtn.title = 'Juntar de volta';
+      mergeBtn.appendChild(licon('merge', 12));
+      mergeBtn.addEventListener('click', (e) => { e.stopPropagation(); mergeBomSplitFlow(bi); });
+      descWrap.appendChild(mergeBtn);
+    }
     tdItem.appendChild(descWrap);
+    const splitSub = _splitSubtitle(bi, selectedOffers, quotationMap);
+    if (splitSub) {
+      const subDiv = document.createElement('div');
+      subDiv.style.cssText = 'font-size:11px;color:var(--muted)';
+      subDiv.textContent = splitSub;
+      tdItem.appendChild(subDiv);
+    }
     if (bi.part_number) {
       const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv);
     }
@@ -718,6 +752,8 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       tdSvc.appendChild(span);
     } else {
       const dDiv = document.createElement('div'); dDiv.style.fontSize = '13px'; dDiv.textContent = bi.description; tdItem.appendChild(dDiv);
+      const splitSubC = _splitSubtitle(bi, selectedOffers, quotationMap);
+      if (splitSubC) { const sDiv = document.createElement('div'); sDiv.style.cssText = 'font-size:11px;color:var(--muted)'; sDiv.textContent = splitSubC; tdItem.appendChild(sDiv); }
       if (bi.part_number) { const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv); }
       let lowestPriceMZN = Infinity;
       for (const s of (coveredIncl.has(bi.id) ? [] : suppliers)) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const clv = matchLineValue(cm, extraByMatchId[cm?.id] || [], bi); const cur = cm?.quotation_items?.currency; const pDDP = _ddpMZN(clv ? clv.unit : null, cur, s, suppTotalG); if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP; }
@@ -1880,6 +1916,25 @@ function openSplitBomModal(bi) {
 
   showModal(el);
   refresh();
+}
+
+async function mergeBomSplitFlow(bi) {
+  const info = _splitGroupInfo(bi.split_group, bomItems);
+  const fq = n => Number(n).toLocaleString('pt-PT');
+  const desc = bi.custom_description || bi.description || '';
+  const lead = info.count === 1 ? `A linha de "${desc}" volta` : `As ${info.count} linhas de "${desc}" voltam`;
+  const ok = await _showConfirmModal('Juntar de volta?',
+    `${lead} a ser 1 linha de ${fq(info.qty)} un. As cotações ligadas voltam para essa linha e a escolha de fornecedor é apagada.`,
+    'Juntar');
+  if (!ok) return;
+  try {
+    await API.mergeBomSplit(bi.split_group);
+    await loadAll();
+    renderMatchingTab();
+    showToast(`Linhas juntas: 1 linha de ${fq(info.qty)} un.`);
+  } catch (e) {
+    showToast('Erro: ' + e.message, true);
+  }
 }
 
 async function openHistoricalPriceModal(bi) {
