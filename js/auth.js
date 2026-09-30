@@ -22,15 +22,18 @@ function _mountSessionGuard(redirectTo) {
   });
 }
 
+// Teto absoluto conta desde o login (last_sign_in_at); o iat do token renova de hora a hora e nunca chegava às 8h
+function _sessionTooOld(session, now) {
+  const signedInAt = Date.parse(session.user?.last_sign_in_at || '') || 0;
+  return signedInAt > 0 && now - signedInAt > SESSION_TIMEOUT_MS;
+}
+
 async function requireAuth(redirectTo = 'index.html') {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { window.location.href = redirectTo; return null; }
 
   // Check absolute session age
-  const issuedAt = session.access_token
-    ? JSON.parse(atob(session.access_token.split('.')[1])).iat * 1000
-    : 0;
-  if (issuedAt && Date.now() - issuedAt > SESSION_TIMEOUT_MS) {
+  if (_sessionTooOld(session, Date.now())) {
     await supabase.auth.signOut();
     window.location.href = redirectTo;
     return null;
