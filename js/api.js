@@ -82,6 +82,21 @@ function _quotationItemRowForDb(row) {
 }
 
 /** Duplicação de processos: split_group aponta para um id de bom_items, por isso é remapeado para os ids novos. */
+// Filtros para o .or() do histórico de preços: , ( ) " \ partem a sintaxe do PostgREST.
+// Part numbers: reservados viram '_' (1 carácter qualquer). Descrições: viram '%'.
+function _priceHistoryFilters(partNumbers, descriptions) {
+  const filters = [];
+  partNumbers.filter(Boolean).forEach(p => {
+    const key = p.trim().toLowerCase().replace(/[,()"\\%*]/g, '_');
+    if (key) filters.push('raw_part_number.ilike.' + key);
+  });
+  descriptions.forEach(d => {
+    const key = d.trim().slice(0, 40).replace(/[%_]/g, '').replace(/[,()"\\*]/g, '%');
+    if (key.replace(/%/g, '').trim()) filters.push('raw_description.ilike.%' + key + '%');
+  });
+  return filters;
+}
+
 function _splitGroupUpdates(sourceBomItems, bomItemMap) {
   const byGroup = {};
   for (const bi of sourceBomItems) {
@@ -868,12 +883,7 @@ const API = {
 
   // ── Price Anomaly Detection ──
   async getPriceHistoryBatch(partNumbers, descriptions) {
-    const filters = [];
-    partNumbers.filter(Boolean).forEach(p => filters.push('raw_part_number.ilike.' + p.trim().toLowerCase()));
-    descriptions.forEach(d => {
-      const key = d.trim().slice(0, 40).replace(/[%_]/g, '');
-      if (key) filters.push('raw_description.ilike.%' + key + '%');
-    });
+    const filters = _priceHistoryFilters(partNumbers, descriptions);
     if (!filters.length) return [];
     const { data, error } = await supabase
       .from('quotation_items')
@@ -924,14 +934,21 @@ const API = {
 
   // ── Price History ──
   async searchPriceHistory(query, dateFrom) {
-    let q = supabase
-      .from('quotation_items')
-      .select('raw_description, raw_part_number, price, currency, quantity, created_at, is_manual, suppliers(name, cambio, processes(id, project_name, client_name)), item_matches(match_type, bom_items!bom_item_id(description, part_number, custom_description))')
-      .order('created_at', { ascending: false });
-    if (dateFrom) q = q.gte('created_at', dateFrom);
-    q = q.limit(1000);
-    const { data, error } = await q;
-    if (error) throw _sanitizeError(error);
+    // O servidor devolve no máximo 1000 linhas por pedido → paginar para não esconder cotações antigas
+    const PAGE = 1000;
+    const data = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = supabase
+        .from('quotation_items')
+        .select('raw_description, raw_part_number, price, currency, quantity, created_at, is_manual, suppliers(name, cambio, processes(id, project_name, client_name)), item_matches(match_type, bom_items!bom_item_id(description, part_number, custom_description))')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true });
+      if (dateFrom) q = q.gte('created_at', dateFrom);
+      const { data: page, error } = await q.range(from, from + PAGE - 1);
+      if (error) throw _sanitizeError(error);
+      data.push(...(page || []));
+      if (!page || page.length < PAGE) break;
+    }
     // Cópias criadas pelo "Usar" (match historical, markup) ficam fora da base; entradas manuais são preços reais e entram
     const rows = (data || []).filter(item => item.is_manual || !item.item_matches?.some(m => m.match_type === 'historical'));
     if (!query || !query.trim()) return rows;
