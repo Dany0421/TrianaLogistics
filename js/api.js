@@ -360,7 +360,7 @@ const API = {
       const chunk = matchIds.slice(i, i + BATCH);
       const { data, error } = await supabase
         .from('match_extra_items')
-        .select('id, item_match_id, quotation_item_id, quotation_items(price, currency, discount, raw_description, eta_value, eta_unit)')
+        .select('id, item_match_id, quotation_item_id, quotation_items(price, currency, discount, quantity, raw_description, eta_value, eta_unit)')
         .in('item_match_id', chunk);
       if (error) throw _sanitizeError(error);
       if (data) all.push(...data);
@@ -372,7 +372,7 @@ const API = {
     const { data, error } = await supabase
       .from('match_extra_items')
       .insert({ item_match_id: itemMatchId, quotation_item_id: quotationItemId })
-      .select('id, item_match_id, quotation_item_id, quotation_items(price, currency, discount, raw_description, eta_value, eta_unit)')
+      .select('id, item_match_id, quotation_item_id, quotation_items(price, currency, discount, quantity, raw_description, eta_value, eta_unit)')
       .single();
     if (error) throw _sanitizeError(error);
     return data;
