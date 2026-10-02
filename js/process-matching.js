@@ -105,6 +105,15 @@ function _coveredByInclusionSet() {
   return set;
 }
 
+// Texto curto para <option> com descrições do BOM: a lista nativa do Chrome fica em branco
+// quando uma opção é mais larga que o ecrã. A descrição inteira vai no title.
+function _bomOptionLabel(b) {
+  const MAX = 80;
+  let d = String(b.description || '—').replace(/\s+/g, ' ').trim();
+  if (d.length > MAX) d = d.slice(0, MAX).trimEnd() + '…';
+  return d + (b.part_number ? '  [' + b.part_number + ']' : '');
+}
+
 function _ddpMZN(price, currency, s, suppTotalG) {
   if (price == null) return null;
   const cambio = (currency && currency !== 'MZN') ? (parseFloat(s.cambio) || 1) : 1;
@@ -1011,7 +1020,7 @@ function openAddToBomModal(parentBomId, supplierId, qi) {
   const parSel = document.createElement('select'); parSel.style.width = '100%';
   bomItems.filter(b => !b.is_service).forEach(b => {
     const o = document.createElement('option'); o.value = b.id;
-    o.textContent = (b.description || '—') + (b.part_number ? '  [' + b.part_number + ']' : '');
+    o.textContent = _bomOptionLabel(b); o.title = b.description || '';
     if (b.id === parentBomId) o.selected = true;
     parSel.appendChild(o);
   });
@@ -1299,12 +1308,12 @@ function openIncludedInModal(bomItemId, supplierId) {
   const selLbl = document.createElement('label'); selLbl.style.cssText = 'display:block;font-size:11px;color:var(--muted);margin-bottom:4px'; selLbl.textContent = 'Coberto por';
   const hasSuppMatch = id => matches.some(m => m.bom_item_id === id && m.supplier_id === supplierId && m.match_type !== 'included_in');
   const allBomOpts = bomItems.filter(b => !b.is_service && b.id !== bomItemId && hasSuppMatch(b.id))
-    .map(b => ({ value: b.id, text: (b.description || '—') + (b.part_number ? '  [' + b.part_number + ']' : '') }));
+    .map(b => ({ value: b.id, text: _bomOptionLabel(b), full: (b.description || '') + ' ' + (b.part_number || '') }));
   const sel = document.createElement('select'); sel.style.width = '100%';
   const rebuildOpts = q => {
     sel.replaceChildren();
-    allBomOpts.filter(o => !q || o.text.toLowerCase().includes(q)).forEach(({ value, text }) => {
-      const opt = document.createElement('option'); opt.value = value; opt.textContent = text; sel.appendChild(opt);
+    allBomOpts.filter(o => !q || o.full.toLowerCase().includes(q)).forEach(({ value, text, full }) => {
+      const opt = document.createElement('option'); opt.value = value; opt.textContent = text; opt.title = full.trim(); sel.appendChild(opt);
     });
   };
   rebuildOpts('');
