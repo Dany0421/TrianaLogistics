@@ -81,7 +81,6 @@ function _quotationItemRowForDb(row) {
   return out;
 }
 
-/** Duplicação de processos: split_group aponta para um id de bom_items, por isso é remapeado para os ids novos. */
 // Filtros para o .or() do histórico de preços: , ( ) " \ partem a sintaxe do PostgREST.
 // Part numbers: reservados viram '_' (1 carácter qualquer). Descrições: viram '%'.
 function _priceHistoryFilters(partNumbers, descriptions) {
@@ -91,12 +90,13 @@ function _priceHistoryFilters(partNumbers, descriptions) {
     if (key) filters.push('raw_part_number.ilike.' + key);
   });
   descriptions.forEach(d => {
-    const key = d.trim().slice(0, 40).replace(/[%_]/g, '').replace(/[,()"\\*]/g, '%');
+    const key = String(d || '').trim().slice(0, 40).replace(/[%_]/g, '').replace(/[,()"\\*]/g, '%');
     if (key.replace(/%/g, '').trim()) filters.push('raw_description.ilike.%' + key + '%');
   });
   return filters;
 }
 
+/** Duplicação de processos: split_group aponta para um id de bom_items, por isso é remapeado para os ids novos. */
 function _splitGroupUpdates(sourceBomItems, bomItemMap) {
   const byGroup = {};
   for (const bi of sourceBomItems) {
