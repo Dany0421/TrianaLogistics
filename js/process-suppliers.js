@@ -258,13 +258,20 @@ function renderSuppliers() {
       const quotSec = document.createElement('div'); quotSec.style.cssText = 'border-top:1px solid var(--border);padding-top:12px';
       const quotHdr = document.createElement('div'); quotHdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
       const quotLbl = document.createElement('div'); quotLbl.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px"; quotLbl.textContent = `COTAÇÃO — ${qCount} ITENS`; quotHdr.appendChild(quotLbl);
-      if (quotationFilesMap[s.id]) {
-        const qfBtnWrap = document.createElement('div'); qfBtnWrap.style.cssText = 'display:flex;gap:4px';
-        const vBtn = document.createElement('button'); vBtn.className = 'btn btn-ghost btn-sm'; lbtn(vBtn, 'file-text', 'Ver'); vBtn.addEventListener('click', e => { e.stopPropagation(); viewQuotFile(quotationFilesMap[s.id].file_path); }); qfBtnWrap.appendChild(vBtn);
-        const dlBtn = document.createElement('button'); dlBtn.className = 'btn btn-ghost btn-sm'; lbtn(dlBtn, 'download', 'Baixar'); dlBtn.addEventListener('click', e => { e.stopPropagation(); downloadQuotFile(quotationFilesMap[s.id].file_path, quotationFilesMap[s.id].original_name); }); qfBtnWrap.appendChild(dlBtn);
-        quotHdr.appendChild(qfBtnWrap);
-      }
+      const qFiles = quotationFilesMap[s.id] || [];
+      if (qFiles.length === 1) quotHdr.appendChild(_quotFileButtons(s.id, qFiles[0]));
       quotSec.appendChild(quotHdr);
+      if (qFiles.length > 1) {
+        const fList = document.createElement('div'); fList.style.cssText = 'display:flex;flex-direction:column;gap:2px;margin-bottom:8px';
+        qFiles.forEach(f => {
+          const row = document.createElement('div'); row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px';
+          const nm = document.createElement('div'); nm.style.cssText = 'font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0';
+          nm.textContent = f.original_name || 'cotação'; nm.title = (f.original_name || '') + (f.uploaded_at ? ' — ' + fmtDate(f.uploaded_at) : '');
+          row.appendChild(nm); row.appendChild(_quotFileButtons(s.id, f));
+          fList.appendChild(row);
+        });
+        quotSec.appendChild(fList);
+      }
       const qTable = document.createElement('table'); qTable.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px';
       qItems.slice(0, 6).forEach(qi => {
         const anom = savedAnomalyMap[qi.id];
@@ -945,6 +952,30 @@ async function doDeleteSupplier(id) {
 }
 
 // ── Quotation Upload ──
+function _quotFilesAfterUpload(prevFiles, mode) {
+  const prev = prevFiles || [];
+  return mode === 'replace' ? { keep: [], remove: prev } : { keep: prev, remove: [] };
+}
+
+async function removeQuotFile(supplierId, file) {
+  const ok = await _showConfirmModal('Apagar ficheiro?', `"${file.original_name}" vai ser apagado. As linhas da cotação ficam como estão.`, 'Apagar');
+  if (!ok) return;
+  try {
+    await API.deleteQuotationFile(file);
+    quotationFilesMap[supplierId] = (quotationFilesMap[supplierId] || []).filter(f => f.id !== file.id);
+    renderSuppliers();
+    showToast('Ficheiro apagado.');
+  } catch(e) { showToast('Erro ao apagar ficheiro: ' + e.message, true); }
+}
+
+function _quotFileButtons(supplierId, f) {
+  const wrap = document.createElement('div'); wrap.style.cssText = 'display:flex;gap:4px;flex-shrink:0';
+  const vBtn = document.createElement('button'); vBtn.className = 'btn btn-ghost btn-sm'; lbtn(vBtn, 'file-text', 'Ver'); vBtn.addEventListener('click', e => { e.stopPropagation(); viewQuotFile(f.file_path); }); wrap.appendChild(vBtn);
+  const dlBtn = document.createElement('button'); dlBtn.className = 'btn btn-ghost btn-sm'; lbtn(dlBtn, 'download', 'Baixar'); dlBtn.addEventListener('click', e => { e.stopPropagation(); downloadQuotFile(f.file_path, f.original_name); }); wrap.appendChild(dlBtn);
+  const xBtn = document.createElement('button'); xBtn.className = 'btn btn-ghost btn-sm'; xBtn.title = 'Apagar ficheiro'; lbtn(xBtn, 'x', ''); xBtn.addEventListener('click', e => { e.stopPropagation(); removeQuotFile(supplierId, f); }); wrap.appendChild(xBtn);
+  return wrap;
+}
+
 function uploadQuotation(supplierId) {
   if (!UUID_RE.test(supplierId)) return;
   currentQuotSuppId = supplierId;
@@ -1019,8 +1050,8 @@ function _askReplaceOrAppend(existingItems, newItems, onReplace, onAppend) {
   document.body.appendChild(overlay);
   const close = () => document.body.removeChild(overlay);
   btnCancel.addEventListener('click', close);
-  btnReplace.addEventListener('click', () => { close(); onReplace(); });
-  btnAppend.addEventListener('click', () => { close(); onAppend(); });
+  btnReplace.addEventListener('click', () => { close(); pendingQuotFileMode = 'replace'; onReplace(); });
+  btnAppend.addEventListener('click', () => { close(); pendingQuotFileMode = 'append'; onAppend(); });
 }
 
 async function handleQuotationUpload(input) {
@@ -1031,6 +1062,7 @@ async function handleQuotationUpload(input) {
   if (!ALLOWED_QUOT_TYPES.includes(file.type) && !file.name.match(/\.(xlsx?|pdf)$/i)) { showToast('Tipo de ficheiro não permitido. Usa .xlsx, .xls ou .pdf.', true); return; }
 
   pendingQuotFile = file;
+  pendingQuotFileMode = 'append';
   if (file.name.toLowerCase().endsWith('.pdf')) {
     await handlePdfQuotation(file);
   } else {
@@ -1613,9 +1645,16 @@ async function confirmQuotation() {
       const ext = pendingQuotFile.name.split('.').pop();
       const filePath = `quotations/${currentQuotSuppId}/${Date.now()}.${ext}`;
       await API.uploadFile('procurement-files', filePath, pendingQuotFile);
-      await API.saveQuotationFile(currentQuotSuppId, filePath, pendingQuotFile.name);
-      quotationFilesMap[currentQuotSuppId] = { file_path: filePath, original_name: pendingQuotFile.name };
+      const savedFile = await API.saveQuotationFile(currentQuotSuppId, filePath, pendingQuotFile.name);
+      // Só apaga os antigos depois do novo estar guardado
+      const { keep, remove } = _quotFilesAfterUpload(quotationFilesMap[currentQuotSuppId], pendingQuotFileMode);
+      const failed = [];
+      for (const f of remove) {
+        try { await API.deleteQuotationFile(f); } catch(e) { console.warn('[Cotação] não apagou', f.original_name, e); failed.push(f); }
+      }
+      quotationFilesMap[currentQuotSuppId] = [savedFile, ...keep, ...failed];
       pendingQuotFile = null;
+      pendingQuotFileMode = 'append';
     }
 
     // Populate savedAnomalyMap for supplier card display

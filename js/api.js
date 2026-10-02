@@ -660,8 +660,18 @@ const API = {
   },
 
   async saveQuotationFile(supplierId, filePath, originalName) {
-    const { error } = await supabase.from('quotation_files')
-      .insert({ supplier_id: supplierId, file_path: filePath, original_name: originalName });
+    const { data, error } = await supabase.from('quotation_files')
+      .insert({ supplier_id: supplierId, file_path: filePath, original_name: originalName })
+      .select().single();
+    if (error) throw _sanitizeError(error);
+    return data;
+  },
+
+  async deleteQuotationFile(file) {
+    if (!file?.id || !file.file_path || file.file_path.includes('..')) throw new Error('Ficheiro inválido.');
+    const { error: sErr } = await supabase.storage.from('procurement-files').remove([file.file_path]);
+    if (sErr) throw _sanitizeError(sErr);
+    const { error } = await supabase.from('quotation_files').delete().eq('id', file.id);
     if (error) throw _sanitizeError(error);
   },
 

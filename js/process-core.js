@@ -23,7 +23,8 @@ let pendingBomFile = null;  // File object held between handleBomUpload and conf
 let _bomModalEl = null;     // reference to the open BOM validation modal element
 let histCatData = null;  // lazy-fetched once; { category, supplier_name }[]
 let pendingQuotFile = null; // File object held between handleQuotationUpload and confirmQuotation
-let quotationFilesMap = {}; // supplierId → latest quotation_files row
+let pendingQuotFileMode = 'append'; // 'replace' (Substituir tudo) apaga os ficheiros antigos ao gravar
+let quotationFilesMap = {}; // supplierId → quotation_files rows, mais recente primeiro
 let quotationMap = {};    // supplierId → items[]
 let matches = [];
 let matchExtraItems = [];
@@ -143,10 +144,7 @@ async function loadAll() {
       selectedOffers = selOfrs.filter(o => currentBomIds.has(o.bom_item_id));
       rejectedAutoMatch = rejAuto;
       matchExtraItems = await API.getMatchExtraItems(matches.map(m => m.id));
-      quotationFilesMap = {};
-      for (const f of qFiles) {
-        if (!quotationFilesMap[f.supplier_id]) quotationFilesMap[f.supplier_id] = f;
-      }
+      quotationFilesMap = _groupQuotFiles(qFiles);
       renderSuppliers();
       renderInstallTab();
       // Matching tab is rendered lazily on first switch
@@ -471,6 +469,12 @@ function showModalLg(el) {
   document.body.style.overflow = 'hidden';
 }
 function closeModal() { document.getElementById('modalRoot').replaceChildren(); document.body.style.overflow = ''; }
+
+function _groupQuotFiles(rows) {
+  const map = {};
+  for (const f of rows) (map[f.supplier_id] = map[f.supplier_id] || []).push(f);
+  return map;
+}
 
 function _showConfirmModal(title, message, confirmLabel = 'Confirmar') {
   return new Promise(resolve => {
