@@ -908,10 +908,7 @@ async function saveSupplier() {
     try {
       await API.upsertGlobalSupplier(fields.name, fields.email || '', fields.cc_emails || [], pendingSupplierCategories, pendingSupplierBrands);
       globalSuppliersList = await API.getGlobalSuppliers();
-      if (fields.is_foreign) {
-        const _gsSync = globalSuppliersList.find(g => g.name.trim().toLowerCase() === fields.name.trim().toLowerCase());
-        if (_gsSync?.id) { await API.updateGlobalSupplier(_gsSync.id, { is_foreign: true }); _gsSync.is_foreign = true; }
-      }
+      // is_foreign não sobe para o perfil: o perfil do fornecedor é o default, o processo só o sobrepõe localmente
     } catch(_) {}
     closeModal();
     suppliers = await API.getSuppliers(processId);
@@ -1634,12 +1631,6 @@ async function confirmQuotation() {
     await API.updateSupplier(currentQuotSuppId, { ...rateFields, ...validityFields });
     const suppIdx = suppliers.findIndex(s => s.id === currentQuotSuppId);
     if (suppIdx !== -1) Object.assign(suppliers[suppIdx], { ...rateFields, ...validityFields });
-    // Sync is_foreign to global supplier profile when set
-    if (rateFields.is_foreign) {
-      const _suppName = suppliers.find(s => s.id === currentQuotSuppId)?.name;
-      const _gsSync = globalSuppliersList.find(g => g.name.trim().toLowerCase() === _suppName?.trim().toLowerCase());
-      if (_gsSync?.id) { try { await API.updateGlobalSupplier(_gsSync.id, { is_foreign: true }); _gsSync.is_foreign = true; } catch(_) {} }
-    }
 
     if (pendingQuotFile) {
       const ext = pendingQuotFile.name.split('.').pop();
