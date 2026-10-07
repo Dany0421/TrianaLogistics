@@ -438,6 +438,19 @@ function openSupplierModal(id = null) {
   const langEl = document.getElementById('gs_language'); if (langEl) langEl.value = s?.language || 'pt';
   renderTagBox('gsCatBox', pendingCats, 'cat', '');
   renderTagBox('gsBrandBox', pendingBrands, 'brand', 'tag-chip-brand');
+
+  // Estrangeiro: é o default que os processos puxam para este fornecedor
+  const notesRow = document.getElementById('gs_notes')?.closest('.form-row');
+  if (notesRow) {
+    const fRow = document.createElement('div'); fRow.className = 'form-row';
+    const fLbl = document.createElement('label'); fLbl.style.cssText = 'display:flex;align-items:center;gap:8px;margin:0;cursor:pointer';
+    const fCb = document.createElement('input'); fCb.type = 'checkbox'; fCb.id = 'gs_foreign'; fCb.style.width = 'auto'; fCb.checked = !!s?.is_foreign;
+    const fTxt = document.createElement('span'); fTxt.style.cssText = 'font-size:13px;color:var(--text)'; fTxt.textContent = 'Fornecedor Estrangeiro';
+    const fHint = document.createElement('span'); fHint.style.cssText = 'font-size:11px;color:var(--muted)'; fHint.textContent = '(+5% custos de importação; vem marcado por defeito nos processos)';
+    fLbl.appendChild(fCb); fLbl.appendChild(fTxt); fLbl.appendChild(fHint);
+    fRow.appendChild(fLbl);
+    notesRow.parentNode.insertBefore(fRow, notesRow);
+  }
 }
 
 async function saveSupplier() {
@@ -451,7 +464,8 @@ async function saveSupplier() {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Email inv\u00e1lido.', true); return; }
 
   const language = document.getElementById('gs_language')?.value || 'pt';
-  const fields = { name, email, cc_emails: cc_emails.length ? cc_emails : null, categories: pendingCats, brands: pendingBrands, notes, language };
+  const is_foreign = !!document.getElementById('gs_foreign')?.checked;
+  const fields = { name, email, cc_emails: cc_emails.length ? cc_emails : null, categories: pendingCats, brands: pendingBrands, notes, language, is_foreign };
   try {
     if (editingId) {
       await API.updateGlobalSupplier(editingId, fields);

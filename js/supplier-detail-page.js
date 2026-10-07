@@ -85,8 +85,14 @@ async function loadDetail(name){
   ]);
   const qCountById={};
   quotItems.forEach(qi=>{qCountById[qi.supplier_id]=(qCountById[qi.supplier_id]||0)+1;});
-  const isForeign=processHistory.some(s=>s.is_foreign);
+  const isForeign=_supplierIsForeign(gs,processHistory);
   renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isForeign,contacts);
+}
+
+// O perfil geral manda (é o que se edita em Fornecedores); sem perfil, usa o histórico dos processos
+function _supplierIsForeign(gs,processHistory){
+  if(gs)return !!gs.is_foreign;
+  return processHistory.some(s=>s.is_foreign);
 }
 
 function renderPage(name,gs,processHistory,quotItems,bomCatMap,qCountById,isForeign,contacts){
