@@ -182,6 +182,8 @@ function renderSuppFilterBar() {
   bar.appendChild(makeChip(`Todos (${suppliers.length})`, null));
   const ORDER = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'];
   ORDER.forEach(st => { if (counts[st]) bar.appendChild(makeChip(`${st} (${counts[st]})`, st)); });
+  // Estados fora da lista fixa (Historical price, personalizados) também filtram
+  Object.keys(counts).filter(st => !ORDER.includes(st)).sort().forEach(st => bar.appendChild(makeChip(`${st} (${counts[st]})`, st)));
 }
 
 // ── Render Suppliers ──
@@ -839,7 +841,7 @@ function openSupplierModal(idx = null, prefill = {}) {
 
   // Status options
   const statusSel = el.querySelector('#sf_status');
-  const sfStatuses = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'];
+  const sfStatuses = SF_STANDARD_STATUSES; // inclui 'Historical price', escolhível à mão
   sfStatuses.forEach(v => { const opt = document.createElement('option'); opt.value = v; opt.textContent = v; if ((s?.status || 'Not contacted') === v) opt.selected = true; statusSel.appendChild(opt); });
   // Estado personalizado (como nos processos): texto + cor, mostrados só com textContent / cor validada
   const customRow = el.querySelector('#sf_custom_row');
