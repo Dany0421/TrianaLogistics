@@ -845,13 +845,15 @@ function openSupplierModal(idx = null, prefill = {}) {
   const customRow = el.querySelector('#sf_custom_row');
   if (s?.status && !sfStatuses.includes(s.status)) {
     const opt = document.createElement('option'); opt.value = s.status; opt.textContent = s.status; opt.selected = true; statusSel.appendChild(opt);
+  }
+  if (s?.status && !SF_STANDARD_STATUSES.includes(s.status)) {
     customRow.style.display = 'flex';
     el.querySelector('#sf_custom_name').value = s.status;
     if (_isHexColor(s.status_color)) el.querySelector('#sf_custom_color').value = s.status_color;
   }
   const newOpt = document.createElement('option'); newOpt.value = '__custom__'; newOpt.textContent = '+ Criar estado...'; statusSel.appendChild(newOpt);
   statusSel.addEventListener('change', function() {
-    const custom = this.value === '__custom__' || !sfStatuses.includes(this.value);
+    const custom = this.value === '__custom__' || !SF_STANDARD_STATUSES.includes(this.value);
     customRow.style.display = custom ? 'flex' : 'none';
     if (this.value === '__custom__') el.querySelector('#sf_custom_name').value = '';
   });
@@ -885,7 +887,8 @@ function openSupplierModal(idx = null, prefill = {}) {
 
 function toggleForeignBox(_val) { /* sf_foreignBox removed — cambio/transport/direitos moved to quotation modal */ }
 
-const SF_STANDARD_STATUSES = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'];
+// Inclui o estado de sistema 'Historical price' (fornecedor criado pelo preço histórico): grava sem cor
+const SF_STANDARD_STATUSES = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response','Historical price'];
 function _isHexColor(c) { return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c); }
 
 function _supplierStatusFields() {
