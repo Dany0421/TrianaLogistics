@@ -10,5 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('addSupplierBtn').addEventListener('click', () => openSupplierModal());
   document.getElementById('generateReportBtn').addEventListener('click', generateReport);
   document.getElementById('generateExcelBtn').addEventListener('click', generateExcel);
+  document.getElementById('generateCompareExcelBtn').addEventListener('click', generateCompareExcel);
   document.getElementById('quotFileInput').addEventListener('change', function() { handleQuotationUpload(this); });
 });

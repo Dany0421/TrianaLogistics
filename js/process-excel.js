@@ -200,14 +200,18 @@ function fillMain(ws, suppliers, sheetNames, dataStarts, allRows, hasServices) {
     if (modelLines > 1) ws.getRow(row).height = Math.max(18.5, modelLines * 15 + 3);
 
     if (item.type === 'equip') {
-      const si=suppliers.findIndex(s=>s.id===item.suppId);
-      if(si<0){row++;continue;}
-      const ss=`'${sheetNames[si].replace(/'/g, "''")}'`;
-      const ds=dataStarts[si];
+      // Final: uma célula (o fornecedor escolhido). Comparação: item.cells com todos os fornecedores.
+      const cells=(item.cells||[{suppId:item.suppId,indexInSupplier:item.indexInSupplier}])
+        .map(c=>({...c,si:suppliers.findIndex(s=>s.id===c.suppId)})).filter(c=>c.si>=0);
+      if(!cells.length){row++;continue;}
       sc2(ws.getCell(row,1),{value:item.part||'',font:dF,alignment:{horizontal:'center',vertical:'middle'}});
       sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
       sc2(ws.getCell(row,3),{value:item.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
-      sc2(ws.getCell(row,4+si),{value:{formula:`${ss}!R${ds+item.indexInSupplier}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+      for(const c of cells){
+        if(c.included){sc2(ws.getCell(row,4+c.si),{value:'incluído',font:dF,alignment:{horizontal:'center',vertical:'middle'}});continue;}
+        const ss=`'${sheetNames[c.si].replace(/'/g, "''")}'`;
+        sc2(ws.getCell(row,4+c.si),{value:{formula:`${ss}!R${dataStarts[c.si]+c.indexInSupplier}`},font:dF,alignment:{horizontal:'center',vertical:'middle'},numFmt:NF});
+      }
     } else {
       sc2(ws.getCell(row,2),{value:item.model,font:dF,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
       sc2(ws.getCell(row,3),{value:item.qty,font:dF,alignment:{horizontal:'center',vertical:'middle'}});
@@ -397,7 +401,12 @@ function _askExcelOptions() {
   });
 }
 
-async function generateExcel() {
+// Excel de comparação: mesmo template, mas a página principal mostra o preço de TODOS os fornecedores
+// em cada item e cada folha de fornecedor tem tudo o que ele cotou (para o boss comparar antes do final).
+function generateCompareExcel() { return generateExcel({ compare: true }); }
+
+async function generateExcel(opts) {
+  const compare = opts?.compare === true; // o click passa um Event → final
   if (hasRole('commercial')) { showToast('Sem permissão para gerar Excel.', true); return; }
 
   const excelOpts = await _askExcelOptions();
@@ -447,10 +456,58 @@ async function generateExcel() {
   const skippedItems = [];
   let hasServices = false;
 
+  // Linha de um item na folha de um fornecedor (quantidade/preço pela regra da tab Matching).
+  // Uma linha de cotação já usada por outro item reaproveita o mesmo índice (isNew=false).
+  const _supplierLine = (bi, suppId, qi) => {
+    const matchId = matchLookup[bi.id]?.[suppId]?.id;
+    const extras = extraByMatchId[matchId] || [];
+    // Quantidade e preço unitário saem da mesma regra da tab Matching (qty_source por match).
+    // O picker global só força quando escolhes BOM — 'Cotação' respeita o que marcaste em cada célula.
+    const _theMatch = matchLookup[bi.id]?.[suppId];
+    const _itemQtySrc = qtySource === 'custom' ? (qtyOverrides[bi.id] || 'quotation') : qtySource;
+    const _mCalc = { ..._theMatch, quotation_items: qi };
+    if (_itemQtySrc === 'bom') _mCalc.qty_source = 'bom';
+    const _lv = matchLineValue(_mCalc, extras, bi) || { unit: 0, total: 0, src: 'quotation' };
+    const effQty = _lv.src === 'bom'
+      ? (bi.quantity || 1)
+      : (Number(qi.quantity) > 0 ? Number(qi.quantity) : (bi.quantity || 1));
+    const totalPrice = effQty > 0 ? _lv.total / effQty : 0;
+    const primaryDesc = bi.custom_description || (descSource === 'bom' ? bi.description : (qi.raw_description || bi.description));
+    const extraDescs = !bi.custom_description ? extras.map(e => e.quotation_items?.raw_description || '').filter(Boolean) : [];
+    const modelDesc = extraDescs.length ? [primaryDesc, ...extraDescs].join(' + ') : primaryDesc;
+    const part = qi.raw_part_number || bi.part_number || '';
+
+    if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; seenQI[suppId] = new Map(); }
+    if (seenQI[suppId].has(qi.id)) return { part, modelDesc, effQty, index: seenQI[suppId].get(qi.id), isNew: false };
+    const index = supplierCounters[suppId]++;
+    seenQI[suppId].set(qi.id, index);
+    supplierItems[suppId].push({ part, model: modelDesc, qty: String(effQty), price: String(totalPrice), currency: qi.currency });
+    return { part, modelDesc, effQty, index, isNew: true };
+  };
+
   for (const bi of bomItems) {
     if (bi.is_service) {
       if ((bi.service_price || 0) > 0) hasServices = true;
       allRows.push({ type: 'service', model: bi.description, qty: bi.quantity || 1, unitPrice: bi.service_price || 0, sheetName: bi.sheet_name || null });
+      continue;
+    }
+
+    if (compare) {
+      // Todos os fornecedores com preço; "incluído em" fica marcado na coluna desse fornecedor
+      const cells = [];
+      for (const s of suppliers) {
+        const m = matchLookup[bi.id]?.[s.id];
+        if (!m) continue;
+        if (m.match_type === 'included_in') { cells.push({ suppId: s.id, included: true }); continue; }
+        const q = (quotationMap[s.id] || []).find(x => x.id === m.quotation_item_id);
+        if (!q) continue;
+        cells.push({ suppId: s.id, indexInSupplier: _supplierLine(bi, s.id, q).index });
+      }
+      if (!cells.some(c => !c.included)) {
+        if (!cells.length) skippedItems.push(bi.description || bi.part_number || '?');
+        continue;
+      }
+      allRows.push({ type: 'equip', part: bi.part_number || '', model: bi.custom_description || bi.description || '', qty: bi.quantity || 1, cells, sheetName: bi.sheet_name || null });
       continue;
     }
 
@@ -485,29 +542,9 @@ async function generateExcel() {
       continue;
     }
 
-    const matchId = matchLookup[bi.id]?.[suppId]?.id;
-    const extras = extraByMatchId[matchId] || [];
-    // Quantidade e preço unitário saem da mesma regra da tab Matching (qty_source por match).
-    // O picker global só força quando escolhes BOM — 'Cotação' respeita o que marcaste em cada célula.
-    const _theMatch = matchLookup[bi.id]?.[suppId];
-    const _itemQtySrc = qtySource === 'custom' ? (qtyOverrides[bi.id] || 'quotation') : qtySource;
-    const _mCalc = { ..._theMatch, quotation_items: qi };
-    if (_itemQtySrc === 'bom') _mCalc.qty_source = 'bom';
-    const _lv = matchLineValue(_mCalc, extras, bi) || { unit: 0, total: 0, src: 'quotation' };
-    const effQty = _lv.src === 'bom'
-      ? (bi.quantity || 1)
-      : (Number(qi.quantity) > 0 ? Number(qi.quantity) : (bi.quantity || 1));
-    const totalPrice = effQty > 0 ? _lv.total / effQty : 0;
-    const primaryDesc = bi.custom_description || (descSource === 'bom' ? bi.description : (qi.raw_description || bi.description));
-    const extraDescs = !bi.custom_description ? extras.map(e => e.quotation_items?.raw_description || '').filter(Boolean) : [];
-    const modelDesc = extraDescs.length ? [primaryDesc, ...extraDescs].join(' + ') : primaryDesc;
-
-    if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; seenQI[suppId] = new Map(); }
-    if (seenQI[suppId].has(qi.id)) continue;
-    const indexInSupplier = supplierCounters[suppId]++;
-    seenQI[suppId].set(qi.id, indexInSupplier);
-    supplierItems[suppId].push({ part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: String(effQty), price: String(totalPrice), currency: qi.currency });
-    allRows.push({ type: 'equip', part: qi.raw_part_number || bi.part_number || '', model: modelDesc, qty: effQty, suppId, indexInSupplier, sheetName: bi.sheet_name || null });
+    const line = _supplierLine(bi, suppId, qi);
+    if (!line.isNew) continue;
+    allRows.push({ type: 'equip', part: line.part, model: line.modelDesc, qty: line.effQty, suppId, indexInSupplier: line.index, sheetName: bi.sheet_name || null });
   }
 
   const activeSuppliers = suppliers.filter(s => supplierItems[s.id]?.length > 0);
@@ -543,9 +580,10 @@ async function generateExcel() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Planilha_Financeira_${(process.project_name||'Processo').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}_${(process.client_name||'').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}.xlsx`;
+    a.download = `${compare ? 'Comparacao_Precos' : 'Planilha_Financeira'}_${(process.project_name||'Processo').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}_${(process.client_name||'').replace(/[^a-zA-Z0-9\s\-_]/g,'').replace(/\s+/g,'_')}.xlsx`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast(currencyWarns.length ? 'Excel gerado. Atenção — ' + currencyWarns.join(' ') : 'Excel gerado!', currencyWarns.length > 0);
+    const doneMsg = compare ? 'Excel de comparação gerado' : 'Excel gerado';
+    showToast(currencyWarns.length ? doneMsg + '. Atenção — ' + currencyWarns.join(' ') : doneMsg + '!', currencyWarns.length > 0);
   } catch(e) { showToast('Erro ao gerar Excel: ' + e.message, true); console.error(e); }
 }
