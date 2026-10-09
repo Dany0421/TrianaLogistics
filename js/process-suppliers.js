@@ -218,6 +218,11 @@ function renderSuppliers() {
     const leftDiv = document.createElement('div'); leftDiv.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap';
     const nameSpan = document.createElement('span'); nameSpan.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--accent)"; nameSpan.textContent = s.name; leftDiv.appendChild(nameSpan);
     const statusBadge = document.createElement('span'); statusBadge.className = 'badge ' + suppStatusClass(s.status); statusBadge.textContent = s.status; leftDiv.appendChild(statusBadge);
+    if (_isHexColor(s.status_color)) {
+      const r = parseInt(s.status_color.slice(1,3),16), g = parseInt(s.status_color.slice(3,5),16), b = parseInt(s.status_color.slice(5,7),16);
+      statusBadge.className = 'badge';
+      statusBadge.style.background = `rgba(${r},${g},${b},.1)`; statusBadge.style.color = s.status_color; statusBadge.style.border = `1px solid rgba(${r},${g},${b},.3)`;
+    }
     if (s.is_foreign) { const fb = document.createElement('span'); fb.className = 'badge'; fb.style.cssText = 'background:#3a2a00;color:#ffaa00;border:1px solid #5a4a00'; fb.textContent = 'ESTRANGEIRO'; leftDiv.appendChild(fb); }
     const quotBadge = document.createElement('span'); quotBadge.className = 'quot-badge' + (qCount ? ' has-items' : ''); quotBadge.textContent = qCount ? `${qCount} itens cotação` : 'sem cotação'; leftDiv.appendChild(quotBadge);
     if (qItems.some(qi => savedAnomalyMap[qi.id])) { const an = document.createElement('span'); an.className = 'anomaly-high'; an.title = 'Preços fora do histórico detectados'; an.appendChild(licon('alert-triangle', 11)); an.appendChild(document.createTextNode('\u00a0outlier')); leftDiv.appendChild(an); }
@@ -790,7 +795,12 @@ function openSupplierModal(idx = null, prefill = {}) {
       <div></div>
     </div>
     <div class="form-grid-2">
-      <div><label>Estado</label><select id="sf_status"></select></div>
+      <div><label>Estado</label><select id="sf_status"></select>
+        <div id="sf_custom_row" style="display:none;gap:8px;margin-top:6px;align-items:center">
+          <input type="text" id="sf_custom_name" placeholder="Nome do estado" maxlength="100" style="flex:1">
+          <input type="color" id="sf_custom_color" value="#2563eb" style="width:40px;height:36px;padding:2px;cursor:pointer">
+        </div>
+      </div>
       <div style="display:flex;align-items:center;gap:10px;padding-top:20px">
         <label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">
           <input type="checkbox" id="sf_foreign" style="width:auto">
@@ -831,6 +841,20 @@ function openSupplierModal(idx = null, prefill = {}) {
   const statusSel = el.querySelector('#sf_status');
   const sfStatuses = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'];
   sfStatuses.forEach(v => { const opt = document.createElement('option'); opt.value = v; opt.textContent = v; if ((s?.status || 'Not contacted') === v) opt.selected = true; statusSel.appendChild(opt); });
+  // Estado personalizado (como nos processos): texto + cor, mostrados só com textContent / cor validada
+  const customRow = el.querySelector('#sf_custom_row');
+  if (s?.status && !sfStatuses.includes(s.status)) {
+    const opt = document.createElement('option'); opt.value = s.status; opt.textContent = s.status; opt.selected = true; statusSel.appendChild(opt);
+    customRow.style.display = 'flex';
+    el.querySelector('#sf_custom_name').value = s.status;
+    if (_isHexColor(s.status_color)) el.querySelector('#sf_custom_color').value = s.status_color;
+  }
+  const newOpt = document.createElement('option'); newOpt.value = '__custom__'; newOpt.textContent = '+ Criar estado...'; statusSel.appendChild(newOpt);
+  statusSel.addEventListener('change', function() {
+    const custom = this.value === '__custom__' || !sfStatuses.includes(this.value);
+    customRow.style.display = custom ? 'flex' : 'none';
+    if (this.value === '__custom__') el.querySelector('#sf_custom_name').value = '';
+  });
 
   // Foreign checkbox — pre-fill from process supplier OR global supplier profile
   const foreignCb = el.querySelector('#sf_foreign');
@@ -861,12 +885,23 @@ function openSupplierModal(idx = null, prefill = {}) {
 
 function toggleForeignBox(_val) { /* sf_foreignBox removed — cambio/transport/direitos moved to quotation modal */ }
 
+const SF_STANDARD_STATUSES = ['Not contacted','Request sent','Waiting response','Follow-up needed','Replied partial','Replied complete','No stock','Not available','Ignored / no response'];
+function _isHexColor(c) { return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c); }
+
+function _supplierStatusFields() {
+  const v = document.getElementById('sf_status').value;
+  if (v !== '__custom__' && SF_STANDARD_STATUSES.includes(v)) return { status: v, status_color: null };
+  const name = (document.getElementById('sf_custom_name').value.trim() || (v === '__custom__' ? 'Custom' : v)).slice(0, 100);
+  const color = document.getElementById('sf_custom_color').value;
+  return { status: name, status_color: _isHexColor(color) ? color : null };
+}
+
 async function saveSupplier() {
   const fields = {
     process_id:       processId,
     name:             document.getElementById('sf_name').value.trim(),
     email:            document.getElementById('sf_email').value.trim() || null,
-    status:           document.getElementById('sf_status').value,
+    ..._supplierStatusFields(),
     is_foreign:       document.getElementById('sf_foreign').checked,
     last_contact_at:  document.getElementById('sf_last').value || null,
     next_followup_at: document.getElementById('sf_followup').value || null,
