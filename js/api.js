@@ -604,6 +604,11 @@ const API = {
     if (error) throw _sanitizeError(error);
   },
 
+  async updateBomItemSoftware(id, isSoftware) {
+    const { error } = await supabase.from('bom_items').update({ is_software: isSoftware }).eq('id', id);
+    if (error) throw _sanitizeError(error);
+  },
+
   async updateBomItemServicePrice(id, price) {
     const { error } = await supabase.from('bom_items').update({ service_price: price }).eq('id', id);
     if (error) throw _sanitizeError(error);
@@ -725,6 +730,7 @@ const API = {
         category:       bi.category,
         sort_order:     bi.sort_order,
         split_origin_qty: bi.split_origin_qty ?? null,
+        is_software:    !!bi.is_software,
       }));
       const savedItems = await API.saveBomItems(newItems);
       savedItems.forEach((ni, idx) => { bomItemMap[sourceBomItems[idx].id] = ni.id; });

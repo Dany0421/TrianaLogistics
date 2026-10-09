@@ -10,7 +10,7 @@ function diffBom(oldItems, newItems) {
   function _classifyMatch(oi, ni) {
     const qtyDiff = Math.abs((oi.quantity||0) - (ni.quantity||0)) > 0.001;
     const descDiff = norm(oi.description) !== norm(ni.description);
-    return { _diffStatus: descDiff ? 'changed' : qtyDiff ? 'qty_changed' : 'unchanged', _oldId: oi.id, _oldQty: oi.quantity };
+    return { _diffStatus: descDiff ? 'changed' : qtyDiff ? 'qty_changed' : 'unchanged', _oldId: oi.id, _oldQty: oi.quantity, is_software: !!oi.is_software };
   }
 
   const result = newItems.map(ni => {
@@ -125,7 +125,8 @@ async function openBomValidationModal(fileName) {
     <th style="width:8%">Unid.</th>
     <th style="width:9%">Categoria</th>
     <th style="width:5%" title="Serviço Triana">Serv.</th>
-    <th style="width:${isRevision ? '11%' : '13%'}"></th>
+    <th style="width:5%" title="Software (estrangeiro: direitos 10%, sem homologação/selos)">Soft.</th>
+    <th style="width:${isRevision ? '6%' : '8%'}"></th>
   </tr></thead>`;
   table.insertAdjacentHTML('afterbegin', theadStr);
   const tbody = document.createElement('tbody'); tbody.id = 'bomValTbody'; table.appendChild(tbody);
@@ -471,7 +472,7 @@ function renderBomValTable() {
   const sheetNames = [...new Set(pendingBomItems.map(i => i.sheet_name).filter(Boolean))];
   const showDividers = sheetNames.length > 1;
   let lastSheet = null;
-  const colSpan = isRevision ? 8 : 7; // +1 for Serv. column
+  const colSpan = isRevision ? 9 : 8; // +1 Serv. +1 Soft.
 
   const _norm = s => (s || '').toLowerCase();
   const _tokens = _norm(_bomValFilter).split(/\s+/).filter(Boolean);
@@ -564,6 +565,16 @@ function renderBomValTable() {
     chkSvc.onchange = function() { pendingBomItems[i].is_service = this.checked; };
     tdSvc.appendChild(chkSvc);
     tr.appendChild(tdSvc);
+
+    const tdSw = document.createElement('td');
+    tdSw.style.textAlign = 'center';
+    const chkSw = document.createElement('input');
+    chkSw.type = 'checkbox';
+    chkSw.checked = !!item.is_software;
+    chkSw.title = 'Software (estrangeiro: direitos 10%, sem homologação/selos)';
+    chkSw.onchange = function() { pendingBomItems[i].is_software = this.checked; };
+    tdSw.appendChild(chkSw);
+    tr.appendChild(tdSw);
 
     const tdActions = document.createElement('td');
     tdActions.style.cssText = 'display:flex;gap:3px;align-items:center';
@@ -755,8 +766,9 @@ function renderBomTable(items) {
     <th style="width:42%">Descrição</th>
     <th style="width:7%">Qty</th>
     <th style="width:7%">Unid.</th>
-    <th style="width:19%">Categoria</th>
+    <th style="width:14%">Categoria</th>
     <th style="width:5%;text-align:center" title="Serviço Triana">Serv.</th>
+    <th style="width:5%;text-align:center" title="Software (estrangeiro: direitos 10%, sem homologação/selos)">Soft.</th>
   </tr></thead><tbody></tbody></table>`);
   holder.appendChild(tableWrap);
   const tbody = holder.querySelector('tbody');
@@ -765,7 +777,7 @@ function renderBomTable(items) {
   for (const item of items) {
     if (item.category && item.category !== lastCat) {
       const catRow = document.createElement('tr'); catRow.className = 'category-row';
-      const catTd = document.createElement('td'); catTd.colSpan = 6; catTd.textContent = item.category;
+      const catTd = document.createElement('td'); catTd.colSpan = 7; catTd.textContent = item.category;
       catRow.appendChild(catTd); tbody.appendChild(catRow);
       lastCat = item.category;
     }
@@ -780,8 +792,12 @@ function renderBomTable(items) {
     const chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = !!item.is_service; chk.title = 'Serviço Triana';
     chk.addEventListener('change', function() { toggleServiceItem(item.id, this.checked); });
     tdSvc.appendChild(chk);
+    const tdSw = document.createElement('td'); tdSw.style.textAlign = 'center';
+    const chkSw = document.createElement('input'); chkSw.type = 'checkbox'; chkSw.checked = !!item.is_software; chkSw.title = 'Software (estrangeiro: direitos 10%, sem homologação/selos)';
+    chkSw.addEventListener('change', function() { toggleSoftwareItem(item.id, this.checked); });
+    tdSw.appendChild(chkSw);
 
-    tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty); tr.appendChild(tdUnit); tr.appendChild(tdCat); tr.appendChild(tdSvc);
+    tr.appendChild(tdPart); tr.appendChild(tdDesc); tr.appendChild(tdQty); tr.appendChild(tdUnit); tr.appendChild(tdCat); tr.appendChild(tdSvc); tr.appendChild(tdSw);
     tbody.appendChild(tr);
   }
 }
@@ -798,6 +814,20 @@ async function toggleServiceItem(bomItemId, isService) {
     bi.is_service = !isService;
     renderBomTable(bomItems);
     renderInstallTab();
+    showToast('Erro: ' + e.message, true);
+  }
+}
+
+async function toggleSoftwareItem(bomItemId, isSoftware) {
+  const bi = bomItems.find(b => b.id === bomItemId);
+  if (!bi) return;
+  bi.is_software = isSoftware;
+  try {
+    await API.updateBomItemSoftware(bomItemId, isSoftware);
+    if (typeof renderMatchingTab === 'function') renderMatchingTab();
+  } catch(e) {
+    bi.is_software = !isSoftware;
+    renderBomTable(bomItems);
     showToast('Erro: ' + e.message, true);
   }
 }

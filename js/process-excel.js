@@ -125,7 +125,7 @@ function buildSupSheet(wb, supplier) {
     ws.getRow(r).height=Math.max(18.5,dataLines*15+3);
     sc2(ws.getCell(r,1),{value:item.part||'',font:dF,border:TB,alignment:dA});
     sc2(ws.getCell(r,2),{value:item.model,font:dF,border:TB,alignment:{horizontal:'left',vertical:'middle',wrapText:true}});
-    sc2(ws.getCell(r,3),{value:direitos,font:dF,border:TB,alignment:dA,numFmt:'0.0%'});
+    sc2(ws.getCell(r,3),{value:item.direitos ?? direitos,font:dF,border:TB,alignment:dA,numFmt:'0.0%'});
     sc2(ws.getCell(r,4),{value:{formula:`+$F$${transportRow}/$G$${totalRow}`},font:dF,border:TB,alignment:dA,numFmt:'0.0%'});
     sc2(ws.getCell(r,5),{value:qty,font:dF,border:TB,alignment:{horizontal:'center',vertical:'middle',wrapText:true}});
     sc2(ws.getCell(r,6),{value:up,font:dF,border:TB,alignment:{horizontal:'right',vertical:'middle'},numFmt:NF});
@@ -138,9 +138,10 @@ function buildSupSheet(wb, supplier) {
     sc2(ws.getCell(r,13),{value:{formula:`L${r}*${isForeign?'5':'0'}%`},font:dF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,14),{value:{formula:`M${r}+L${r}`},font:rF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,15),{value:{formula:`+N${r}*$F$${cambioRow}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
-    // Estrangeiro: Homologação 3000 repartida pela QTY da linha + Selos 25 (como a equipa preenche à mão)
-    sc2(ws.getCell(r,16),{value:isForeign?{formula:`3000/E${r}`}:undefined,font:isForeign?dF:undefined,border:TB,alignment:dA,numFmt:NFD});
-    sc2(ws.getCell(r,17),{value:isForeign?25:undefined,font:isForeign?dF:undefined,border:TB,alignment:dA,numFmt:NFD});
+    // Estrangeiro (hardware): Homologação 3000 repartida pela QTY da linha + Selos 25 (como a equipa preenche à mão)
+    const homolog = item.homolog ?? isForeign;
+    sc2(ws.getCell(r,16),{value:homolog?{formula:`3000/E${r}`}:undefined,font:homolog?dF:undefined,border:TB,alignment:dA,numFmt:NFD});
+    sc2(ws.getCell(r,17),{value:homolog?25:undefined,font:homolog?dF:undefined,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,18),{value:{formula:`+Q${r}+P${r}+O${r}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,19),{border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,20),{border:TB,alignment:dA,numFmt:NFD});
@@ -477,12 +478,13 @@ async function generateExcel(opts) {
     const extraDescs = !bi.custom_description ? extras.map(e => e.quotation_items?.raw_description || '').filter(Boolean) : [];
     const modelDesc = extraDescs.length ? [primaryDesc, ...extraDescs].join(' + ') : primaryDesc;
     const part = qi.raw_part_number || bi.part_number || '';
+    const duty = _lineDuties(suppliers.find(x => x.id === suppId), bi);
 
     if (!supplierItems[suppId]) { supplierItems[suppId] = []; supplierCounters[suppId] = 0; seenQI[suppId] = new Map(); }
     if (seenQI[suppId].has(qi.id)) return { part, modelDesc, effQty, index: seenQI[suppId].get(qi.id), isNew: false };
     const index = supplierCounters[suppId]++;
     seenQI[suppId].set(qi.id, index);
-    supplierItems[suppId].push({ part, model: modelDesc, qty: String(effQty), price: String(totalPrice), currency: qi.currency });
+    supplierItems[suppId].push({ part, model: modelDesc, qty: String(effQty), price: String(totalPrice), currency: qi.currency, direitos: duty.direitos, homolog: duty.homolog });
     return { part, modelDesc, effQty, index, isNew: true };
   };
 
@@ -530,7 +532,7 @@ async function generateExcel(opts) {
           const extras = extraByMatchId[m.id] || [];
           const v = matchLineValue({ ...m, quotation_items: q }, extras, bi);
           const s = suppliers.find(x => x.id === sid);
-          const ddp = (v && s) ? _ddpMZN(v.unit, q?.currency, s, suppTotalG) : null;
+          const ddp = (v && s) ? _ddpMZN(v.unit, q?.currency, s, suppTotalG, { bi, qty: _lineQty({ ...m, quotation_items: q }, v, bi) }) : null;
           if (ddp != null && ddp < bestDDP) { bestDDP = ddp; suppId = sid; qi = q; }
         }
       }

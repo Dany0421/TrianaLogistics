@@ -114,16 +114,38 @@ function _bomOptionLabel(b) {
   return d + (b.part_number ? '  [' + b.part_number + ']' : '');
 }
 
-function _ddpMZN(price, currency, s, suppTotalG) {
+// Direitos por linha. Estrangeiro sem valor escrito → hardware 7.5% + homologação/selos, software 10% sem eles.
+// Valor escrito no fornecedor (>0) manda em todas as linhas. Não estrangeiro: o valor escrito, sem homologação.
+function _lineDuties(s, bi) {
+  const written = parseFloat(s?.direitos) || 0;
+  const sw = !!bi?.is_software;
+  if (!s?.is_foreign) return { direitos: written / 100, homolog: false };
+  return { direitos: written > 0 ? written / 100 : (sw ? 0.10 : 0.075), homolog: !sw };
+}
+
+// Quantidade da linha como o Excel a escreve na coluna QTY (base da homologação 3000/QTY)
+function _lineQty(m, v, bi) {
+  const bq = Number(bi?.quantity) > 0 ? Number(bi.quantity) : 1;
+  if (v?.src === 'bom') return bq;
+  const q = Number(m?.quotation_items?.quantity);
+  return q > 0 ? q : bq;
+}
+
+// line = { bi, qty, total }: aplica a regra por linha (direitos + homologação 3000/QTY e selos 25 em MZN);
+// total=true quando price é o total da linha. Sem line: comportamento antigo (direitos do fornecedor).
+function _ddpMZN(price, currency, s, suppTotalG, line) {
   if (price == null) return null;
   const cambio = (currency && currency !== 'MZN') ? (parseFloat(s.cambio) || 1) : 1;
   const transport = parseFloat(s.transport) || 0;
-  const direitos = (parseFloat(s.direitos) || 0) / 100;
+  const duty = line ? _lineDuties(s, line.bi) : { direitos: (parseFloat(s.direitos) || 0) / 100, homolog: false };
+  const direitos = duty.direitos;
   const outros = s.is_foreign ? 0.05 : 0;
   const totalG = suppTotalG[s.id] || 0;
   const transportRatio = (transport > 0 && totalG > 0) ? transport / totalG : 0;
   const infinitMargin = (s.name||'').toLowerCase().includes('infinitreach') ? 0.10 : 0;
-  return (price * (1 + transportRatio) * (1 + direitos) + price * infinitMargin) * (1 + outros) * cambio;
+  const ddp = (price * (1 + transportRatio) * (1 + direitos) + price * infinitMargin) * (1 + outros) * cambio;
+  if (!duty.homolog || !(line.qty > 0)) return ddp;
+  return ddp + (line.total ? 3000 + 25 * line.qty : 3000 / line.qty + 25);
 }
 function switchMatchingView(v) {
   matchingView = v;
@@ -463,7 +485,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       if (_m?.match_type === 'included_in') continue;
       const _lv = matchLineValue(_m, extraByMatchId[_m?.id] || [], bi);
       const _cur = _m?.quotation_items?.currency;
-      const pDDP = _ddpMZN(_lv ? _lv.unit : null, _cur, s, suppTotalG);
+      const pDDP = _ddpMZN(_lv ? _lv.unit : null, _cur, s, suppTotalG, { bi, qty: _lineQty(_m, _lv, bi) });
       if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP;
     }
     const row = tbody.insertRow();
@@ -533,7 +555,7 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
       const lv = matchLineValue(m, extraByMatchId[m?.id] || [], bi);
       const price = lv ? lv.unit : null;
       const _cur2 = m?.quotation_items?.currency;
-      const priceDDP = _ddpMZN(price, _cur2, s, suppTotalG);
+      const priceDDP = _ddpMZN(price, _cur2, s, suppTotalG, { bi, qty: _lineQty(m, lv, bi) });
       const isLowest = !isIncludedIn && priceDDP != null && priceDDP === lowestPriceMZN && lowestPriceMZN < Infinity;
       const tdSupp = row.insertCell();
       const cellDiv = document.createElement('div');
@@ -639,8 +661,8 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const v = matchLineValue(m, extraByMatchId[m.id] || [], bi);
       if (v == null) continue;
       const cur = m.quotation_items?.currency;
-      const ddp = _ddpMZN(v.unit, cur, s, suppTotalG);
-      const totalDDP = _ddpMZN(v.total, cur, s, suppTotalG);
+      const ddp = _ddpMZN(v.unit, cur, s, suppTotalG, { bi, qty: _lineQty(m, v, bi) });
+      const totalDDP = _ddpMZN(v.total, cur, s, suppTotalG, { bi, qty: _lineQty(m, v, bi), total: true });
       if (lowestDDP === null || ddp < lowestDDP) { lowestDDP = ddp; lowestSuppId = s.id; lowestTotal = totalDDP; }
     }
     if (lowestSuppId !== null) lowestSuppForItem[bi.id] = { suppId: lowestSuppId, ddp: lowestDDP, totalDDP: lowestTotal };
@@ -658,7 +680,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       if (isSelected || isOnlyMatch) {
         const v = matchLineValue(thisMatch, extraByMatchId[thisMatch?.id] || [], bi);
         const cur = thisMatch?.quotation_items?.currency;
-        const ddp = v ? _ddpMZN(v.total, cur, s, suppTotalG) : null;
+        const ddp = v ? _ddpMZN(v.total, cur, s, suppTotalG, { bi, qty: _lineQty(thisMatch, v, bi), total: true }) : null;
         return sum + (ddp != null ? ddp : 0);
       }
       if (!selectedSuppId && lowestSuppForItem[bi.id]?.suppId === s.id) {
@@ -677,7 +699,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const v = matchLineValue(selMatch, extraByMatchId[selMatch?.id] || [], bi);
       const selSupp = suppliers.find(s => s.id === selectedSuppId);
       const cur = selMatch?.quotation_items?.currency;
-      const ddp = v ? _ddpMZN(v.total, cur, selSupp, suppTotalG) : null;
+      const ddp = v ? _ddpMZN(v.total, cur, selSupp, suppTotalG, { bi, qty: _lineQty(selMatch, v, bi), total: true }) : null;
       return sum + (ddp ? ddp : 0);
     }
     if (matchCount === 1) {
@@ -687,7 +709,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       const v = matchLineValue(onlyMatch, extraByMatchId[onlyMatch?.id] || [], bi);
       const onlySupp = suppliers.find(s => s.id === onlySuppId);
       const cur = onlyMatch?.quotation_items?.currency;
-      const ddp = v ? _ddpMZN(v.total, cur, onlySupp, suppTotalG) : null;
+      const ddp = v ? _ddpMZN(v.total, cur, onlySupp, suppTotalG, { bi, qty: _lineQty(onlyMatch, v, bi), total: true }) : null;
       return sum + (ddp ? ddp : 0);
     }
     if (matchCount > 1 && lowestSuppForItem[bi.id]) {
@@ -765,7 +787,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
       if (splitSubC) { const sDiv = document.createElement('div'); sDiv.style.cssText = 'font-size:11px;color:var(--muted)'; sDiv.textContent = splitSubC; tdItem.appendChild(sDiv); }
       if (bi.part_number) { const pnDiv = document.createElement('div'); pnDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)"; pnDiv.textContent = bi.part_number; tdItem.appendChild(pnDiv); }
       let lowestPriceMZN = Infinity;
-      for (const s of (coveredIncl.has(bi.id) ? [] : suppliers)) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const clv = matchLineValue(cm, extraByMatchId[cm?.id] || [], bi); const cur = cm?.quotation_items?.currency; const pDDP = _ddpMZN(clv ? clv.unit : null, cur, s, suppTotalG); if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP; }
+      for (const s of (coveredIncl.has(bi.id) ? [] : suppliers)) { const cm = matchLookup[bi.id]?.[s.id]; if (cm?.match_type === 'included_in') continue; const clv = matchLineValue(cm, extraByMatchId[cm?.id] || [], bi); const cur = cm?.quotation_items?.currency; const pDDP = _ddpMZN(clv ? clv.unit : null, cur, s, suppTotalG, { bi, qty: _lineQty(cm, clv, bi) }); if (pDDP != null && pDDP < lowestPriceMZN) lowestPriceMZN = pDDP; }
       const selectedSuppId = selLookup[bi.id];
       for (const s of suppliers) {
         const m = matchLookup[bi.id]?.[s.id];
@@ -775,7 +797,7 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
         const currency = m?.quotation_items?.currency || '';
         const isSel = selectedSuppId === s.id;
         const cur2 = m?.quotation_items?.currency;
-        const cellDDP = _ddpMZN(price, cur2, s, suppTotalG);
+        const cellDDP = _ddpMZN(price, cur2, s, suppTotalG, { bi, qty: _lineQty(m, lv, bi) });
         const isLow = !isIncl && cellDDP != null && cellDDP === lowestPriceMZN && lowestPriceMZN < Infinity;
         const td = row.insertCell();
         const span = document.createElement('span');
