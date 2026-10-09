@@ -138,8 +138,9 @@ function buildSupSheet(wb, supplier) {
     sc2(ws.getCell(r,13),{value:{formula:`L${r}*${isForeign?'5':'0'}%`},font:dF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,14),{value:{formula:`M${r}+L${r}`},font:rF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,15),{value:{formula:`+N${r}*$F$${cambioRow}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
-    sc2(ws.getCell(r,16),{border:TB,alignment:dA,numFmt:NFD});
-    sc2(ws.getCell(r,17),{border:TB,alignment:dA,numFmt:NFD});
+    // Estrangeiro: Homologação 3000 repartida pela QTY da linha + Selos 25 (como a equipa preenche à mão)
+    sc2(ws.getCell(r,16),{value:isForeign?{formula:`3000/E${r}`}:undefined,font:isForeign?dF:undefined,border:TB,alignment:dA,numFmt:NFD});
+    sc2(ws.getCell(r,17),{value:isForeign?25:undefined,font:isForeign?dF:undefined,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,18),{value:{formula:`+Q${r}+P${r}+O${r}`},font:dF,border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,19),{border:TB,alignment:dA,numFmt:NFD});
     sc2(ws.getCell(r,20),{border:TB,alignment:dA,numFmt:NFD});
