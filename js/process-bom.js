@@ -315,7 +315,10 @@ function buildBomSuggestionsStep() {
 
   const step = document.createElement('div');
   step.className = 'bom-sugg-step';
-  const checkboxMap = new Map(); // gs.name → <input type=checkbox>
+  const checkboxMap = new Map(); // gs.name → <input type=checkbox> (a primeira; é a que conta)
+  // Um fornecedor pode aparecer em várias categorias: cada linha tem a sua caixa (um nó DOM só existe
+  // num sítio), todas sincronizadas com a primeira.
+  const checkboxGroups = new Map(); // gs.name → [checkboxes]
 
   // Matched categories
   cats.forEach(cat => {
@@ -330,15 +333,17 @@ function buildBomSuggestionsStep() {
       const row = document.createElement('div');
       row.className = 'bom-sugg-row';
 
-      let cb;
-      if (checkboxMap.has(gs.name)) {
-        cb = checkboxMap.get(gs.name);
-      } else {
-        cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = true;
-        checkboxMap.set(gs.name, cb);
-      }
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      const primary = checkboxMap.get(gs.name);
+      cb.checked = primary ? primary.checked : true;
+      if (!primary) { checkboxMap.set(gs.name, cb); checkboxGroups.set(gs.name, []); }
+      const group = checkboxGroups.get(gs.name);
+      group.push(cb);
+      cb.addEventListener('change', () => {
+        group.forEach(o => { o.checked = cb.checked; });
+        if (cb !== checkboxMap.get(gs.name)) checkboxMap.get(gs.name).dispatchEvent(new Event('change'));
+      });
 
       const name = document.createElement('span');
       name.className = 'bom-sugg-name';
@@ -416,7 +421,7 @@ function buildBomSuggestionsStep() {
   };
   toggleAllBtn.addEventListener('click', () => {
     const allChecked = [...checkboxMap.values()].every(c => c.checked);
-    checkboxMap.forEach(c => { c.checked = !allChecked; });
+    checkboxGroups.forEach(g => g.forEach(c => { c.checked = !allChecked; }));
     updateCount();
     updateToggleLabel();
   });
