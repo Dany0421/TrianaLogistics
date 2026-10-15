@@ -678,6 +678,8 @@ async function confirmBom() {
       sort_order: idx,
       process_id: processId,
       bom_version_id: version.id,
+      // Num insert em lote o PostgREST mete NULL (não o default) quando só algumas linhas trazem a coluna
+      is_software: !!item.is_software,
     }));
 
     const savedItems = await API.saveBomItems(itemsToSave);
