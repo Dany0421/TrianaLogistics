@@ -35,6 +35,30 @@ function matchLineValue(m, extras, bi) {
   };
 }
 
+// Badge de cobertura da célula: quantidade cotada / quantidade pedida.
+// A pedida soma a do próprio item com a dos itens marcados "incluído em" esta célula
+// (3 ratos cotados numa linha, 1 no item + 2 incluídos → 3/3).
+// Devolve null quando não há nada para mostrar: bate certo e sem incluídos (como antes).
+function coverageBadge(lv, bi, inclMatches, bomItemsArr) {
+  if (!lv || lv.src !== 'quotation') return null;
+  const q = x => (Number(x?.quantity) > 0 ? Number(x.quantity) : 1);
+  const incl = inclMatches || [];
+  let needed = q(bi);
+  for (const im of incl) {
+    const ib = (bomItemsArr || []).find(b => b.id === im.bom_item_id);
+    if (ib) needed += q(ib);
+  }
+  const ok = lv.quotedQty === needed;
+  if (ok && !incl.length) return null;
+  return {
+    text: lv.quotedQty + '/' + needed,
+    ok,
+    title: incl.length
+      ? 'Quantidade cotada vs. quantidade do BOM (este item + ' + incl.length + ' incluído(s))'
+      : 'Quantidade cotada na linha principal vs. quantidade do BOM',
+  };
+}
+
 // Linhas de cotação ligadas a um item, para o modal Repartir: a principal de cada match
 // (excepto included_in) e as extras desse match. Ordem: colunas de fornecedor, principal antes das extras.
 function _splitLinesForItem(biId, matchesArr, extrasArr, suppliersArr) {
@@ -580,12 +604,13 @@ function _renderMatchingView(el, matchLookup, selLookup, pct, pctColor, covered,
             ddpDiv.textContent = fmtPrice(priceDDP) + ' MZN';
             cellDiv.appendChild(ddpDiv);
           }
-          // Cotou menos (ou mais) do que o BOM pede — só visível quando conta por quantidade cotada
-          if (lv && lv.src === 'quotation' && lv.quotedQty !== (Number(bi.quantity) > 0 ? Number(bi.quantity) : 1)) {
+          // Cotado vs. pedido (o próprio item + os incluídos nesta célula): âmbar se não bate, verde se bate com incluídos
+          const cov = coverageBadge(lv, bi, includedByLookup[bi.id + '_' + s.id], bomItems);
+          if (cov) {
             const qDiv = document.createElement('div');
-            qDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f59e0b;margin-top:1px";
-            qDiv.textContent = lv.quotedQty + '/' + (bi.quantity || 1);
-            qDiv.title = 'Quantidade cotada na linha principal vs. quantidade do BOM';
+            qDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;margin-top:1px;color:" + (cov.ok ? '#34d399' : '#f59e0b');
+            qDiv.textContent = cov.text;
+            qDiv.title = cov.title;
             cellDiv.appendChild(qDiv);
           }
           if (isSel) { const lbl = document.createElement('div'); lbl.style.cssText = 'font-size:9px;color:var(--accent);letter-spacing:1px'; lbl.textContent = 'SELECIONADO'; cellDiv.appendChild(lbl); }
@@ -813,12 +838,13 @@ function _renderComparacaoView(el, matchLookup, selLookup, pct, pctColor, covere
             ddpDiv.textContent = fmtPrice(cellDDP) + ' MZN';
             span.appendChild(ddpDiv);
           }
-          // Cotou menos (ou mais) do que o BOM pede — só visível quando conta por quantidade cotada
-          if (lv && lv.src === 'quotation' && lv.quotedQty !== (Number(bi.quantity) > 0 ? Number(bi.quantity) : 1)) {
+          // Cotado vs. pedido (o próprio item + os incluídos nesta célula): âmbar se não bate, verde se bate com incluídos
+          const cov = coverageBadge(lv, bi, includedByLookup[bi.id + '_' + s.id], bomItems);
+          if (cov) {
             const qDiv = document.createElement('div');
-            qDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:#f59e0b;margin-top:1px";
-            qDiv.textContent = lv.quotedQty + '/' + (bi.quantity || 1);
-            qDiv.title = 'Quantidade cotada na linha principal vs. quantidade do BOM';
+            qDiv.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;margin-top:1px;color:" + (cov.ok ? '#34d399' : '#f59e0b');
+            qDiv.textContent = cov.text;
+            qDiv.title = cov.title;
             span.appendChild(qDiv);
           }
           const etaVal = m?.quotation_items?.eta_value || '';
